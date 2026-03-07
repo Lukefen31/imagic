@@ -1,0 +1,21 @@
+# Imagic — Core Dependencies
+PyQt6>=6.5.0
+SQLAlchemy>=2.0
+PyYAML>=6.0
+Pillow>=10.0
+numpy>=1.24
+rawpy>=0.19
+scipy>=1.11
+imagehash>=4.3
+
+# Optional: AI content analysis (CLIP)
+# Uncomment if you want the ContentAnalyzer module:
+# torch>=2.0
+# transformers>=4.30
+
+# CLI metadata (optional — exiftool is used via subprocess)
+# No Python package needed for exiftool.
+
+# Development / Testing
+pytest>=7.4
+pytest-cov>=4.1

@@ -1,0 +1,86 @@
+{
+  "project_name": "Imagic",
+  "version": "0.1.0",
+  "description": "Professional-grade photo editing orchestrator with AI-powered culling and batch processing",
+  "architecture": "MVC (Model-View-Controller)",
+  "structure": {
+    "src/": {
+      "imagic/": {
+        "__init__.py": "Package init with version info",
+        "main.py": "Application entry point",
+        "models/": {
+          "__init__.py": "Models package",
+          "database.py": "SQLAlchemy engine, session factory, base model",
+          "photo.py": "Photo ORM model with status tracking",
+          "catalog.py": "Catalog/collection ORM models",
+          "enums.py": "Status enums (pending, analyzing, culled, processed, exported)"
+        },
+        "views/": {
+          "__init__.py": "Views package",
+          "main_window.py": "Main PyQt6 window shell",
+          "library_view.py": "Photo grid/list browser",
+          "import_view.py": "Import/ingest dialog",
+          "processing_view.py": "Batch processing status panel",
+          "settings_view.py": "Settings/configuration dialog",
+          "widgets/": {
+            "__init__.py": "Custom widgets package",
+            "thumbnail_widget.py": "Thumbnail renderer with lazy loading",
+            "status_bar.py": "Custom status bar with progress",
+            "filter_bar.py": "Score/status filter controls"
+          }
+        },
+        "controllers/": {
+          "__init__.py": "Controllers package",
+          "app_controller.py": "Main application controller (lifecycle)",
+          "library_controller.py": "Library scan/import orchestration",
+          "processing_controller.py": "Batch processing orchestration",
+          "ai_controller.py": "AI analysis orchestration"
+        },
+        "services/": {
+          "__init__.py": "Services package",
+          "scanner.py": "Directory scanner with pathlib (cross-platform)",
+          "task_queue.py": "Non-blocking task queue with worker threads",
+          "cli_orchestrator.py": "Subprocess wrapper for darktable-cli / RawTherapee-cli",
+          "thumbnail_generator.py": "RAW thumbnail extraction via rawpy",
+          "metadata_reader.py": "EXIF/XMP metadata reader",
+          "export_service.py": "Export pipeline management"
+        },
+        "ai/": {
+          "__init__.py": "AI package",
+          "base_analyzer.py": "Abstract base class for AI analyzers",
+          "quality_scorer.py": "Image quality/sharpness scoring",
+          "duplicate_detector.py": "Perceptual hash duplicate detection",
+          "content_analyzer.py": "CLIP-based content analysis (optional)"
+        },
+        "config/": {
+          "__init__.py": "Config package",
+          "settings.py": "Settings manager (YAML loader/saver)",
+          "defaults.py": "Default configuration values"
+        },
+        "utils/": {
+          "__init__.py": "Utilities package",
+          "logger.py": "Centralized logging configuration",
+          "path_utils.py": "Cross-platform path helpers (pathlib)",
+          "image_utils.py": "Image format detection and helpers"
+        }
+      }
+    },
+    "tests/": {
+      "__init__.py": "Tests package",
+      "test_scanner.py": "Library scanner unit tests",
+      "test_task_queue.py": "Task queue unit tests",
+      "test_database.py": "Database model tests",
+      "test_cli_orchestrator.py": "CLI orchestrator tests",
+      "test_ai_analyzers.py": "AI analyzer tests",
+      "conftest.py": "Pytest fixtures"
+    },
+    "config/": {
+      "default_config.yaml": "Default application configuration",
+      "logging.yaml": "Logging configuration"
+    },
+    "assets/": {
+      "icons/": "Application icons",
+      "styles/": "QSS stylesheets"
+    }
+  }
+}

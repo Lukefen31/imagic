@@ -1,0 +1,44 @@
+# Imagic — Default Configuration
+# Override any value by editing this file.
+
+app:
+  name: Imagic
+  log_level: INFO
+
+scanner:
+  watch_directories: []
+  recursive: true
+  follow_symlinks: false
+  raw_extensions:
+    - .cr2
+    - .cr3
+    - .nef
+    - .arw
+    - .raf
+    - .orf
+    - .rw2
+    - .dng
+    - .pef
+
+processing:
+  max_workers: 4
+  export_format: jpeg
+  jpeg_quality: 95
+  thumbnail_size: [320, 320]
+
+cli_tools:
+  # Set absolute paths to the CLI executables on your system.
+  darktable_cli: ""
+  rawtherapee_cli: "C:/Program Files/RawTherapee/5.12/rawtherapee-cli.exe"
+  exiftool: ""
+
+ai:
+  enabled: true
+  keep_threshold: 0.8
+  trash_threshold: 0.3
+  duplicate_hash_threshold: 5
+
+ui:
+  theme: dark
+  thumbnail_grid_columns: 5
+  show_status_bar: true

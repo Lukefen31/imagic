@@ -748,8 +748,7 @@ def run_gui(args: argparse.Namespace) -> int:
 
     def _on_open_export_folder() -> None:
         """Open the export output directory in the system file manager."""
-        import os
-        import subprocess
+        from imagic.utils.path_utils import open_file_manager
 
         export_dir = Path(
             app.settings.get_nested("processing", "output_directory", default="exports")
@@ -757,7 +756,7 @@ def run_gui(args: argparse.Namespace) -> int:
         if not export_dir.is_absolute():
             export_dir = Path.home() / ".imagic" / export_dir
         export_dir.mkdir(parents=True, exist_ok=True)
-        subprocess.Popen(["explorer", str(export_dir)])
+        open_file_manager(export_dir)
 
     def _refresh_exports() -> None:
         """Populate the export gallery tab with exported photos."""

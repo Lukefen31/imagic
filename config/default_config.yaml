@@ -28,8 +28,9 @@ processing:
 
 cli_tools:
   # Set absolute paths to the CLI executables on your system.
+  # Leave empty for auto-detection (searches PATH, /Applications, Homebrew, etc.)
   darktable_cli: ""
-  rawtherapee_cli: "C:/Program Files/RawTherapee/5.12/rawtherapee-cli.exe"
+  rawtherapee_cli: ""
   exiftool: ""
 
 ai:

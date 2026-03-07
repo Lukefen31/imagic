@@ -27,8 +27,8 @@ A robust, cross-platform desktop application (Python + PyQt6) that **orchestrate
 ```bash
 # 1. Create a virtual environment
 python -m venv .venv
-.venv\Scripts\activate      # Windows
-# source .venv/bin/activate  # macOS/Linux
+source .venv/bin/activate    # macOS / Linux
+# .venv\Scripts\activate   # Windows
 
 # 2. Install dependencies
 pip install -e ".[dev]"
@@ -37,7 +37,7 @@ pip install -e ".[dev]"
 imagic
 
 # 4. Or run headless (batch mode)
-imagic --headless --scan "D:\Photos\2024" --analyse --export
+imagic --headless --scan ~/Photos/2024 --analyse --export
 
 # 5. Run tests
 pytest

@@ -290,6 +290,13 @@ class CLIOrchestrator:
         Returns:
             Mapping of tool name → ``True`` if the executable was found.
         """
+        # rawtherapee-cli does not support --version; use a harmless flag
+        # that causes it to print usage and exit instead.
+        version_flags: dict[str, list[str]] = {
+            "darktable-cli": ["--version"],
+            "rawtherapee-cli": ["--help"],
+            "exiftool": ["-ver"],
+        }
         status: dict[str, bool] = {}
         for name, path in [
             ("darktable-cli", self.darktable_cli),
@@ -301,7 +308,7 @@ class CLIOrchestrator:
                 continue
             try:
                 subprocess.run(
-                    [path, "--version"],
+                    [path] + version_flags.get(name, ["--version"]),
                     capture_output=True,
                     timeout=10,
                 )

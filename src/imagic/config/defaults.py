@@ -8,6 +8,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from imagic.utils.path_utils import (
+    discover_darktable_cli,
+    discover_exiftool,
+    discover_rawtherapee_cli,
+)
+
 # Application data lives next to the user's home directory by default.
 _APP_DIR = Path.home() / ".imagic"
 
@@ -39,9 +45,9 @@ DEFAULTS: dict = {
         "thumbnail_size": [320, 320],
     },
     "cli_tools": {
-        "darktable_cli": "",
-        "rawtherapee_cli": "C:/Program Files/RawTherapee/5.12/rawtherapee-cli.exe",
-        "exiftool": "",
+        "darktable_cli": discover_darktable_cli(),
+        "rawtherapee_cli": discover_rawtherapee_cli(),
+        "exiftool": discover_exiftool(),
     },
     "ai": {
         "enabled": True,

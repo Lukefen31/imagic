@@ -83,3 +83,147 @@ def relative_to_safe(path: Path, base: Path) -> Path:
         return path.relative_to(base)
     except ValueError:
         return path
+
+
+# ------------------------------------------------------------------
+# Cross-platform CLI tool discovery
+# ------------------------------------------------------------------
+
+import platform
+import shutil
+from typing import Optional as _Optional
+
+
+def _which(name: str) -> _Optional[str]:
+    """Thin wrapper around ``shutil.which``."""
+    return shutil.which(name)
+
+
+def discover_rawtherapee_cli() -> str:
+    """Return a best-guess path to ``rawtherapee-cli`` for the current OS.
+
+    Searches:
+    * ``PATH`` (all platforms)
+    * Common macOS locations (``/Applications``, Homebrew)
+    * Common Windows locations (``Program Files``)
+
+    Returns:
+        An absolute path string, or ``""`` if not found.
+    """
+    found = _which("rawtherapee-cli")
+    if found:
+        return found
+
+    system = platform.system()
+    if system == "Darwin":
+        candidates = [
+            "/Applications/RawTherapee.app/Contents/MacOS/rawtherapee-cli",
+            "/opt/homebrew/bin/rawtherapee-cli",
+            "/usr/local/bin/rawtherapee-cli",
+        ]
+    elif system == "Windows":
+        import glob
+        candidates = glob.glob(
+            r"C:\Program Files\RawTherapee\*\rawtherapee-cli.exe"
+        ) + glob.glob(
+            r"C:\Program Files (x86)\RawTherapee\*\rawtherapee-cli.exe"
+        )
+    else:  # Linux / other
+        candidates = [
+            "/usr/bin/rawtherapee-cli",
+            "/usr/local/bin/rawtherapee-cli",
+            "/snap/rawtherapee/current/usr/bin/rawtherapee-cli",
+        ]
+
+    for c in candidates:
+        if Path(c).is_file():
+            return str(c)
+    return ""
+
+
+def discover_darktable_cli() -> str:
+    """Return a best-guess path to ``darktable-cli`` for the current OS.
+
+    Returns:
+        An absolute path string, or ``""`` if not found.
+    """
+    found = _which("darktable-cli")
+    if found:
+        return found
+
+    system = platform.system()
+    if system == "Darwin":
+        candidates = [
+            "/Applications/darktable.app/Contents/MacOS/darktable-cli",
+            "/opt/homebrew/bin/darktable-cli",
+            "/usr/local/bin/darktable-cli",
+        ]
+    elif system == "Windows":
+        import glob
+        candidates = glob.glob(
+            r"C:\Program Files\darktable\bin\darktable-cli.exe"
+        )
+    else:
+        candidates = [
+            "/usr/bin/darktable-cli",
+            "/usr/local/bin/darktable-cli",
+            "/snap/darktable/current/usr/bin/darktable-cli",
+        ]
+
+    for c in candidates:
+        if Path(c).is_file():
+            return str(c)
+    return ""
+
+
+def discover_exiftool() -> str:
+    """Return a best-guess path to ``exiftool`` for the current OS.
+
+    Returns:
+        An absolute path string, or ``""`` if not found.
+    """
+    found = _which("exiftool")
+    if found:
+        return found
+
+    system = platform.system()
+    if system == "Darwin":
+        candidates = [
+            "/opt/homebrew/bin/exiftool",
+            "/usr/local/bin/exiftool",
+        ]
+    elif system == "Windows":
+        candidates = [
+            r"C:\Windows\exiftool.exe",
+            r"C:\exiftool\exiftool.exe",
+        ]
+    else:
+        candidates = [
+            "/usr/bin/exiftool",
+            "/usr/local/bin/exiftool",
+        ]
+
+    for c in candidates:
+        if Path(c).is_file():
+            return str(c)
+    return ""
+
+
+def open_file_manager(path: Path) -> None:
+    """Open *path* in the platform's native file manager.
+
+    Works on Windows (``explorer``), macOS (``open``), and Linux
+    (``xdg-open``).
+
+    Args:
+        path: Directory or file to reveal.
+    """
+    import subprocess
+
+    system = platform.system()
+    if system == "Darwin":
+        subprocess.Popen(["open", str(path)])
+    elif system == "Windows":
+        subprocess.Popen(["explorer", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(path)])

@@ -1,0 +1,135 @@
+================================================================================
+  imagic Web App — Concept & Architecture (Paused)
+================================================================================
+
+Status:  PAUSED as of March 2026
+Reason:  Server constraints (shared-cpu-1x, 1 GB RAM, local-disk storage on Fly.io)
+Plan:    Revisit when budget allows a bigger VM + object storage
+
+--------------------------------------------------------------------------------
+1. WHAT IT IS
+--------------------------------------------------------------------------------
+A browser-based version of imagic that mirrors the desktop workflow:
+Import → Analyse → Review & Cull → Edit → Export.
+
+Users upload photos through the browser, the server runs AI quality scoring
+and duplicate detection, and the client-side editor provides the same slider-
+based editing experience (exposure, contrast, HSL, color grading, effects, AI
+tools) as the desktop app.
+
+No install required — works on any modern browser, any OS.
+
+--------------------------------------------------------------------------------
+2. FEATURES
+--------------------------------------------------------------------------------
+• 5-step guided workflow (Import → Analyse → Review → Edit → Export)
+• Drag-and-drop upload (JPEG, PNG, TIFF, WebP, plus RAW with JPEG preview)
+• AI quality scoring (sharpness, exposure, noise, composition, detail)
+• Burst & duplicate detection via perceptual hashing
+• Auto-crop suggestions with confidence scoring
+• Full client-side editor:
+    - Histogram
+    - Basic: Temperature, Tint, Exposure, Contrast, Highlights, Shadows,
+      Whites, Blacks
+    - Presence: Clarity, Dehaze, Vibrance, Saturation
+    - HSL / Color (9 channels × saturation + luminance)
+    - Detail: Sharpen Amount/Radius, NR Luminance/Color
+    - Color Grading: Shadow/Highlight hue & sat, Balance
+    - Effects: Vignette, Grain
+    - AI Tools: Auto-Enhance, Auto WB, Denoise, Smart Sharpen, B&W
+• 30+ cinematic color grades with live preview thumbnails
+• Export to JPEG / PNG / WebP + bulk ZIP download
+• Account system (email + password, or Google OAuth)
+• Free tier: 20 images/day (IP-based rate limit)
+• Paid tier: credit packs ($5 / 500 images via Stripe, one-time, stackable)
+• Before/After toggle, Undo/Redo stack, Crop tool
+
+--------------------------------------------------------------------------------
+3. ARCHITECTURE
+--------------------------------------------------------------------------------
+Backend:   FastAPI (Python)
+Frontend:  Vanilla JS + CSS (no framework)
+Hosting:   Fly.io single VM
+
+Key files (all still in the repo — do NOT delete):
+  website/templates/app.html          – Full web app HTML (349 lines)
+  website/static/js/app.js            – Client-side workflow + editor JS
+  website/static/css/editor.css       – Editor-specific styles
+  website/api/main.py                 – FastAPI routes (upload, analyse, export, auth, etc.)
+  website/api/processing.py           – Server-side image processing (quality scoring,
+                                        duplicate detection, crop, grade previews, export)
+  website/api/rate_limit.py           – IP + account-based rate limiting
+  website/api/account_store.py        – In-memory + JSON-file account store
+  website/api/stripe_integration.py   – Stripe checkout for credit packs + desktop license
+
+API routes still wired (just not publicly linked):
+  POST /api/upload           – Upload photos
+  POST /api/analyse/{id}     – Run AI quality analysis
+  POST /api/duplicates       – Detect duplicates across session
+  POST /api/crop/{id}        – Suggest crop
+  POST /api/grades/{id}      – Generate grade previews
+  POST /api/export/{id}      – Export single photo
+  POST /api/export-all       – Batch export all kept photos
+  GET  /api/download-all     – Download ZIP of exports
+  POST /api/register          – Create account
+  POST /api/login             – Sign in
+  GET  /api/auth/google       – Google OAuth flow
+  POST /api/checkout          – Stripe credit-pack checkout
+  POST /api/redeem            – Redeem credit key
+
+Storage:
+  uploads/{session_id}/originals/     – Uploaded files
+  uploads/{session_id}/thumbnails/    – Display-size previews
+  uploads/{session_id}/exports/       – Exported results
+  All on LOCAL DISK — this is the main scaling bottleneck.
+
+--------------------------------------------------------------------------------
+4. PRICING MODEL (as designed)
+--------------------------------------------------------------------------------
+Free tier:
+  • 20 images per day, no account required
+  • IP-based rate limiting
+  • Non-intrusive ad slot (placeholder, never activated)
+
+Credit packs (account required):
+  • $5 / 500 images (one-time, stackable)
+  • Stripe checkout, credits tied to account
+  • No subscription, no recurring billing
+  • Batch ZIP download included
+  • No ads for paid users
+
+Desktop license (separate product):
+  • $10 one-time
+  • Product key + installer delivered by email
+
+--------------------------------------------------------------------------------
+5. WHY IT'S PAUSED
+--------------------------------------------------------------------------------
+• The Fly.io VM is shared-cpu-1x with 1 GB RAM — not enough for concurrent
+  image processing by multiple users.
+• All uploads, thumbnails, and exports are stored on the VM's local disk.
+  This means:
+    - No horizontal scaling (second VM can't see first VM's files)
+    - Disk fills up quickly with photo uploads
+    - VM restart = data loss for active sessions
+• We cannot reliably serve 10+ simultaneous users doing photo uploads +
+  AI analysis + editing + export on this hardware.
+
+--------------------------------------------------------------------------------
+6. WHAT'S NEEDED TO RELAUNCH
+--------------------------------------------------------------------------------
+1. Object storage (Cloudflare R2, AWS S3, or Tigris) for uploads/exports
+2. Bigger VM — at least performance-2x (2 CPU, 4 GB) or dedicated
+3. Background job queue (Celery, ARQ, or similar) for heavy processing
+4. CDN for static assets + exported photos
+5. Possibly separate worker machines for image processing
+6. Session store in Redis or Postgres (not in-memory)
+7. Estimated minimum monthly cost: $30–50/mo for modest traffic
+
+--------------------------------------------------------------------------------
+7. TIMELINE
+--------------------------------------------------------------------------------
+No firm date. Revisit once desktop sales generate enough recurring revenue
+to fund the infrastructure. Target: late 2026 at earliest.
+
+================================================================================

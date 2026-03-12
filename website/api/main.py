@@ -119,9 +119,10 @@ async def favicon():
     return Response(status_code=204)
 
 
-@app.get("/app", response_class=HTMLResponse)
+@app.get("/app")
 async def web_app(request: Request):
-    return templates.TemplateResponse("app.html", {"request": request})
+    """Web app is paused — redirect visitors to the homepage."""
+    return RedirectResponse(url="/", status_code=302)
 
 
 @app.get("/desktop", response_class=HTMLResponse)

@@ -78,7 +78,9 @@ class _RawDecodeWorker(QThread):
 
 _SLIDER_STYLE = (
     "QSlider::groove:horizontal { height: 6px; background: #444; border-radius: 3px; }"
-    "QSlider::handle:horizontal { width: 14px; margin: -4px 0; background: #4caf50; border-radius: 7px; }"
+    "QSlider::handle:horizontal { width: 14px; margin: -4px 0; background: #4caf50; "
+    "border: 2px solid #1a1a1a; border-radius: 7px; }"
+    "QSlider::handle:horizontal:hover { background: #66bb6a; }"
     "QSlider::sub-page:horizontal { background: #4caf50; border-radius: 3px; }"
 )
 
@@ -101,7 +103,7 @@ class _ReEditSidebar(QFrame):
         super().__init__(parent)
         self.setFixedWidth(260)
         self.setStyleSheet(
-            "QFrame { background: #1a1a1a; border-left: 1px solid #333; }"
+            "QFrame { background: #141414; border-left: 1px solid #2a2a2a; }"
         )
         self._photo_id: int = 0
         self._current_overrides: Dict = {}
@@ -112,7 +114,7 @@ class _ReEditSidebar(QFrame):
 
         title = QLabel("RE-EDIT")
         title.setStyleSheet(
-            "color: #ff9800; font-weight: bold; font-size: 14px; border: none;"
+            "color: #ff9800; font-weight: bold; font-size: 14px; border: none; letter-spacing: 2px;"
         )
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
@@ -124,7 +126,10 @@ class _ReEditSidebar(QFrame):
         self._grade_combo = QComboBox()
         self._grade_combo.addItems(_GRADES)
         self._grade_combo.setStyleSheet(
-            "QComboBox { background: #333; color: #eee; padding: 4px; border: 1px solid #555; }"
+            "QComboBox { background: #2a2a2a; color: #eee; padding: 6px; "
+            "border: 1px solid #444; border-radius: 4px; }"
+            "QComboBox:hover { border-color: #555; }"
+            "QComboBox:focus { border-color: #ff9800; }"
         )
         layout.addWidget(self._grade_combo)
 
@@ -164,9 +169,10 @@ class _ReEditSidebar(QFrame):
         self._apply_btn = QPushButton("Apply && Re-Export")
         self._apply_btn.setStyleSheet(
             "QPushButton { background: #ff9800; color: #111; font-weight: bold; "
-            "border: none; border-radius: 4px; padding: 8px; font-size: 12px; }"
+            "border: none; border-radius: 6px; padding: 8px; font-size: 12px; }"
             "QPushButton:hover { background: #ffa726; }"
-            "QPushButton:disabled { background: #555; color: #999; }"
+            "QPushButton:pressed { background: #f57c00; }"
+            "QPushButton:disabled { background: #333; color: #666; }"
         )
         self._apply_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._apply_btn.clicked.connect(self._on_apply)
@@ -175,9 +181,10 @@ class _ReEditSidebar(QFrame):
         # -- Reset button --
         reset_btn = QPushButton("Reset to Auto")
         reset_btn.setStyleSheet(
-            "QPushButton { background: #444; color: #ccc; border: none; "
-            "border-radius: 4px; padding: 6px; font-size: 11px; }"
-            "QPushButton:hover { background: #555; }"
+            "QPushButton { background: #2a2a2a; color: #ccc; border: 1px solid #444; "
+            "border-radius: 6px; padding: 6px; font-size: 11px; }"
+            "QPushButton:hover { background: #333; border-color: #555; }"
+            "QPushButton:pressed { background: #222; }"
         )
         reset_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         reset_btn.clicked.connect(self._reset_sliders)
@@ -280,7 +287,7 @@ class ImageViewerDialog(QDialog):
         self._header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._header.setStyleSheet(
             "color: #eee; font-size: 13px; font-weight: bold; "
-            "background: #222; padding: 8px;"
+            "background: #141414; padding: 10px; letter-spacing: 0.5px;"
         )
         layout.addWidget(self._header)
 
@@ -327,7 +334,7 @@ class ImageViewerDialog(QDialog):
 
         # Footer with nav + re-edit button
         footer_widget = QWidget()
-        footer_widget.setStyleSheet("background: #222;")
+        footer_widget.setStyleSheet("background: #141414;")
         footer_layout = QHBoxLayout(footer_widget)
         footer_layout.setContentsMargins(10, 4, 10, 4)
 
@@ -338,8 +345,9 @@ class ImageViewerDialog(QDialog):
         self._reedit_btn = QPushButton("Re-Edit ✏")
         self._reedit_btn.setStyleSheet(
             "QPushButton { background: #ff9800; color: #111; font-weight: bold; "
-            "border: none; border-radius: 4px; padding: 6px 16px; font-size: 12px; }"
+            "border: none; border-radius: 6px; padding: 6px 16px; font-size: 12px; }"
             "QPushButton:hover { background: #ffa726; }"
+            "QPushButton:pressed { background: #f57c00; }"
         )
         self._reedit_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._reedit_btn.clicked.connect(self._toggle_sidebar)

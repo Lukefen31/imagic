@@ -19,6 +19,8 @@ from imagic.models.database import DatabaseManager
 from imagic.models.enums import ExportFormat, PhotoStatus
 from imagic.models.photo import Photo
 from imagic.services.cli_orchestrator import CLIOrchestrator, CLIResult
+from imagic.services.editor_style_presets import get_editor_style_overrides, merge_editor_overrides
+from imagic.services.native_processor import NativeProcessor, NativeResult
 from imagic.services.pp3_generator import (
     GRADES,
     PhotoMetrics,
@@ -59,6 +61,7 @@ class ExportService:
         self._default_pp3 = default_pp3
         self._forced_preset: Optional[str] = None
         self._max_file_size_kb = max_file_size_kb
+        self._native = NativeProcessor(jpeg_quality=jpeg_quality)
 
     def set_forced_preset(self, preset: Optional[str]) -> None:
         """Override the auto-selected preset for all future exports.
@@ -96,6 +99,7 @@ class ExportService:
         from PIL import Image
 
         img = Image.open(path)
+        icc_profile = img.info.get("icc_profile")
 
         # Binary search for the right quality.
         lo, hi = 10, 95
@@ -103,7 +107,10 @@ class ExportService:
         while lo <= hi:
             mid = (lo + hi) // 2
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=mid, optimize=True)
+            save_kwargs = {"format": "JPEG", "quality": mid, "optimize": True}
+            if icc_profile:
+                save_kwargs["icc_profile"] = icc_profile
+            img.save(buf, **save_kwargs)
             size_kb = buf.tell() / 1024
             if size_kb <= max_kb:
                 best_buf = buf
@@ -121,7 +128,10 @@ class ExportService:
         else:
             # Even quality=10 is too large — save at minimum.
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=10, optimize=True)
+            save_kwargs = {"format": "JPEG", "quality": 10, "optimize": True}
+            if icc_profile:
+                save_kwargs["icc_profile"] = icc_profile
+            img.save(buf, **save_kwargs)
             path.write_bytes(buf.getvalue())
             final_kb = path.stat().st_size / 1024
             logger.warning(
@@ -166,8 +176,38 @@ class ExportService:
 
             logger.info("Exporting %s → %s", raw_path.name, output_path)
 
-            # Choose the right CLI tool.
-            if self._cli.darktable_cli:
+            metrics, grade, manual_ov = self._build_native_params(
+                photo, raw_path, sidecar,
+            )
+            use_editor_pipeline = self._native._has_editor_overrides(manual_ov)
+
+            # Edited photos must use the same renderer as the editor
+            # preview, otherwise the export will not be WYSIWYG.
+            if use_editor_pipeline:
+                fmt_str = {ExportFormat.JPEG: "jpg", ExportFormat.TIFF: "tif",
+                           ExportFormat.PNG: "png"}.get(self._export_format, "jpg")
+                logger.info(
+                    "Using native editor-matching export for %s (bypassing CLI tools)",
+                    raw_path.name,
+                )
+                native_res = self._native.process(
+                    input_path=raw_path,
+                    output_dir=output_path.parent,
+                    metrics=metrics,
+                    color_grade=grade,
+                    output_format=fmt_str,
+                    manual_overrides=manual_ov,
+                )
+                result = CLIResult(
+                    success=native_res.success,
+                    return_code=native_res.return_code,
+                    stdout=native_res.stdout,
+                    stderr=native_res.stderr,
+                    command=native_res.command,
+                    duration_s=native_res.duration_s,
+                )
+            # Choose the right CLI tool for non-editor exports.
+            elif self._cli.darktable_cli:
                 result = self._cli.darktable_export(
                     input_path=raw_path,
                     output_path=output_path,
@@ -182,7 +222,25 @@ class ExportService:
                     pp3_path=pp3,
                 )
             else:
-                raise ValueError("No CLI export tool is configured.")
+                # Native Python fallback — no external CLI needed.
+                fmt_str = {ExportFormat.JPEG: "jpg", ExportFormat.TIFF: "tif",
+                           ExportFormat.PNG: "png"}.get(self._export_format, "jpg")
+                native_res = self._native.process(
+                    input_path=raw_path,
+                    output_dir=output_path.parent,
+                    metrics=metrics,
+                    color_grade=grade,
+                    output_format=fmt_str,
+                    manual_overrides=manual_ov,
+                )
+                result = CLIResult(
+                    success=native_res.success,
+                    return_code=native_res.return_code,
+                    stdout=native_res.stdout,
+                    stderr=native_res.stderr,
+                    command=native_res.command,
+                    duration_s=native_res.duration_s,
+                )
 
             # Update database based on result.
             if result.success:
@@ -257,25 +315,55 @@ class ExportService:
                 # Scale crop from thumbnail to full RAW dimensions.
                 # The crop was computed on the thumbnail; we need to
                 # scale to the full RAW image.  RT crops operate on
-                # the decoded RAW dimensions which we don't know exactly,
-                # but we can compute a scale factor.
+                # the decoded RAW pixel space after demosaicing.
                 if crop.get("original_w") and crop.get("original_h"):
-                    # Use the crop data as-is — RT will apply it to
-                    # the image at whatever resolution it decodes.
-                    # The PP3 Crop coordinates are in the output
-                    # pixel space after demosaicing.
+                    thumb_w = crop["original_w"]
+                    thumb_h = crop["original_h"]
+
+                    # Get actual RAW output dimensions.
+                    try:
+                        import rawpy
+                        with rawpy.imread(str(raw_path)) as _raw:
+                            raw_w = _raw.sizes.width
+                            raw_h = _raw.sizes.height
+                    except Exception:
+                        # Fallback: Sony A7III typical
+                        raw_w, raw_h = 6024, 4024
+
+                    scale_x = raw_w / thumb_w
+                    scale_y = raw_h / thumb_h
+
                     metrics.crop_enabled = True
-                    metrics.crop_x = crop["x"]
-                    metrics.crop_y = crop["y"]
-                    metrics.crop_w = crop["w"]
-                    metrics.crop_h = crop["h"]
-                    metrics.image_w = crop["original_w"]
-                    metrics.image_h = crop["original_h"]
+                    metrics.crop_x = int(crop["x"] * scale_x)
+                    metrics.crop_y = int(crop["y"] * scale_y)
+                    metrics.crop_w = int(crop["w"] * scale_x)
+                    metrics.crop_h = int(crop["h"] * scale_y)
+                    metrics.image_w = raw_w
+                    metrics.image_h = raw_h
             except (json.JSONDecodeError, KeyError):
                 pass
 
-        # Resolve color grade.
-        grade_name = self._forced_preset or photo.color_grade or "natural"
+        # Load manual overrides first — they contain the actual color grade.
+        manual_ov: dict = {}
+        if photo.manual_overrides:
+            try:
+                manual_ov = json.loads(photo.manual_overrides)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not manual_ov and photo.scene_preset:
+            manual_ov = merge_editor_overrides(
+                get_editor_style_overrides(photo.scene_preset),
+                manual_ov,
+            )
+
+        # Resolve color grade: forced preset > manual override > DB column > natural.
+        grade_name = (
+            self._forced_preset
+            or manual_ov.get("color_grade")
+            or photo.scene_preset
+            or photo.color_grade
+            or "natural"
+        )
         grade = GRADES.get(grade_name)
 
         # If the forced preset is a legacy scene name, fall back to
@@ -294,14 +382,6 @@ class ExportService:
         pp3_dir = Path.home() / ".imagic" / "pp3_cache"
         pp3_path = pp3_dir / f"{raw_path.stem}.pp3"
 
-        # Load manual overrides if stored.
-        manual_ov: dict = {}
-        if photo.manual_overrides:
-            try:
-                manual_ov = json.loads(photo.manual_overrides)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
         generate_pp3(metrics, grade, pp3_path, manual_overrides=manual_ov)
         logger.info(
             "Per-photo PP3 for %s: grade=%s, exp=%.1f, ISO=%s, sharp=%.2f",
@@ -311,3 +391,75 @@ class ExportService:
             metrics.sharpness,
         )
         return pp3_path
+
+    # ------------------------------------------------------------------
+    # Native fallback parameter extraction
+    # ------------------------------------------------------------------
+    def _build_native_params(
+        self, photo: "Photo", raw_path: Path, sidecar: Optional[Path],
+    ) -> tuple:
+        """Build (metrics, grade, manual_overrides) for the native processor.
+
+        Mirrors the logic in ``_generate_per_photo_pp3`` but returns
+        Python objects instead of writing a PP3 file.
+        """
+        photo_dict = {
+            "cull_reasons": photo.cull_reasons or "",
+            "exif_iso": photo.exif_iso,
+            "exif_aperture": photo.exif_aperture,
+            "exif_focal_length": photo.exif_focal_length,
+            "exif_shutter_speed": photo.exif_shutter_speed,
+        }
+        metrics = metrics_from_photo(photo_dict)
+
+        thumb = photo.thumbnail_path
+        if thumb and Path(thumb).is_file():
+            analyze_photo_histogram(Path(thumb), metrics)
+
+        if photo.auto_crop_data:
+            try:
+                crop = json.loads(photo.auto_crop_data)
+                if crop.get("original_w") and crop.get("original_h"):
+                    thumb_w = crop["original_w"]
+                    thumb_h = crop["original_h"]
+                    try:
+                        import rawpy
+                        with rawpy.imread(str(raw_path)) as _raw:
+                            raw_w = _raw.sizes.width
+                            raw_h = _raw.sizes.height
+                    except Exception:
+                        raw_w, raw_h = 6024, 4024
+                    scale_x = raw_w / thumb_w
+                    scale_y = raw_h / thumb_h
+                    metrics.crop_enabled = True
+                    metrics.crop_x = int(crop["x"] * scale_x)
+                    metrics.crop_y = int(crop["y"] * scale_y)
+                    metrics.crop_w = int(crop["w"] * scale_x)
+                    metrics.crop_h = int(crop["h"] * scale_y)
+                    metrics.image_w = raw_w
+                    metrics.image_h = raw_h
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        manual_ov: dict = {}
+        if photo.manual_overrides:
+            try:
+                manual_ov = json.loads(photo.manual_overrides)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not manual_ov and photo.scene_preset:
+            manual_ov = merge_editor_overrides(
+                get_editor_style_overrides(photo.scene_preset),
+                manual_ov,
+            )
+
+        grade_name = (
+            self._forced_preset
+            or manual_ov.get("color_grade")
+            or photo.scene_preset
+            or photo.color_grade
+            or "natural"
+        )
+        grade = GRADES.get(grade_name, GRADES["natural"])
+
+        return metrics, grade, manual_ov

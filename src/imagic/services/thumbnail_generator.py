@@ -6,11 +6,18 @@ it to a configurable maximum dimension via ``Pillow``.
 
 from __future__ import annotations
 
+import io
 import logging
+import os
+import tempfile
+import threading
 from pathlib import Path
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+_RAW_THUMBNAIL_CONCURRENCY = max(1, int(os.environ.get("IMAGIC_RAW_THUMBNAIL_CONCURRENCY", "1") or "1"))
+_RAW_THUMBNAIL_SEMAPHORE = threading.BoundedSemaphore(_RAW_THUMBNAIL_CONCURRENCY)
 
 
 def generate_thumbnail(
@@ -18,6 +25,7 @@ def generate_thumbnail(
     output_path: Path,
     max_size: Tuple[int, int] = (320, 320),
     quality: int = 85,
+    embedded_only: bool = False,
 ) -> Optional[Path]:
     """Create a JPEG thumbnail for a RAW image.
 
@@ -40,29 +48,55 @@ def generate_thumbnail(
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with rawpy.imread(str(raw_path)) as raw:
-            try:
-                # Fast path: embedded JPEG thumbnail.
-                thumb = raw.extract_thumb()
-                if thumb.format == rawpy.ThumbFormat.JPEG:
-                    # Write raw JPEG bytes, then resize.
-                    temp = output_path.with_suffix(".tmp.jpg")
-                    temp.write_bytes(thumb.data)
-                    img = Image.open(temp)
-                    img.thumbnail(max_size, Image.LANCZOS)
-                    img.save(str(output_path), "JPEG", quality=quality)
-                    temp.unlink(missing_ok=True)
-                    logger.debug("Thumbnail (embedded) created: %s", output_path)
-                    return output_path
-            except Exception:
-                logger.debug("No embedded thumb for %s — falling back to full decode.", raw_path)
+        with _RAW_THUMBNAIL_SEMAPHORE:
+            with rawpy.imread(str(raw_path)) as raw:
+                try:
+                    # Fast path: embedded JPEG thumbnail.
+                    thumb = raw.extract_thumb()
+                    if thumb.format == rawpy.ThumbFormat.JPEG:
+                        img = Image.open(io.BytesIO(thumb.data))
+                        img.thumbnail(max_size, Image.LANCZOS)
+                        with tempfile.NamedTemporaryFile(
+                            dir=output_path.parent,
+                            suffix=".jpg",
+                            delete=False,
+                        ) as handle:
+                            temp_path = Path(handle.name)
+                        try:
+                            img.save(str(temp_path), "JPEG", quality=quality, optimize=True)
+                            temp_path.replace(output_path)
+                        finally:
+                            temp_path.unlink(missing_ok=True)
+                        logger.debug("Thumbnail (embedded) created: %s", output_path)
+                        return output_path
+                except Exception:
+                    logger.debug("No embedded thumb for %s — falling back to decode.", raw_path)
 
-            # Slow path: full demosaic → resize.
-            rgb = raw.postprocess()
+                if embedded_only:
+                    logger.warning("No embedded RAW thumbnail available for %s", raw_path)
+                    return None
+
+                # Memory-conscious fallback for web use.
+                rgb = raw.postprocess(
+                    half_size=True,
+                    use_camera_wb=True,
+                    no_auto_bright=True,
+                    output_bps=8,
+                )
 
         img = Image.fromarray(rgb)
         img.thumbnail(max_size, Image.LANCZOS)
-        img.save(str(output_path), "JPEG", quality=quality)
+        with tempfile.NamedTemporaryFile(
+            dir=output_path.parent,
+            suffix=".jpg",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+        try:
+            img.save(str(temp_path), "JPEG", quality=quality, optimize=True)
+            temp_path.replace(output_path)
+        finally:
+            temp_path.unlink(missing_ok=True)
         logger.debug("Thumbnail (decoded) created: %s", output_path)
         return output_path
 

@@ -47,10 +47,13 @@ class AIController:
         duplicate_detector: Optional[DuplicateDetector] = None,
         keep_threshold: float = 0.8,
         trash_threshold: float = 0.3,
+        duplicate_hash_threshold: int = 10,
     ) -> None:
         self._queue = task_queue
         self._scorer = quality_scorer or QualityScorer()
-        self._dup_detector = duplicate_detector or DuplicateDetector()
+        self._dup_detector = duplicate_detector or DuplicateDetector(
+            threshold=duplicate_hash_threshold,
+        )
         self._keep = keep_threshold
         self._trash = trash_threshold
 
@@ -220,11 +223,21 @@ class AIController:
                     except Exception:
                         logger.debug("Auto-crop analysis failed for %s", photo.file_name)
 
-                    # Decision engine.
-                    if result.score >= self._keep:
+                    # Decision engine — apply learned threshold adjustments.
+                    from imagic.ai.feedback_learner import get_learner
+                    adj = get_learner().get_score_adjustments()
+                    effective_keep = self._keep + adj.get("keep_shift", 0.0)
+                    effective_trash = self._trash + adj.get("trash_shift", 0.0)
+                    if adj.get("sample_count", 0) >= 5:
+                        logger.debug(
+                            "Learned thresholds: keep=%.3f trash=%.3f (%d samples)",
+                            effective_keep, effective_trash, adj["sample_count"],
+                        )
+
+                    if result.score >= effective_keep:
                         photo.status = PhotoStatus.KEEP.value
                         stats["keep"] += 1
-                    elif result.score <= self._trash:
+                    elif result.score <= effective_trash:
                         photo.status = PhotoStatus.TRASH.value
                         stats["trash"] += 1
                     stats["analysed"] += 1
@@ -249,13 +262,14 @@ class AIController:
         session = db.get_session()
         try:
             photos: List[Photo] = session.query(Photo).filter(
-                Photo.status.in_([
-                    PhotoStatus.CULLED.value,
-                    PhotoStatus.KEEP.value,
+                Photo.status.notin_([
+                    PhotoStatus.TRASH.value,
+                    PhotoStatus.ERROR.value,
                 ])
             ).all()
 
             hash_map: dict[str, str] = {}
+            time_map: dict[str, object] = {}
             for photo in photos:
                 image_path = (
                     Path(photo.thumbnail_path)
@@ -266,10 +280,11 @@ class AIController:
                 if result.ok and "phash" in result.labels:
                     photo.perceptual_hash = result.labels["phash"]
                     hash_map[photo.file_path] = result.labels["phash"]
+                    time_map[photo.file_path] = photo.exif_date_taken
 
             session.commit()
 
-            groups = self._dup_detector.group_duplicates(hash_map)
+            groups = self._dup_detector.group_duplicates(hash_map, time_map=time_map)
             logger.info("Duplicate scan: %d groups found.", len(groups))
             return {"groups": groups, "total_duplicates": sum(len(g) for g in groups)}
         except Exception:

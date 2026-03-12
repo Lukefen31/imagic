@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>imagic Desktop — Order Ready</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/imagic-app-icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-desktop-session-id="{{ session_id }}" data-desktop-bundle-available="{{ 'true' if desktop_bundle_available else 'false' }}">
+<section class="desktop-thanks-shell">
+    <div class="desktop-thanks-card">
+        <div class="hero-badge"><span class="badge badge-accent">Desktop order</span></div>
+        <h1>Your imagic Desktop order is processing</h1>
+        <p>Stripe has returned to imagic. This page will load your product key and secure installer links as soon as the payment webhook finishes.</p>
+        <div id="desktop-order-status" class="desktop-order-status">
+            <p>Waiting for confirmation…</p>
+        </div>
+        <div class="desktop-thanks-actions">
+            <a href="/desktop" class="btn btn-secondary btn-lg">Back to Desktop Page</a>
+            <a href="/" class="btn btn-primary btn-lg">Homepage</a>
+        </div>
+    </div>
+</section>
+
+<script src="/static/js/desktop.js"></script>
+</body>
+</html>

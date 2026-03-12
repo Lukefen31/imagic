@@ -55,4 +55,11 @@ DEFAULTS: dict = {
         "thumbnail_grid_columns": 5,
         "show_status_bar": True,
     },
+    "security": {
+        "require_activation": False,
+        "license_api_base_url": "",
+        "license_email": "",
+        "license_key": "",
+        "activation_token": "",
+    },
 }

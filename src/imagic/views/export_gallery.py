@@ -68,6 +68,7 @@ class _ExportTile(QWidget):
     """Single export thumbnail tile (no thread — loaded externally)."""
 
     clicked = pyqtSignal(int)  # index
+    double_clicked = pyqtSignal(int)  # index
 
     def __init__(
         self,
@@ -89,7 +90,7 @@ class _ExportTile(QWidget):
         self._image_label = QLabel()
         self._image_label.setFixedSize(size, size)
         self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image_label.setStyleSheet("background: #1e1e1e; border: 1px solid #333;")
+        self._image_label.setStyleSheet("background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 4px;")
         self._image_label.setText("Loading…")
         layout.addWidget(self._image_label)
 
@@ -117,6 +118,9 @@ class _ExportTile(QWidget):
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         self.clicked.emit(self._index)
 
+    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
+        self.double_clicked.emit(self._index)
+
 
 class ExportGalleryView(QWidget):
     """Scrollable grid showing exported photos.
@@ -127,6 +131,7 @@ class ExportGalleryView(QWidget):
     """
 
     photo_clicked = pyqtSignal(int, str, str)  # photo_id, export_path, thumb_path
+    photo_double_clicked = pyqtSignal(int, str, str)  # photo_id — open editor
 
     def __init__(self, columns: int = 5, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -142,7 +147,7 @@ class ExportGalleryView(QWidget):
         header = QLabel("  Exported Images")
         header.setStyleSheet(
             "color: #eee; font-size: 13px; font-weight: bold; "
-            "padding: 8px; background: #2a2a2a;"
+            "padding: 10px; background: #141414; letter-spacing: 0.5px;"
         )
         layout.addWidget(header)
 
@@ -163,7 +168,7 @@ class ExportGalleryView(QWidget):
         # Empty state
         self._empty_label = QLabel("No exported images yet.\nRun the pipeline to see results here.")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet("color: #666; font-size: 14px; padding: 40px;")
+        self._empty_label.setStyleSheet("color: #555; font-size: 14px; padding: 40px;")
         layout.addWidget(self._empty_label)
 
     def set_exports(self, photos: List[dict]) -> None:
@@ -196,6 +201,7 @@ class ExportGalleryView(QWidget):
                 status=p.get("status", ""),
             )
             tile.clicked.connect(self._on_tile_clicked)
+            tile.double_clicked.connect(self._on_tile_double_clicked)
             row, col = divmod(len(self._tiles), self._columns)
             self._grid_layout.addWidget(tile, row, col)
             self._tiles.append(tile)
@@ -206,11 +212,8 @@ class ExportGalleryView(QWidget):
 
         for idx, p in enumerate(photos):
             export_path = p.get("export_path", "")
-            # Prefer thumbnail for gallery (much smaller); fall back to export.
-            thumb = p.get("thumbnail_path", "")
-            load_path = thumb if (thumb and Path(thumb).is_file()) else export_path
-            if load_path and Path(load_path).is_file():
-                self._loader.enqueue(idx, load_path, _THUMB_SIZE)
+            if export_path and Path(export_path).is_file():
+                self._loader.enqueue(idx, export_path, _THUMB_SIZE)
 
         self._loader.start()
 
@@ -222,6 +225,15 @@ class ExportGalleryView(QWidget):
         if 0 <= index < len(self._photo_data):
             p = self._photo_data[index]
             self.photo_clicked.emit(
+                p.get("id", 0),
+                p.get("export_path", ""),
+                p.get("thumbnail_path", ""),
+            )
+
+    def _on_tile_double_clicked(self, index: int) -> None:
+        if 0 <= index < len(self._photo_data):
+            p = self._photo_data[index]
+            self.photo_double_clicked.emit(
                 p.get("id", 0),
                 p.get("export_path", ""),
                 p.get("thumbnail_path", ""),

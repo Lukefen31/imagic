@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>imagic — Free Lightroom Alternative | AI Photo Culling &amp; Editing</title>
+    <meta name="description" content="The free, open-source Lightroom alternative. AI-powered photo culling, batch editing, and RAW processing — faster, cheaper, and simpler than Adobe. Try in your browser or download for desktop.">
+    <meta name="keywords" content="free lightroom alternative, photo culling software, AI photo editing, batch photo processing, RAW editor, open source photo editor, lightroom replacement, photo management">
+    <link rel="icon" type="image/svg+xml" href="/static/img/imagic-app-icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+</head>
+<body>
+
+<!-- ============================================================
+     Navigation
+     ============================================================ -->
+<nav class="navbar" id="navbar">
+    <div class="container">
+        <a href="/" class="navbar-brand navbar-brand-wide">
+            <img src="/static/img/imagic-wide-white.svg" alt="imagic" class="brand-logo-wide">
+        </a>
+        <ul class="navbar-links" id="nav-links">
+            <li><a href="#why-switch">Why Switch</a></li>
+            <li><a href="#showcase">How It Works</a></li>
+            <li><a href="#ai-assistant">AI Assistant</a></li>
+            <li><a href="#versions">Versions</a></li>
+            <li><a href="#pricing">Pricing</a></li>
+        </ul>
+        <div class="navbar-actions">
+            <a href="/app" class="btn btn-primary btn-sm">Open Web App</a>
+            <button class="hamburger" id="hamburger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+</nav>
+
+<!-- ============================================================
+     Hero
+     ============================================================ -->
+<section class="hero">
+    <div class="container">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <span class="badge badge-accent">Free &amp; open-source Lightroom alternative</span>
+            </div>
+            <h1>Cull &amp; edit photos<br><span class="gradient-text">10× faster than Lightroom</span></h1>
+            <p>AI selects your best shots, removes duplicates, and batch-edits thousands of photos — all for free. No subscription, no creative cloud, no bloat. Just results.</p>
+            <div class="hero-actions">
+                <a href="/app" class="btn btn-primary btn-lg">
+                    <span><i class="fa-solid fa-bolt"></i></span> Try Free in Browser
+                </a>
+                <a href="/desktop" class="btn btn-secondary btn-lg">
+                    <span><i class="fa-solid fa-download"></i></span> Download Desktop
+                </a>
+            </div>
+            <div class="hero-stats">
+                <div class="hero-stat">
+                    <div class="number">$0</div>
+                    <div class="label">vs $10/mo Lightroom</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="number">10×</div>
+                    <div class="label">Faster culling</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="number">9+</div>
+                    <div class="label">RAW formats</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="number">∞</div>
+                    <div class="label">Photos free</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Hero Screenshot (showpiece)
+     ============================================================ -->
+<div class="hero-screenshot">
+    <div class="window-frame">
+        <div class="window-titlebar">
+            <div class="window-dots"><span></span><span></span><span></span></div>
+            <div class="window-title">imagic — Edit Photos</div>
+        </div>
+        <img src="/static/img/edit-top.png" alt="imagic photo editor with color grading, histogram, and adjustment sliders" loading="eager">
+    </div>
+</div>
+
+<!-- ============================================================
+     Pipeline Showcase (real screenshots in window frames)
+     ============================================================ -->
+<section class="section pipeline-section tex-grid" id="showcase">
+    <div class="container">
+        <div class="section-title">Your entire workflow, <span class="gradient-text">5 simple steps</span></div>
+        <div class="section-subtitle">From folder to finished exports — imagic handles the heavy lifting at every stage.</div>
+
+        <div class="pipeline-steps">
+
+            <!-- Step 1: Import -->
+            <div class="pipeline-step" data-step="1">
+                <div class="pipeline-text">
+                    <h3><span>Import</span> your photos</h3>
+                    <p>Point imagic at any folder. It scans and catalogs every photo — RAW, JPEG, TIFF — including subfolders. One click to begin.</p>
+                </div>
+                <div class="pipeline-screenshot">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">1. Import</div>
+                        </div>
+                        <img src="/static/img/import.png" alt="Import Photos — folder picker with how-it-works guide" loading="lazy">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Analyse -->
+            <div class="pipeline-step" data-step="2">
+                <div class="pipeline-text">
+                    <h3><span>Analyse</span> with AI</h3>
+                    <p>AI scores every shot on sharpness, exposure, noise, composition, and detail. Duplicates are flagged automatically. Results in seconds, not hours.</p>
+                </div>
+                <div class="pipeline-screenshot">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">2. Analyse</div>
+                        </div>
+                        <img src="/static/img/analyse.png" alt="Analyse Photos — zoomable thumbnail grid with quality scores" loading="lazy">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Review & Cull -->
+            <div class="pipeline-step" data-step="3">
+                <div class="pipeline-text">
+                    <h3><span>Review</span> &amp; cull</h3>
+                    <p>See per-metric breakdowns at a glance: sharpness, exposure, detail, noise, composition, and face detection. Keep or trash each shot with one click.</p>
+                </div>
+                <div class="pipeline-screenshot">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">3. Review &amp; Cull</div>
+                        </div>
+                        <img src="/static/img/review.png" alt="Review & Cull — enriched tiles with metric bars and keep/trash buttons" loading="lazy">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4: Edit -->
+            <div class="pipeline-step" data-step="4">
+                <div class="pipeline-text">
+                    <h3><span>Edit</span> &amp; grade</h3>
+                    <p>Full editing suite: histogram, exposure, color grading, sharpening, noise reduction, AI auto-enhance, and 6+ style presets with live previews.</p>
+                </div>
+                <div class="pipeline-screenshot">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">4. Edit</div>
+                        </div>
+                        <img src="/static/img/edit-bottom.png" alt="Edit Photos — detail, color grading, effects, and AI tools" loading="lazy">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 5: Export -->
+            <div class="pipeline-step" data-step="5">
+                <div class="pipeline-text">
+                    <h3><span>Export</span> the keepers</h3>
+                    <p>Batch-process all kept photos with your chosen settings. Crash-resilient pipeline auto-resumes interrupted exports. Open the output folder when done.</p>
+                </div>
+                <div class="pipeline-screenshot">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">5. Export</div>
+                        </div>
+                        <img src="/static/img/export.png" alt="Export — gallery of processed images ready to share" loading="lazy">
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Extra showcase: Duplicate Cleaner + Style Chooser -->
+        <div style="margin-top: 100px;">
+            <div class="section-title">Plus <span class="gradient-text">powerful extras</span></div>
+            <div class="section-subtitle">Dedicated tools for duplicates, styles, and detailed culling decisions.</div>
+            <div class="showcase-gallery">
+                <div class="showcase-gallery-item">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">Duplicate Cleaner</div>
+                        </div>
+                        <img src="/static/img/duplicates.png" alt="Duplicate Cleaner — grouped similar photos with auto-pick best" loading="lazy">
+                    </div>
+                    <div class="showcase-gallery-label">Finds burst duplicates and picks the sharpest automatically</div>
+                </div>
+                <div class="showcase-gallery-item">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">Style Chooser</div>
+                        </div>
+                        <img src="/static/img/style-edit.png" alt="Style Chooser — 6 editing presets with live preview thumbnails" loading="lazy">
+                    </div>
+                    <div class="showcase-gallery-label">6 editing styles + 30 color grades with live preview</div>
+                </div>
+                <div class="showcase-gallery-item">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">Detailed Culling View</div>
+                        </div>
+                        <img src="/static/img/culling-preview.png" alt="Culling Preview — detailed table with scores, decisions, and reasons" loading="lazy">
+                    </div>
+                    <div class="showcase-gallery-label">Detailed breakdown of every AI decision with full reasoning</div>
+                </div>
+                <div class="showcase-gallery-item">
+                    <div class="window-frame">
+                        <div class="window-titlebar">
+                            <div class="window-dots"><span></span><span></span><span></span></div>
+                            <div class="window-title">Color Grades</div>
+                        </div>
+                        <img src="/static/img/style-grade.png" alt="Color Grade chooser — 30+ cinematic LUT presets" loading="lazy">
+                    </div>
+                    <div class="showcase-gallery-label">30+ cinematic color grades applied across all your photos</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="parallax-divider" style="background-image: url('{{ url_for('static', path='img/DSC04977.jpg') }}')">
+    <div class="parallax-credit">
+        <span>edited by</span>
+        <img src="/static/img/imagic-wide-white.svg" alt="imagic">
+    </div>
+</div>
+
+<!-- ============================================================
+     Why Switch from Lightroom
+     ============================================================ -->
+<section class="section tex-diag" id="why-switch">
+    <div class="container">
+        <div class="section-title">Why photographers are <span class="gradient-text">ditching Lightroom</span></div>
+        <div class="section-subtitle">imagic does what Lightroom does — faster, simpler, and without the $120/year subscription.</div>
+
+        <!-- Comparison Table -->
+        <div class="comparison-table">
+            <div class="comparison-header">
+                <div class="comparison-feature-label"></div>
+                <div class="comparison-col imagic-col">
+                    <div class="comparison-logo"><i class="fa-solid fa-sparkles"></i> imagic</div>
+                </div>
+                <div class="comparison-col lr-col">
+                    <div class="comparison-logo">Lightroom</div>
+                </div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">Price</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes">Free forever</span></div>
+                <div class="comparison-col lr-col"><span class="comp-no">$9.99/month</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">AI photo culling</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes"><i class="fa-solid fa-check"></i> Built-in</span></div>
+                <div class="comparison-col lr-col"><span class="comp-no"><i class="fa-solid fa-xmark"></i> Manual only</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">Duplicate detection</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes"><i class="fa-solid fa-check"></i> Automatic</span></div>
+                <div class="comparison-col lr-col"><span class="comp-no"><i class="fa-solid fa-xmark"></i> Not available</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">Cull 1,000 photos</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes">~30 seconds</span></div>
+                <div class="comparison-col lr-col"><span class="comp-no">2-3 hours manual</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">RAW processing</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes"><i class="fa-solid fa-check"></i> 9+ formats</span></div>
+                <div class="comparison-col lr-col"><span class="comp-neutral"><i class="fa-solid fa-check"></i> Supported</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">Batch export</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes"><i class="fa-solid fa-check"></i> Multi-threaded</span></div>
+                <div class="comparison-col lr-col"><span class="comp-neutral"><i class="fa-solid fa-check"></i> Supported</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">Learning AI</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes"><i class="fa-solid fa-check"></i> Learns from you</span></div>
+                <div class="comparison-col lr-col"><span class="comp-no"><i class="fa-solid fa-xmark"></i> No</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">Works in browser</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes"><i class="fa-solid fa-check"></i> No install</span></div>
+                <div class="comparison-col lr-col"><span class="comp-no"><i class="fa-solid fa-xmark"></i> Desktop only</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">Open source</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes"><i class="fa-solid fa-check"></i> MIT License</span></div>
+                <div class="comparison-col lr-col"><span class="comp-no"><i class="fa-solid fa-xmark"></i> Proprietary</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-feature">Account required</div>
+                <div class="comparison-col imagic-col"><span class="comp-yes">No</span></div>
+                <div class="comparison-col lr-col"><span class="comp-no">Yes (Adobe ID)</span></div>
+            </div>
+        </div>
+
+        <!-- Key Benefits -->
+        <div class="benefits-grid">
+            <div class="benefit-card">
+                <div class="benefit-icon"><i class="fa-solid fa-piggy-bank"></i></div>
+                <h3>Save $120+/year</h3>
+                <p>No subscription, no hidden costs. The desktop app is completely free with zero limits. Stop paying Adobe for features you don't use.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon"><i class="fa-solid fa-bolt"></i></div>
+                <h3>10× faster culling</h3>
+                <p>AI scores every photo on sharpness, exposure, noise, composition, and detail — in seconds. What takes hours in Lightroom happens automatically.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon"><i class="fa-solid fa-crosshairs"></i></div>
+                <h3>Dead simple workflow</h3>
+                <p>Import → AI Analyse → Review → Edit → Export. Five steps, one flow. No catalogues to manage, no import settings to configure. Point at a folder and go.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon"><i class="fa-solid fa-brain"></i></div>
+                <h3>AI that learns from you</h3>
+                <p>Every keep/trash decision and edit you make teaches imagic your preferences. Over time, it gets smarter and more aligned with your eye.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="parallax-divider" style="background-image: url('{{ url_for('static', path='img/DSC05858.jpg') }}')">
+    <div class="parallax-credit">
+        <span>edited by</span>
+        <img src="/static/img/imagic-wide-white.svg" alt="imagic">
+    </div>
+</div>
+
+<!-- ============================================================
+     AI Assistant
+     ============================================================ -->
+<section class="section ai-section tex-dots" id="ai-assistant">
+    <div class="container">
+        <div class="section-title">Your personal <span class="gradient-text">AI editing assistant</span></div>
+        <div class="section-subtitle">imagic's AI doesn't replace you — it handles the tedious work so you can focus on the creative decisions that matter.</div>
+
+        <div class="ai-features">
+            <div class="ai-feature-card">
+                <div class="ai-feature-number">01</div>
+                <h3>Intelligent scoring</h3>
+                <p>Every photo is scored across 5 metrics: sharpness, exposure, noise, composition, and detail. The AI instantly separates keepers from rejects — so you start with the best instead of sifting through thousands.</p>
+            </div>
+            <div class="ai-feature-card">
+                <div class="ai-feature-number">02</div>
+                <h3>Burst &amp; duplicate detection</h3>
+                <p>Shot 20 frames of the same scene? imagic finds visually identical photos and burst groups, then picks the sharpest automatically. You'll never manually compare near-identical shots again.</p>
+            </div>
+            <div class="ai-feature-card">
+                <div class="ai-feature-number">03</div>
+                <h3>Smart crop &amp; framing</h3>
+                <p>Detects dead space, subjects, and rule-of-thirds alignment. Suggests optimal crop and framing with a confidence score. Accept the suggestion or ignore it — you're always in control.</p>
+            </div>
+            <div class="ai-feature-card">
+                <div class="ai-feature-number">04</div>
+                <h3>Scene-aware profiles</h3>
+                <p>Automatically detects whether a shot is a portrait, landscape, low-light scene, or high-contrast environment — and applies the perfect processing profile to match.</p>
+            </div>
+            <div class="ai-feature-card">
+                <div class="ai-feature-number">05</div>
+                <h3>Feedback learning</h3>
+                <p>This is what makes imagic truly unique: the AI tracks your keep/trash decisions, your edits, and your style preferences. Over time, it learns what <em>you</em> consider a great photo and weights its scoring accordingly. It's like training your own personal assistant.</p>
+            </div>
+            <div class="ai-feature-card">
+                <div class="ai-feature-number">06</div>
+                <h3>You're always in control</h3>
+                <p>Every AI suggestion can be overridden. Keep a photo the AI rejected. Trash one it liked. Adjust any edit. The AI adapts to your choices — it assists, never dictates.</p>
+            </div>
+        </div>
+
+        <div class="ai-callout">
+            <div class="ai-callout-icon"><i class="fa-solid fa-robot"></i></div>
+            <div class="ai-callout-text">
+                <strong>Think of imagic as your editing intern.</strong> It does the grunt work — scoring, sorting, flagging duplicates — and learns from every correction you make. After a few sessions, it knows your taste better than any preset ever could.
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="parallax-divider" style="background-image: url('{{ url_for('static', path='img/DSC06152.jpg') }}')">
+    <div class="parallax-credit">
+        <span>edited by</span>
+        <img src="/static/img/imagic-wide-white.svg" alt="imagic">
+    </div>
+</div>
+
+<!-- ============================================================
+     Features (condensed)
+     ============================================================ -->
+<section class="section tex-cross" id="features">
+    <div class="container">
+        <div class="section-title">Everything you need to <span class="gradient-text">cull smarter</span></div>
+        <div class="section-subtitle">From AI quality scoring to batch export — imagic automates the boring parts so you can focus on creative editing.</div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-crosshairs"></i></div>
+                <h3>AI Quality Scoring</h3>
+                <p>Scores every photo on sharpness, exposure, noise, composition, and detail — instantly separating keepers from rejects.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+                <h3>Duplicate Detection</h3>
+                <p>Finds visually identical shots and burst duplicates using perceptual hashing — keep the sharpest, ditch the rest.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-crop"></i></div>
+                <h3>Smart Auto-Crop</h3>
+                <p>Detects dead space, aligns to rule-of-thirds, and suggests optimal framing with confidence scoring.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-palette"></i></div>
+                <h3>Color Grading</h3>
+                <p>6 cinematic grades — Natural, Film Warm, Film Cool, Moody, Vibrant, Cinematic — with live preview thumbnails.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-bolt"></i></div>
+                <h3>Batch Processing</h3>
+                <p>Parallel multi-threaded export through darktable or RawTherapee. Process thousands of photos hands-free.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i class="fa-solid fa-camera"></i></div>
+                <h3>9+ RAW Formats</h3>
+                <p>Canon CR2/CR3, Nikon NEF, Sony ARW, Fujifilm RAF, Olympus ORF, Panasonic RW2, Adobe DNG, Pentax PEF, and more.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="parallax-divider" style="background-image: url('{{ url_for('static', path='img/DSC06342.jpg') }}')">
+    <div class="parallax-credit">
+        <span>edited by</span>
+        <img src="/static/img/imagic-wide-white.svg" alt="imagic">
+    </div>
+</div>
+
+<!-- ============================================================
+     Versions — Browser / Desktop / Desktop + RawTherapee
+     ============================================================ -->
+<section class="section tex-circuit" id="versions">
+    <div class="container">
+        <div class="section-title">Three ways to use <span class="gradient-text">imagic</span></div>
+        <div class="section-subtitle">From zero-install browser access to full RAW processing power — pick the version that fits your workflow.</div>
+
+        <div class="versions-grid">
+            <!-- Browser -->
+            <div class="version-card">
+                <div class="version-badge"><i class="fa-solid fa-globe"></i> Easiest</div>
+                <h3>Browser</h3>
+                <p class="version-tagline">Nothing to install. Open and go.</p>
+                <ul class="version-features">
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> AI quality scoring &amp; culling</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Duplicate detection</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Auto-crop suggestions</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Color grade preview</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> JPEG/PNG export</li>
+                    <li><span class="cross">—</span> RAW processing (JPEG preview only)</li>
+                    <li><span class="cross">—</span> Offline access</li>
+                </ul>
+                <div class="version-best-for">
+                    <strong>Best for:</strong> Quick culling sessions, trying imagic, or when you're not at your main machine.
+                </div>
+                <a href="/app" class="btn btn-primary" style="width:100%; justify-content:center;">Open in Browser</a>
+            </div>
+
+            <!-- Desktop Standalone -->
+            <div class="version-card featured">
+                <div class="version-badge-featured"><span class="badge badge-success">Recommended</span></div>
+                <div class="version-badge"><i class="fa-solid fa-desktop"></i> Full power</div>
+                <h3>Desktop Standalone</h3>
+                <p class="version-tagline">Full AI pipeline. No RAW engine needed.</p>
+                <ul class="version-features">
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Everything in Browser</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Unlimited photos</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Full editing suite &amp; histogram</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Feedback learning AI</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Batch JPEG/PNG export</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> CLI &amp; headless mode</li>
+                    <li><span class="cross">—</span> RAW → JPEG via embedded preview</li>
+                </ul>
+                <div class="version-best-for">
+                    <strong>Best for:</strong> Photographers who shoot JPEG, or want AI culling and editing without extra setup.
+                </div>
+                <div class="version-downloads">
+                    <a href="/desktop" class="btn btn-primary btn-sm" style="flex:1; justify-content:center;"><i class="fa-brands fa-windows"></i> Windows</a>
+                    <a href="/desktop" class="btn btn-primary btn-sm" style="flex:1; justify-content:center;"><i class="fa-brands fa-apple"></i> macOS</a>
+                    <a href="/desktop" class="btn btn-primary btn-sm" style="flex:1; justify-content:center;"><i class="fa-brands fa-linux"></i> Linux</a>
+                </div>
+            </div>
+
+            <!-- Desktop + RawTherapee -->
+            <div class="version-card">
+                <div class="version-badge"><i class="fa-solid fa-microscope"></i> Maximum quality</div>
+                <h3>Desktop + RawTherapee</h3>
+                <p class="version-tagline">True RAW processing. Full control.</p>
+                <ul class="version-features">
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Everything in Standalone</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> True RAW demosaicing &amp; processing</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Full RawTherapee parameter control</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> 30+ cinematic color grades</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Scene-aware profile auto-selection</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> PP3 profile generation</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Maximum export quality</li>
+                </ul>
+                <div class="version-best-for">
+                    <strong>Best for:</strong> Serious RAW shooters who want the absolute best processing quality and full parameter control.
+                </div>
+                <a href="/desktop" class="btn btn-secondary" style="width:100%; justify-content:center;">Download + Install RawTherapee</a>
+            </div>
+        </div>
+
+        <div style="text-align:center; margin-top: 32px;">
+            <p style="color: var(--text-muted); font-size: 0.9rem;">
+                Or install via pip: <code style="background: var(--bg-card); padding: 4px 12px; border-radius: 4px; font-family: var(--font-mono);">pip install imagic</code>
+            </p>
+        </div>
+    </div>
+</section>
+
+<div class="parallax-divider" style="background-image: url('{{ url_for('static', path='img/DSC04103.jpg') }}')">
+    <div class="parallax-credit">
+        <span>edited by</span>
+        <img src="/static/img/imagic-wide-white.svg" alt="imagic">
+    </div>
+</div>
+
+<!-- ============================================================
+     Pricing
+     ============================================================ -->
+<section class="section tex-noise" id="pricing" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-title">Simple, honest <span class="gradient-text">pricing</span></div>
+        <div class="section-subtitle">One-time desktop license, a free daily web tier, and simple account-based credit packs for the browser workflow.</div>
+
+        <div class="pricing-grid">
+            <!-- Desktop -->
+            <div class="pricing-card">
+                <h3>Desktop</h3>
+                <div class="price" data-price-10>$10</div>
+                <div class="price-note">One-time payment — unlimited license</div>
+                <ul class="pricing-features">
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Unlimited photos</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> All AI features</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> All editing tools &amp; grades</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Feedback learning AI</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Batch export</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> CLI &amp; headless mode</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> RawTherapee integration</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> No ads, no account</li>
+                </ul>
+                <a href="/desktop" class="btn btn-secondary" style="width:100%; justify-content:center;">Buy Desktop License</a>
+            </div>
+
+            <!-- Web Free -->
+            <div class="pricing-card">
+                <h3>Web — Free</h3>
+                <div class="price">$0</div>
+                <div class="price-note">20 images / day</div>
+                <ul class="pricing-features">
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> 20 images per day</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> AI quality scoring</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Duplicate detection</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Auto-crop suggestions</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Color grade preview</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> JPEG/PNG export</li>
+                    <li><span class="cross">—</span> Non-intrusive ads</li>
+                    <li><span class="cross">—</span> Standard processing speed</li>
+                </ul>
+                <a href="/app" class="btn btn-primary" style="width:100%; justify-content:center;">Open Web App</a>
+            </div>
+
+            <!-- Web Credits -->
+            <div class="pricing-card featured">
+                <div class="pricing-badge"><span class="badge badge-success">Account-based</span></div>
+                <h3>Web — Credit Pack</h3>
+                <div class="price" data-price-5><span class="currency-symbol">$</span>5<span>/500 images</span></div>
+                <div class="price-note">One-time pack. No subscription.</div>
+                <ul class="pricing-features">
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> 500 processed images per pack</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Everything in Web Free</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Credits tied to your account</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Batch download as ZIP</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> No ads</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Credits stack as you buy more</li>
+                    <li><span class="check"><i class="fa-solid fa-check"></i></span> Better abuse protection via account sign-in</li>
+                    <li>&nbsp;</li>
+                </ul>
+                <a href="/app" class="btn btn-primary" style="width:100%; justify-content:center;" data-checkout-btn>Buy 500 Images — <span class="currency-symbol">$</span>5</a>
+            </div>
+        </div>
+
+        <div class="pricing-comparison-note">
+            <p><i class="fa-solid fa-lightbulb" style="color: var(--accent);"></i> <strong>For context:</strong> imagic Desktop remains a <strong>one-time <span data-price-10-inline>$10</span></strong> purchase, while the web app now uses small prepaid packs so heavy browser usage pays for server time without forcing everyone into a subscription.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     CTA
+     ============================================================ -->
+<section class="section cta-section">
+    <div class="container">
+        <h2>Stop paying Adobe to <span class="gradient-text">cull photos manually</span></h2>
+        <p>Join photographers who've replaced their Lightroom subscription with AI-powered culling.</p>
+        <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+            <a href="/app" class="btn btn-primary btn-lg"><span><i class="fa-solid fa-bolt"></i></span> Try Free in Browser</a>
+            <a href="/desktop" class="btn btn-secondary btn-lg"><span><i class="fa-solid fa-download"></i></span> Download Desktop</a>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Works with your camera + Footer (shared camera background)
+     ============================================================ -->
+<div class="camera-footer-wrap">
+<section class="section camera-section">
+    <div class="container">
+        <div class="section-title">Works with <span class="gradient-text">your camera</span></div>
+        <div class="section-subtitle">Upload RAW or JPEG from any major brand. We handle the rest.</div>
+        <div class="formats-row">
+            <div class="format-chip">.CR2</div>
+            <div class="format-chip">.CR3</div>
+            <div class="format-chip">.NEF</div>
+            <div class="format-chip">.ARW</div>
+            <div class="format-chip">.RAF</div>
+            <div class="format-chip">.ORF</div>
+            <div class="format-chip">.RW2</div>
+            <div class="format-chip">.DNG</div>
+            <div class="format-chip">.PEF</div>
+            <div class="format-chip">.JPEG</div>
+            <div class="format-chip">.PNG</div>
+            <div class="format-chip">.TIFF</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Footer
+     ============================================================ -->
+<footer class="footer">
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <a href="/" class="navbar-brand navbar-brand-wide">
+                    <img src="/static/img/imagic-wide-white.svg" alt="imagic" class="brand-logo-wide">
+                </a>
+                <p>AI-powered photo culling and batch processing. Free, open source, and built for photographers.</p>
+                <div class="footer-social">
+                    <a href="#" aria-label="GitHub"><i class="fa-brands fa-github"></i></a>
+                    <a href="#" aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
+                    <a href="#" aria-label="Discord"><i class="fa-brands fa-discord"></i></a>
+                </div>
+            </div>
+            <div class="footer-col">
+                <h4>Product</h4>
+                <ul>
+                    <li><a href="#why-switch">Why Switch</a></li>
+                    <li><a href="#ai-assistant">AI Assistant</a></li>
+                    <li><a href="#versions">Versions</a></li>
+                    <li><a href="#pricing">Pricing</a></li>
+                    <li><a href="/desktop">Desktop Download</a></li>
+                    <li><a href="/app">Web App</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h4>Resources</h4>
+                <ul>
+                    <li><a href="#">Documentation</a></li>
+                    <li><a href="#">API Reference</a></li>
+                    <li><a href="#">Changelog</a></li>
+                    <li><a href="#">GitHub</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h4>Support</h4>
+                <ul>
+                    <li><a href="https://ko-fi.com/imagic" target="_blank" rel="noopener"><i class="fa-solid fa-mug-hot"></i> Buy Us a Coffee</a></li>
+                    <li><a href="#">Report a Bug</a></li>
+                    <li><a href="#">Feature Request</a></li>
+                    <li><a href="#">Contact</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <span>&copy; 2026 imagic. Open source under MIT License.</span>
+            <span>Made with <i class="fa-solid fa-heart" style="color: #ef4444;"></i> for photographers</span>
+        </div>
+    </div>
+</footer>
+</div>
+
+<!-- Ad slot placeholder (for Google AdSense / Carbon Ads) -->
+<!-- Replace with your actual ad code when ready:
+     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=YOUR-ID" crossorigin="anonymous"></script>
+-->
+
+<script src="/static/js/landing.js"></script>
+</body>
+</html>

@@ -19,6 +19,9 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from imagic.services.editor_style_presets import LEGACY_STYLE_PRESETS, get_editor_style_overrides
+from imagic.services.preview_engine import PreviewEngine
+
 logger = logging.getLogger(__name__)
 
 # Preview size (long edge), kept small for speed.
@@ -293,6 +296,8 @@ def generate_style_previews(
                 use_camera_wb=True,
                 no_auto_bright=True,
                 output_bps=8,
+                demosaic_algorithm=rawpy.DemosaicAlgorithm.AHD,
+                output_color=rawpy.ColorSpace.sRGB,
             )
     except Exception as exc:
         logger.error("Failed to decode %s for previews: %s", raw_path, exc)
@@ -306,13 +311,12 @@ def generate_style_previews(
         pil_img = Image.fromarray(rgb).resize((new_w, new_h), Image.LANCZOS)
         rgb = np.asarray(pil_img)
 
-    base = _to_float(rgb)
     preview_dir.mkdir(parents=True, exist_ok=True)
     stem = raw_path.stem
 
     # Save an "original" (camera auto) preview for reference.
     orig_path = preview_dir / f"{stem}_original.jpg"
-    Image.fromarray(_to_uint8(base)).save(str(orig_path), "JPEG", quality=88)
+    Image.fromarray(rgb).save(str(orig_path), "JPEG", quality=88)
     previews.styles["original"] = StylePreview(
         preset="original",
         label="Camera Default",
@@ -320,10 +324,9 @@ def generate_style_previews(
         path=orig_path,
     )
 
-    for preset_name, apply_fn in _STYLE_FUNCTIONS.items():
+    for preset_name in LEGACY_STYLE_PRESETS:
         try:
-            adjusted = apply_fn(base.copy())
-            out = _to_uint8(adjusted)
+            out = PreviewEngine.apply(rgb, get_editor_style_overrides(preset_name))
             out_path = preview_dir / f"{stem}_{preset_name}.jpg"
             Image.fromarray(out).save(str(out_path), "JPEG", quality=88)
 

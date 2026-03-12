@@ -286,25 +286,43 @@ class QualityScorer(BaseAnalyzer):
                 })
 
             # --- Weighted combination ---
+            # Apply learned weight adjustments from user feedback.
+            sw, ew, dw, nw, cw, fw = (
+                self._sw, self._ew, self._dw, self._nw, self._cw, self._fw,
+            )
+            try:
+                from imagic.ai.feedback_learner import get_learner
+                adj = get_learner().get_score_adjustments()
+                ws = adj.get("weight_shifts", {})
+                if ws:
+                    sw = max(0.02, sw + ws.get("sharpness", 0))
+                    ew = max(0.02, ew + ws.get("exposure", 0))
+                    dw = max(0.02, dw + ws.get("detail", 0))
+                    nw = max(0.02, nw + ws.get("noise", 0))
+                    cw = max(0.02, cw + ws.get("composition", 0))
+                    fw = max(0.02, fw + ws.get("faces", 0))
+            except Exception:
+                pass  # learner unavailable is fine
+
             # Re-normalise weights if face detection unavailable.
             if has_faces:
-                total_w = self._sw + self._ew + self._dw + self._nw + self._cw + self._fw
+                total_w = sw + ew + dw + nw + cw + fw
                 raw = (
-                    self._sw * sharpness
-                    + self._ew * exposure
-                    + self._dw * detail
-                    + self._nw * noise
-                    + self._cw * composition
-                    + self._fw * face_score
+                    sw * sharpness
+                    + ew * exposure
+                    + dw * detail
+                    + nw * noise
+                    + cw * composition
+                    + fw * face_score
                 ) / total_w
             else:
-                total_w = self._sw + self._ew + self._dw + self._nw + self._cw
+                total_w = sw + ew + dw + nw + cw
                 raw = (
-                    self._sw * sharpness
-                    + self._ew * exposure
-                    + self._dw * detail
-                    + self._nw * noise
-                    + self._cw * composition
+                    sw * sharpness
+                    + ew * exposure
+                    + dw * detail
+                    + nw * noise
+                    + cw * composition
                 ) / total_w
 
             # --- Hard penalties ---
@@ -359,15 +377,52 @@ class QualityScorer(BaseAnalyzer):
     # ------------------------------------------------------------------
     @staticmethod
     def _laplacian_variance(gray: np.ndarray) -> float:
-        """Compute normalised Laplacian variance (sharpness proxy).
+        """Compute sharpness score combining Laplacian variance and
+        directional gradient analysis to detect motion blur.
 
-        Stricter normalisation: values above ~700 are considered very sharp.
+        Pure Laplacian variance can be fooled by motion-blurred images
+        with strong colour transitions (e.g. stage lights). We add a
+        directional coherence check: if gradients are strongly aligned
+        in one direction, the image has motion blur even if Laplacian
+        variance is high.
         """
-        from scipy.ndimage import laplace
+        from scipy.ndimage import laplace, sobel
 
+        # Classic Laplacian variance
         lap = laplace(gray)
-        var = float(np.var(lap))
-        return float(np.clip(var / 700.0, 0.0, 1.0))
+        lap_var = float(np.var(lap))
+        lap_score = float(np.clip(lap_var / 700.0, 0.0, 1.0))
+
+        # Directional gradient analysis — detect motion blur
+        # Motion blur causes gradients to be strong in one axis but weak
+        # in the perpendicular axis. Compute the ratio of horizontal vs
+        # vertical gradient energy.
+        gx = sobel(gray, axis=1)  # horizontal edges
+        gy = sobel(gray, axis=0)  # vertical edges
+        energy_x = float(np.mean(gx ** 2))
+        energy_y = float(np.mean(gy ** 2))
+        total_energy = energy_x + energy_y
+
+        if total_energy > 1e-6:
+            # Ratio near 1.0 = balanced (sharp). Near 0.0 or inf = directional blur.
+            ratio = min(energy_x, energy_y) / max(energy_x, energy_y)
+            # Also check gradient magnitude consistency — motion blur has
+            # high variance in gradient magnitudes (smeared vs sharp spots).
+            mag = np.hypot(gx, gy)
+            mag_mean = float(np.mean(mag))
+            mag_std = float(np.std(mag))
+            coherence_penalty = 0.0
+            if mag_mean > 1e-6:
+                cv = mag_std / mag_mean  # coefficient of variation
+                # Very high CV (>2.5) + low directional ratio = motion blur
+                if cv > 2.0 and ratio < 0.6:
+                    coherence_penalty = min(0.4, (cv - 2.0) * 0.15 + (0.6 - ratio) * 0.3)
+                elif ratio < 0.45:
+                    # Strong directional bias alone
+                    coherence_penalty = min(0.3, (0.45 - ratio) * 0.5)
+            lap_score = max(0.0, lap_score - coherence_penalty)
+
+        return lap_score
 
     @staticmethod
     def _histogram_score(gray: np.ndarray) -> float:

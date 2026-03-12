@@ -49,6 +49,52 @@ _COLUMN_ORDER = [
     "original", "low_light", "bright_outdoor", "high_contrast", "portrait", "balanced",
 ]
 _GRADE_ORDER = list(GRADES.keys())
+_GRADE_CATEGORY_SPECS = [
+    ("Core", "Clean starting points and flexible all-round looks.", {
+        "natural", "clean", "soft_light", "balanced",
+    }),
+    ("Film", "Film-inspired stock emulations and analog colour response.", {
+        "film_warm", "film_cool", "kodak_portra", "kodak_ektar",
+        "fuji_pro400h", "fuji_velvia", "agfa_vista", "ilford_hp5",
+    }),
+    ("Cinematic", "Movie-style contrast, teal-orange separation, and dramatic toning.", {
+        "cinematic", "teal_orange", "orange_teal", "blockbuster",
+        "golden_hour", "noir",
+    }),
+    ("Moody", "Lower-key, darker, and more atmospheric colour palettes.", {
+        "moody", "dark_moody", "matte", "forest", "arctic",
+    }),
+    ("Vibrant", "Higher-energy colour with extra punch and saturation.", {
+        "vibrant", "punch", "summer", "tropical", "sunset",
+        "autumn", "desert",
+    }),
+    ("Vintage", "Retro, faded, and cross-processed looks.", {
+        "faded", "vintage", "polaroid", "sepia", "lomo",
+        "cross_process", "pastel", "bleach_bypass",
+    }),
+    ("Black & White", "Monochrome looks from clean classic to punchy contrast.", {
+        "bw_classic", "bw_high_contrast", "bw_low_key", "bw_faded",
+        "bw_warm", "bw_cool",
+    }),
+    ("Experimental", "Stylised and less neutral looks for bold creative edits.", {
+        "cyberpunk",
+    }),
+]
+
+
+def _build_grade_categories() -> List[tuple[str, str, List[str]]]:
+    """Group grades into readable sections while preserving overall order."""
+    categories: List[tuple[str, str, List[str]]] = []
+    used: set[str] = set()
+    for title, description, keys in _GRADE_CATEGORY_SPECS:
+        ordered = [key for key in _GRADE_ORDER if key in keys]
+        if ordered:
+            categories.append((title, description, ordered))
+            used.update(ordered)
+    remaining = [key for key in _GRADE_ORDER if key not in used]
+    if remaining:
+        categories.append(("More", "Additional looks that do not fit the main groups.", remaining))
+    return categories
 
 # ======================================================================
 # Workers
@@ -152,11 +198,11 @@ class _ClickableImage(QLabel):
     def _refresh(self) -> None:
         if self._selected:
             self.setStyleSheet(
-                "border: 3px solid #4fc3f7; border-radius: 4px; background: #1a1a2e;"
+                "border: 3px solid #ff9800; border-radius: 6px; background: #1a1a1a;"
             )
         else:
             self.setStyleSheet(
-                "border: 2px solid #333; border-radius: 4px; background: #1e1e1e;"
+                "border: 2px solid #333; border-radius: 6px; background: #1a1a1a;"
             )
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
@@ -256,7 +302,7 @@ class _EditStyleTab(QWidget):
 
 
 class _ColourGradeTab(QWidget):
-    """Grid of sample thumbnails × 8 colour grades."""
+    """Categorised, scrollable gallery of sample thumbnails × colour grades."""
 
     grade_clicked = pyqtSignal(str)
 
@@ -271,39 +317,85 @@ class _ColourGradeTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Column headers
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(8)
-        for key in _GRADE_ORDER:
-            grade = GRADES[key]
-            lbl = QLabel(grade.name)
-            lbl.setFixedWidth(_PREVIEW_SIZE)
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-            lbl.setStyleSheet("color: #ccc;")
-            header_layout.addWidget(lbl)
-        header_layout.addStretch()
-        layout.addLayout(header_layout)
+        hint = QLabel(
+            "Colour grades are grouped into sections. Thumbnails stay full size; scroll within a section to browse more looks."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; padding: 0 4px 8px 4px;")
+        layout.addWidget(hint)
 
-        # Scroll area with pre-built grid
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        grid_widget = QWidget()
-        self._grid_layout = QGridLayout(grid_widget)
-        self._grid_layout.setSpacing(8)
-        self._grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        outer_scroll = QScrollArea()
+        outer_scroll.setWidgetResizable(True)
+        outer_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        outer_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer_widget = QWidget()
+        outer_layout = QVBoxLayout(outer_widget)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(18)
 
-        for row_idx in range(len(sample_thumbnails)):
-            for col_idx, key in enumerate(_GRADE_ORDER):
-                widget = _ClickableImage(key, _PREVIEW_SIZE)
-                widget.clicked.connect(self._on_clicked)
-                self._images.append(widget)
-                self._image_map[(key, row_idx)] = widget
-                self._grid_layout.addWidget(widget, row_idx, col_idx)
+        row_count = max(1, len(sample_thumbnails))
+        section_height = row_count * (_PREVIEW_SIZE + 52) + max(0, (row_count - 1) * 8) + 16
 
-        scroll.setWidget(grid_widget)
-        layout.addWidget(scroll, stretch=1)
+        for title, description, keys in _build_grade_categories():
+            section = QFrame()
+            section.setStyleSheet(
+                "QFrame { background: #171717; border: 1px solid #2a2a2a; border-radius: 8px; }"
+            )
+            section_layout = QVBoxLayout(section)
+            section_layout.setContentsMargins(12, 12, 12, 12)
+            section_layout.setSpacing(10)
+
+            title_lbl = QLabel(title)
+            title_lbl.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+            title_lbl.setStyleSheet("color: #eee;")
+            section_layout.addWidget(title_lbl)
+
+            desc_lbl = QLabel(description)
+            desc_lbl.setWordWrap(True)
+            desc_lbl.setStyleSheet("color: #888;")
+            section_layout.addWidget(desc_lbl)
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setFixedHeight(section_height)
+            scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
+            grid_widget = QWidget()
+            grid_layout = QGridLayout(grid_widget)
+            grid_layout.setContentsMargins(0, 0, 0, 0)
+            grid_layout.setSpacing(8)
+            grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+
+            for row_idx in range(len(sample_thumbnails)):
+                for col_idx, key in enumerate(keys):
+                    widget = _ClickableImage(key, _PREVIEW_SIZE)
+                    widget.clicked.connect(self._on_clicked)
+                    self._images.append(widget)
+                    self._image_map[(key, row_idx)] = widget
+                    grade = GRADES[key]
+                    cell = QWidget()
+                    cell_layout = QVBoxLayout(cell)
+                    cell_layout.setContentsMargins(0, 0, 0, 0)
+                    cell_layout.setSpacing(6)
+                    label = QLabel(grade.name)
+                    label.setFixedWidth(_PREVIEW_SIZE)
+                    label.setWordWrap(True)
+                    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+                    label.setStyleSheet("color: #ccc; min-height: 36px;")
+                    cell_layout.addWidget(label)
+                    cell_layout.addWidget(widget)
+                    grid_layout.addWidget(cell, row_idx, col_idx)
+
+            scroll.setWidget(grid_widget)
+            section_layout.addWidget(scroll)
+            outer_layout.addWidget(section)
+
+        outer_layout.addStretch()
+        outer_scroll.setWidget(outer_widget)
+        layout.addWidget(outer_scroll, stretch=1)
 
         # Progress
         self._progress = QProgressBar()
@@ -373,7 +465,7 @@ class StyleChooserDialog(QDialog):
         # Header
         header = QLabel("Choose how your photos will look")
         header.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        header.setStyleSheet("color: #eee; padding: 8px;")
+        header.setStyleSheet("color: #eee; padding: 10px 8px 4px 8px;")
         main_layout.addWidget(header)
 
         subtitle = QLabel(
@@ -381,13 +473,13 @@ class StyleChooserDialog(QDialog):
             "Colour Grade layers artistic colour on top of per-photo optimisation."
         )
         subtitle.setWordWrap(True)
-        subtitle.setStyleSheet("color: #999; padding: 0 8px 8px 8px;")
+        subtitle.setStyleSheet("color: #888; padding: 0 8px 8px 8px;")
         main_layout.addWidget(subtitle)
 
         # Tabs
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(
-            "QTabBar::tab { padding: 8px 24px; font-size: 11pt; }"
+            "QTabBar::tab { padding: 10px 24px; font-size: 11pt; }"
         )
 
         # Tab 1 — Edit Style
@@ -410,7 +502,7 @@ class StyleChooserDialog(QDialog):
         # Selection info
         self._selection_label = QLabel("No style selected yet")
         self._selection_label.setFont(QFont("Segoe UI", 11))
-        self._selection_label.setStyleSheet("color: #4fc3f7; padding: 6px;")
+        self._selection_label.setStyleSheet("color: #ff9800; padding: 6px; font-weight: bold;")
         main_layout.addWidget(self._selection_label)
 
         self._desc_label = QLabel("")
@@ -426,16 +518,22 @@ class StyleChooserDialog(QDialog):
         self._apply_btn.setEnabled(False)
         self._apply_btn.setMinimumWidth(160)
         self._apply_btn.setStyleSheet(
-            "QPushButton { background: #4fc3f7; color: #111; font-weight: bold; "
-            "padding: 8px 24px; border-radius: 4px; } "
-            "QPushButton:disabled { background: #555; color: #888; }"
+            "QPushButton { background: #ff9800; color: #111; font-weight: bold; "
+            "padding: 8px 24px; border-radius: 6px; } "
+            "QPushButton:hover { background: #ffa726; }"
+            "QPushButton:pressed { background: #f57c00; }"
+            "QPushButton:disabled { background: #333; color: #666; }"
         )
         self._apply_btn.clicked.connect(self._on_apply)
         btn_layout.addWidget(self._apply_btn)
 
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setMinimumWidth(100)
-        cancel_btn.setStyleSheet("QPushButton { padding: 8px 24px; border-radius: 4px; }")
+        cancel_btn.setStyleSheet(
+            "QPushButton { padding: 8px 24px; border-radius: 6px; "
+            "border: 1px solid #444; } "
+            "QPushButton:hover { border-color: #555; background: #333; }"
+        )
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 

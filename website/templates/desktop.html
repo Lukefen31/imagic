@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>imagic Desktop — Download and Buy</title>
+    <meta name="description" content="Buy imagic Desktop for one price, get the installer and your product key by email, and activate it directly in the app.">
+    <link rel="icon" type="image/svg+xml" href="/static/img/imagic-app-icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+</head>
+<body data-desktop-checkout-enabled="{{ 'true' if desktop_checkout_enabled else 'false' }}" data-desktop-bundle-available="{{ 'true' if desktop_bundle_available else 'false' }}" data-prefill-email="{{ prefill_email }}">
+<nav class="navbar scrolled" id="navbar">
+    <div class="container">
+        <a href="/" class="navbar-brand navbar-brand-wide">
+            <img src="/static/img/imagic-wide-white.svg" alt="imagic" class="brand-logo-wide">
+        </a>
+        <ul class="navbar-links" id="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/app">Web App</a></li>
+            <li><a href="#desktop-benefits">Why Buy</a></li>
+            <li><a href="#desktop-checkout">Checkout</a></li>
+        </ul>
+        <div class="navbar-actions">
+            <a href="/app" class="btn btn-secondary btn-sm">Open Web App</a>
+            <button class="hamburger" id="hamburger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+</nav>
+
+<section class="desktop-hero">
+    <div class="container desktop-hero-grid">
+        <div>
+            <div class="hero-badge"><span class="badge badge-accent">One-time desktop license</span></div>
+            <h1>Buy imagic Desktop once.<br><span class="gradient-text">Own the fast workflow.</span></h1>
+            <p>The desktop app is where imagic makes the most sense: unlimited local processing, the full editor, headless automation, and secure device-bound activation without a subscription.</p>
+            <div class="desktop-hero-actions">
+                <a href="#desktop-checkout" class="btn btn-primary btn-lg">Buy Desktop for <span data-desktop-price-inline>$10</span></a>
+                <a href="/app" class="btn btn-secondary btn-lg">Try the Web App First</a>
+            </div>
+            <div class="desktop-proof-row">
+                <div class="desktop-proof-pill"><i class="fa-solid fa-bolt"></i> Unlimited local jobs</div>
+                <div class="desktop-proof-pill"><i class="fa-solid fa-key"></i> Product key delivered instantly</div>
+                <div class="desktop-proof-pill"><i class="fa-solid fa-shield-halved"></i> Device-bound activation</div>
+            </div>
+        </div>
+        <aside class="desktop-summary-card" id="desktop-checkout">
+            <div class="desktop-price-kicker">Desktop license</div>
+            <div class="desktop-price" data-desktop-price>$10<span>one-time</span></div>
+            <p>No recurring billing. Pay once, receive the installer and your product key by email.</p>
+            <label class="desktop-email-label" for="desktop-email">Delivery email</label>
+            <input id="desktop-email" class="desktop-email-input" type="email" value="{{ prefill_email }}" placeholder="you@example.com" autocomplete="email">
+            <button id="desktop-buy-btn" class="btn btn-primary btn-lg desktop-buy-btn" onclick="startDesktopCheckout()">Buy Desktop License</button>
+            <p class="desktop-checkout-note" id="desktop-checkout-note">Includes the standard installer{% if desktop_bundle_available %} and the optional RawTherapee bundle{% endif %}.</p>
+            <div class="desktop-mini-facts">
+                <div><strong>Activation:</strong> enter your product key once in the app.</div>
+                <div><strong>Transfer:</strong> activating on a new device revokes the old device automatically.</div>
+                <div><strong>Delivery:</strong> installer links and the key are emailed after Stripe confirms payment.</div>
+            </div>
+        </aside>
+    </div>
+</section>
+
+<section class="section" id="desktop-benefits">
+    <div class="container">
+        <div class="section-title">Why the desktop app is <span class="gradient-text">worth buying</span></div>
+        <div class="section-subtitle">This is the full imagic experience: speed, automation, editing depth, and local ownership.</div>
+        <div class="desktop-benefits-grid">
+            <div class="desktop-benefit-card">
+                <div class="desktop-benefit-icon"><i class="fa-solid fa-folder-tree"></i></div>
+                <h3>Unlimited local photo jobs</h3>
+                <p>No web quotas, no upload waits, and no image-count ceiling. Point imagic at a folder and let it churn through the job on your own machine.</p>
+            </div>
+            <div class="desktop-benefit-card">
+                <div class="desktop-benefit-icon"><i class="fa-solid fa-sliders"></i></div>
+                <h3>The full editor stack</h3>
+                <p>Histogram, manual controls, color grades, scene-aware presets, and export from the same edit pipeline. What you see is what gets exported.</p>
+            </div>
+            <div class="desktop-benefit-card">
+                <div class="desktop-benefit-icon"><i class="fa-solid fa-gears"></i></div>
+                <h3>CLI and automation ready</h3>
+                <p>Batch jobs, headless runs, and crash-resilient export make it practical for real shoots, not just casual browser sessions.</p>
+            </div>
+            <div class="desktop-benefit-card">
+                <div class="desktop-benefit-icon"><i class="fa-solid fa-camera-retro"></i></div>
+                <h3>RawTherapee option included</h3>
+                <p>If you want the full RAW pipeline, use the bundle build{% if not desktop_bundle_available %} once it is uploaded{% endif %} or the standard installer and point imagic at your own RawTherapee install.</p>
+            </div>
+            <div class="desktop-benefit-card">
+                <div class="desktop-benefit-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                <h3>AI that keeps learning</h3>
+                <p>Your keep/trash decisions and editing choices feed back into the desktop workflow so the assistant gets closer to your taste over time.</p>
+            </div>
+            <div class="desktop-benefit-card">
+                <div class="desktop-benefit-icon"><i class="fa-solid fa-receipt"></i></div>
+                <h3>Simple commercial model</h3>
+                <p>One payment. One product key. No subscription fatigue, no seat dashboard, and no vendor lock-in just to cull and edit your own work.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section desktop-includes-section">
+    <div class="container desktop-includes-grid">
+        <div class="desktop-includes-card">
+            <h2>What you get immediately</h2>
+            <ul class="desktop-feature-list">
+                <li><i class="fa-solid fa-check"></i> Secure checkout for the desktop license</li>
+                <li><i class="fa-solid fa-check"></i> Product key delivered by email</li>
+                <li><i class="fa-solid fa-check"></i> Direct installer download link</li>
+                <li><i class="fa-solid fa-check"></i> Key-based activation on first launch</li>
+                <li><i class="fa-solid fa-check"></i> Automatic key transfer when moving to a new device</li>
+            </ul>
+        </div>
+        <div class="desktop-includes-card desktop-includes-card-accent">
+            <h2>Activation behavior</h2>
+            <p>The product key is saved on the device after activation. If you later activate the same key on another device, the earlier activation stops working. That gives you a clean transfer path without allowing one key to stay active everywhere.</p>
+            <p class="desktop-includes-small">That matches the app-side enforcement already built into the licensing backend and startup gate.</p>
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="container">
+        <div class="footer-bottom" style="padding-top:0; border-top:none;">
+            <span>&copy; 2026 imagic</span>
+            <span><a href="/">Back to homepage</a></span>
+        </div>
+    </div>
+</footer>
+
+<script src="/static/js/desktop.js"></script>
+</body>
+</html>

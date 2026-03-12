@@ -44,14 +44,16 @@ _CULLED_BG = QColor(120, 120, 120, 30)   # grey tint
 
 _BTN_STYLE_KEEP = (
     "QPushButton { background: #2e7d32; color: white; border: none; "
-    "border-radius: 3px; padding: 3px 8px; font-size: 10px; font-weight: bold; }"
+    "border-radius: 4px; padding: 4px 10px; font-size: 10px; font-weight: bold; }"
     "QPushButton:hover { background: #388e3c; }"
+    "QPushButton:pressed { background: #1b5e20; }"
     "QPushButton:disabled { background: #1b5e20; color: #8bc34a; }"
 )
 _BTN_STYLE_TRASH = (
     "QPushButton { background: #c62828; color: white; border: none; "
-    "border-radius: 3px; padding: 3px 8px; font-size: 10px; font-weight: bold; }"
+    "border-radius: 4px; padding: 4px 10px; font-size: 10px; font-weight: bold; }"
     "QPushButton:hover { background: #d32f2f; }"
+    "QPushButton:pressed { background: #7f1d1d; }"
     "QPushButton:disabled { background: #7f1d1d; color: #ef9a9a; }"
 )
 
@@ -80,12 +82,22 @@ class _ThumbLoader(QThread):
 
 
 def _decision_for(photo: Dict, keep_t: float, trash_t: float) -> str:
-    """Return KEEP / TRASH / REVIEW based on score and status."""
-    score = photo.get("quality_score") or 0.0
+    """Return KEEP / TRASH / REVIEW based on score and status.
+
+    Explicit status (manual override) always takes priority over
+    score-based thresholds.
+    """
     status = photo.get("status", "")
-    if status == "keep" or score >= keep_t:
+    # Manual / decision-engine status takes priority
+    if status == "keep":
         return "KEEP"
-    if status == "trash" or score <= trash_t:
+    if status == "trash":
+        return "TRASH"
+    # No explicit decision yet — use score thresholds
+    score = photo.get("quality_score") or 0.0
+    if score >= keep_t:
+        return "KEEP"
+    if score <= trash_t:
         return "TRASH"
     return "REVIEW"
 
@@ -282,9 +294,9 @@ class _CullingGalleryDialog(QDialog):
 
         self._review_btn = QPushButton("? REVIEW")
         self._review_btn.setStyleSheet(
-            "QPushButton { background: #555; color: white; border: none; "
-            "border-radius: 3px; padding: 3px 8px; font-size: 10px; font-weight: bold; }"
-            "QPushButton:hover { background: #666; }"
+            "QPushButton { background: #444; color: white; border: none; "
+            "border-radius: 4px; padding: 4px 10px; font-size: 10px; font-weight: bold; }"
+            "QPushButton:hover { background: #555; }"
         )
         self._review_btn.setFixedHeight(28)
         self._review_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -295,7 +307,7 @@ class _CullingGalleryDialog(QDialog):
 
         nav_hint = QLabel("← → Navigate  |  Esc Close")
         nav_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        nav_hint.setStyleSheet("color: #777; font-size: 10px;")
+        nav_hint.setStyleSheet("color: #666; font-size: 10px; letter-spacing: 0.5px;")
         status_layout.addWidget(nav_hint)
 
         # Load first image
@@ -544,9 +556,11 @@ class CullingPreviewDialog(QDialog):
         self._table.setColumnWidth(5, 160)
 
         self._table.setStyleSheet(
-            "QTableWidget { background: #1e1e1e; color: #ddd; font-size: 11px; }"
-            "QHeaderView::section { background: #2a2a2a; color: #ccc; "
-            "font-weight: bold; padding: 4px; border: none; }"
+            "QTableWidget { background: #0d0d0d; color: #ddd; font-size: 12px; border: none; }"
+            "QTableWidget::item { border-bottom: 1px solid #1a1a1a; padding: 4px; }"
+            "QHeaderView::section { background: #1a1a1a; color: #888; "
+            "font-weight: bold; font-size: 11px; padding: 6px 8px; border: none; "
+            "border-bottom: 1px solid #333; }"
         )
 
         self._table.cellDoubleClicked.connect(self._on_row_double_clicked)
@@ -561,7 +575,9 @@ class CullingPreviewDialog(QDialog):
         close_btn = QPushButton("Close")
         close_btn.setMinimumWidth(120)
         close_btn.setStyleSheet(
-            "QPushButton { padding: 8px 24px; border-radius: 4px; }"
+            "QPushButton { padding: 8px 24px; border-radius: 6px; "
+            "background: #2a2a2a; border: 1px solid #444; }"
+            "QPushButton:hover { background: #333; border-color: #555; }"
         )
         close_btn.clicked.connect(self.accept)
         btn_layout.addWidget(close_btn)
@@ -704,9 +720,10 @@ class CullingPreviewDialog(QDialog):
         review_btn.setToolTip("Mark as REVIEW")
         review_btn.setFixedSize(28, 24)
         review_btn.setStyleSheet(
-            "QPushButton { background: #555; color: white; border: none; "
-            "border-radius: 3px; font-size: 10px; font-weight: bold; }"
-            "QPushButton:hover { background: #666; }"
+            "QPushButton { background: #444; color: white; border: none; "
+            "border-radius: 4px; font-size: 10px; font-weight: bold; }"
+            "QPushButton:hover { background: #555; }"
+            "QPushButton:pressed { background: #333; }"
         )
         review_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         review_btn.setEnabled(decision != "REVIEW")

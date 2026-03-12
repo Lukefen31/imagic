@@ -67,13 +67,22 @@ class ProcessingController:
     # Workers
     # ------------------------------------------------------------------
     def _export_batch(self) -> dict:
-        """Export all KEEP photos (runs in worker thread)."""
+        """Export all KEEP and EXPORTED photos (runs in worker thread).
+
+        Including EXPORTED allows re-export when the output folder is
+        cleared or when the user wants to regenerate with new settings.
+        """
         db = DatabaseManager.get()
         session = db.get_session()
         try:
             photos: List[Photo] = (
                 session.query(Photo)
-                .filter(Photo.status == PhotoStatus.KEEP.value)
+                .filter(
+                    Photo.status.in_([
+                        PhotoStatus.KEEP.value,
+                        PhotoStatus.EXPORTED.value,
+                    ])
+                )
                 .all()
             )
             ids = [p.id for p in photos]

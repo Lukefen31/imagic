@@ -17,6 +17,8 @@ from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 logger = logging.getLogger(__name__)
 
+_LOAD_SIZE = 1024  # load at high res for sharp display at any zoom level
+
 
 class _ImageLoader(QThread):
     """Background thread that loads a pixmap from disk."""
@@ -43,6 +45,7 @@ class ThumbnailWidget(QWidget):
     """
 
     clicked = pyqtSignal(int)  # emits photo_id
+    double_clicked = pyqtSignal(int)  # emits photo_id
 
     def __init__(
         self,
@@ -51,7 +54,7 @@ class ThumbnailWidget(QWidget):
         file_name: str,
         score: Optional[float] = None,
         status: str = "",
-        size: int = 160,
+        size: int = 180,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -59,7 +62,7 @@ class ThumbnailWidget(QWidget):
         self._size = size
         self._score = score
         self._status = status
-        self._pixmap: Optional[QPixmap] = None
+        self._source_pixmap: Optional[QPixmap] = None  # hi-res loaded copy
 
         self.setFixedSize(size + 8, size + 28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -71,7 +74,7 @@ class ThumbnailWidget(QWidget):
         self._image_label = QLabel()
         self._image_label.setFixedSize(size, size)
         self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image_label.setStyleSheet("background: #1e1e1e; border: 1px solid #333;")
+        self._image_label.setStyleSheet("background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 4px;")
         layout.addWidget(self._image_label)
 
         self._name_label = QLabel(file_name)
@@ -80,24 +83,48 @@ class ThumbnailWidget(QWidget):
         self._name_label.setMaximumWidth(size)
         layout.addWidget(self._name_label)
 
-        # Lazy load the thumbnail.
+        # Lazy load the thumbnail at high resolution.
         if thumb_path and Path(thumb_path).is_file():
-            self._loader = _ImageLoader(thumb_path, QSize(size, size))
+            self._loader = _ImageLoader(thumb_path, QSize(_LOAD_SIZE, _LOAD_SIZE))
             self._loader.loaded.connect(self._on_loaded)
             self._loader.start()
         else:
             self._image_label.setText("No thumb")
             self._image_label.setStyleSheet(
-                "background: #2a2a2a; color: #666; border: 1px solid #333;"
+                "background: #1a1a1a; color: #555; border: 1px solid #2a2a2a; border-radius: 4px;"
             )
 
     def _on_loaded(self, pixmap: QPixmap) -> None:
         if not pixmap.isNull():
-            self._pixmap = pixmap
-            self._image_label.setPixmap(pixmap)
+            self._source_pixmap = pixmap
+            display = pixmap.scaled(
+                QSize(self._size, self._size),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._image_label.setPixmap(display)
+
+    def set_size(self, size: int) -> None:
+        """Resize the tile dynamically (called by LibraryView on relayout)."""
+        if size == self._size:
+            return
+        self._size = size
+        self.setFixedSize(size + 8, size + 28)
+        self._image_label.setFixedSize(size, size)
+        self._name_label.setMaximumWidth(size)
+        if self._source_pixmap and not self._source_pixmap.isNull():
+            display = self._source_pixmap.scaled(
+                QSize(size, size),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._image_label.setPixmap(display)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         self.clicked.emit(self.photo_id)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
+        self.double_clicked.emit(self.photo_id)
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         super().paintEvent(event)
@@ -113,9 +140,9 @@ class ThumbnailWidget(QWidget):
             )
             painter.setBrush(badge_color)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRoundedRect(self._size - 30, 6, 34, 18, 4, 4)
+            painter.drawRoundedRect(self._size - 30, 6, 34, 18, 6, 6)
 
             painter.setPen(QColor("white"))
-            painter.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+            painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
             painter.drawText(self._size - 28, 6, 30, 18, Qt.AlignmentFlag.AlignCenter, f"{self._score:.0%}")
             painter.end()

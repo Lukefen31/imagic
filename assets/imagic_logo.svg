@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff9800"/>
+      <stop offset="100%" style="stop-color:#f57c00"/>
+    </linearGradient>
+    <linearGradient id="lens" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#263238"/>
+      <stop offset="100%" style="stop-color:#37474f"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4fc3f7"/>
+      <stop offset="50%" style="stop-color:#0288d1"/>
+      <stop offset="100%" style="stop-color:#01579b"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:rgba(255,255,255,0.6)"/>
+      <stop offset="100%" style="stop-color:rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bg)"/>
+
+  <!-- Camera body -->
+  <rect x="80" y="175" width="352" height="230" rx="32" ry="32" fill="#263238"/>
+  <rect x="90" y="185" width="332" height="210" rx="24" ry="24" fill="#37474f"/>
+
+  <!-- Viewfinder bump -->
+  <rect x="195" y="138" width="110" height="50" rx="12" ry="12" fill="#263238"/>
+  <rect x="205" y="145" width="90" height="36" rx="8" ry="8" fill="#37474f"/>
+
+  <!-- Flash -->
+  <circle cx="155" cy="210" r="10" fill="#ffeb3b" opacity="0.9"/>
+
+  <!-- Shutter button -->
+  <rect x="340" y="148" width="40" height="20" rx="10" ry="10" fill="#f44336"/>
+
+  <!-- Lens outer ring -->
+  <circle cx="256" cy="290" r="85" fill="url(#lens)"/>
+  <circle cx="256" cy="290" r="75" fill="#455a64"/>
+
+  <!-- Lens inner -->
+  <circle cx="256" cy="290" r="62" fill="url(#glass)"/>
+
+  <!-- Aperture blades hint -->
+  <polygon points="256,235 275,260 275,320 256,345 237,320 237,260" fill="rgba(0,0,0,0.15)"/>
+  <polygon points="211,260 236,248 276,278 276,302 236,332 211,320" fill="rgba(0,0,0,0.08)"/>
+  <polygon points="301,260 276,248 236,278 236,302 276,332 301,320" fill="rgba(0,0,0,0.08)"/>
+
+  <!-- Lens highlight -->
+  <circle cx="235" cy="268" r="22" fill="url(#shine)" opacity="0.5"/>
+
+  <!-- Center dot -->
+  <circle cx="256" cy="290" r="8" fill="#263238"/>
+
+  <!-- AI sparkle -->
+  <g fill="#ffeb3b" opacity="0.9">
+    <polygon points="400,140 406,155 420,158 408,167 411,182 400,173 389,182 392,167 380,158 394,155" />
+    <polygon points="115,370 119,380 128,382 120,388 122,398 115,392 108,398 110,388 102,382 111,380" transform="scale(0.8) translate(18,55)"/>
+  </g>
+</svg>

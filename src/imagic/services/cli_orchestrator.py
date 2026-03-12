@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -91,11 +92,15 @@ class CLIOrchestrator:
             start = time.monotonic()
 
             try:
+                _extra = {}
+                if sys.platform == "win32":
+                    _extra["creationflags"] = subprocess.CREATE_NO_WINDOW
                 proc = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=self.timeout,
+                    **_extra,
                 )
                 elapsed = time.monotonic() - start
 

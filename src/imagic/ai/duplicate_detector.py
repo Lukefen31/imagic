@@ -1,14 +1,25 @@
-"""Duplicate detector — perceptual hashing for near-duplicate detection.
+"""Duplicate detector — perceptual hashing + burst-shot clustering.
 
-Uses ``imagehash`` (average hash / perceptual hash) to produce a compact
-fingerprint for each image.  Images whose Hamming distance is below a
-configurable threshold are flagged as duplicates.
+Uses ``imagehash`` (perceptual hash) for visual similarity, combined with
+EXIF timestamp analysis for burst-shot detection.
+
+**Two-phase approach:**
+
+1. **Time-based burst clustering** — photos taken within ``burst_window``
+   seconds of each other (transitively) are grouped as burst duplicates.
+   Within a burst, only wildly different frames are split out.
+2. **Hash-based duplicate detection** — photos with Hamming distance below
+   ``threshold`` are grouped regardless of time.
+
+Both phases feed into a single union-find, so a burst group and a hash
+group that share a member are merged automatically.
 """
 
 from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -18,16 +29,29 @@ logger = logging.getLogger(__name__)
 
 
 class DuplicateDetector(BaseAnalyzer):
-    """Perceptual-hash based duplicate detector.
+    """Perceptual-hash + burst-time duplicate detector.
 
     Args:
         hash_size: Dimension of the hash grid (default 8 → 64-bit hash).
-        threshold: Maximum Hamming distance to consider two images duplicates.
+        threshold: Maximum Hamming distance for hash-only duplicate pairs.
+        burst_window: Max seconds between consecutive shots to be a burst.
+        burst_hash_limit: Max Hamming distance within a burst group.  Pairs
+            inside a burst whose distance exceeds this are NOT linked
+            (prevents merging truly different scenes that happen to be close
+            in time).
     """
 
-    def __init__(self, hash_size: int = 8, threshold: int = 5) -> None:
+    def __init__(
+        self,
+        hash_size: int = 8,
+        threshold: int = 10,
+        burst_window: float = 3.0,
+        burst_hash_limit: int = 34,
+    ) -> None:
         self._hash_size = hash_size
         self._threshold = threshold
+        self._burst_window = burst_window
+        self._burst_hash_limit = burst_hash_limit
 
     @property
     def name(self) -> str:  # noqa: D401
@@ -60,14 +84,74 @@ class DuplicateDetector(BaseAnalyzer):
             logger.error("DuplicateDetector failed for %s: %s", file_path, exc)
             return AnalysisResult(file_path=file_path, error=str(exc))
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _union_find_ops():
+        """Return fresh find / union closures over a shared parent dict."""
+        parent: Dict[str, str] = {}
+
+        def find(x: str) -> str:
+            while parent.get(x, x) != x:
+                parent[x] = parent.get(parent[x], parent[x])
+                x = parent[x]
+            return x
+
+        def union(a: str, b: str) -> None:
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        return find, union, parent
+
+    def _burst_groups(
+        self,
+        time_map: Dict[str, Optional[datetime]],
+    ) -> List[List[str]]:
+        """Build transitive burst groups from timestamps.
+
+        Photos are sorted by timestamp.  Consecutive photos within
+        ``burst_window`` seconds are chained together.
+        """
+        timed = [
+            (path, ts)
+            for path, ts in time_map.items()
+            if ts is not None
+        ]
+        if not timed:
+            return []
+
+        timed.sort(key=lambda x: x[1])
+
+        find, union, parent = self._union_find_ops()
+
+        for i in range(1, len(timed)):
+            gap = abs((timed[i][1] - timed[i - 1][1]).total_seconds())
+            if gap <= self._burst_window:
+                union(timed[i][0], timed[i - 1][0])
+
+        groups: Dict[str, List[str]] = defaultdict(list)
+        for path, _ in timed:
+            groups[find(path)].append(path)
+
+        return [g for g in groups.values() if len(g) > 1]
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     def find_duplicates(
         self,
         hash_map: Dict[str, str],
+        time_map: Optional[Dict[str, Optional[datetime]]] = None,
     ) -> List[Tuple[str, str, int]]:
-        """Compare all pairs and return those within the threshold.
+        """Return duplicate pairs using hash similarity only.
 
         Args:
             hash_map: Mapping of ``file_path → hex_hash_string``.
+            time_map: Unused here, kept for API compat.
 
         Returns:
             List of ``(path_a, path_b, distance)`` tuples.
@@ -86,7 +170,10 @@ class DuplicateDetector(BaseAnalyzer):
                     if dist <= self._threshold:
                         duplicates.append((entries[i][0], entries[j][0], dist))
 
-            logger.info("Duplicate scan: %d pairs within threshold %d.", len(duplicates), self._threshold)
+            logger.info(
+                "Hash scan: %d pairs within threshold %d.",
+                len(duplicates), self._threshold,
+            )
             return duplicates
         except Exception as exc:
             logger.error("Duplicate comparison failed: %s", exc)
@@ -95,32 +182,59 @@ class DuplicateDetector(BaseAnalyzer):
     def group_duplicates(
         self,
         hash_map: Dict[str, str],
+        time_map: Optional[Dict[str, Optional[datetime]]] = None,
     ) -> List[List[str]]:
         """Group file paths into clusters of duplicates.
 
+        Combines **time-based burst clustering** with **hash-based
+        similarity**.  Within burst groups, pairs whose hash distance
+        exceeds ``burst_hash_limit`` are split apart to avoid merging
+        genuinely different scenes.
+
         Args:
             hash_map: Mapping of ``file_path → hex_hash_string``.
+            time_map: Optional mapping of ``file_path → datetime``.
 
         Returns:
             List of groups, each containing >= 2 duplicate paths.
         """
-        pairs = self.find_duplicates(hash_map)
-        # Union-Find style grouping.
-        parent: Dict[str, str] = {}
+        import imagehash
 
-        def find(x: str) -> str:
-            while parent.get(x, x) != x:
-                parent[x] = parent.get(parent[x], parent[x])
-                x = parent[x]
-            return x
+        find, union, _parent = self._union_find_ops()
 
-        def union(a: str, b: str) -> None:
-            ra, rb = find(a), find(b)
-            if ra != rb:
-                parent[ra] = rb
+        # Phase 1 — time-based burst pairs.
+        burst_groups = self._burst_groups(time_map or {})
+        burst_pairs = 0
 
-        for a, b, _ in pairs:
+        hash_cache: Dict[str, object] = {}
+        for path, h in hash_map.items():
+            hash_cache[path] = imagehash.hex_to_hash(h)
+
+        for group in burst_groups:
+            # Within a burst group, link consecutive photos if their hash
+            # distance is within the generous burst_hash_limit.
+            for i in range(1, len(group)):
+                ha = hash_cache.get(group[i - 1])
+                hb = hash_cache.get(group[i])
+                if ha is not None and hb is not None:
+                    dist = ha - hb
+                    if dist <= self._burst_hash_limit:
+                        union(group[i - 1], group[i])
+                        burst_pairs += 1
+                else:
+                    # No hash → still link by time
+                    union(group[i - 1], group[i])
+                    burst_pairs += 1
+
+        # Phase 2 — hash-only pairs (catches duplicates far apart in time).
+        hash_pairs = self.find_duplicates(hash_map)
+        for a, b, _ in hash_pairs:
             union(a, b)
+
+        logger.info(
+            "Duplicate grouping: %d burst links + %d hash pairs.",
+            burst_pairs, len(hash_pairs),
+        )
 
         groups: Dict[str, List[str]] = defaultdict(list)
         for path in hash_map:

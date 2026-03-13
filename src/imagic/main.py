@@ -202,6 +202,13 @@ def run_gui(args: argparse.Namespace) -> int:
     from imagic.views.main_window import MainWindow
     from imagic.views.photo_editor import PhotoEditorWidget
     from imagic.views.style_chooser import StyleChooserDialog
+    from imagic.views.widgets.ai_loading_modal import AILoadingModal
+    from imagic.views.widgets.speech_bubble import (
+        SpeechBubble,
+        PointerSide,
+        TutorialOverlay,
+        TutorialStep,
+    )
 
     qt_app = QApplication(sys.argv)
     qt_app.setApplicationName("Imagic")
@@ -236,6 +243,13 @@ def run_gui(args: argparse.Namespace) -> int:
     if icon_path is not None:
         window.setWindowIcon(QIcon(str(icon_path)))
 
+    # AI loading overlay on the main window
+    _main_ai_modal = AILoadingModal(parent=window)
+
+    # Speech bubble for post-analysis tips
+    _tip_bubble = SpeechBubble(parent=window.centralWidget())
+    _first_analysis_done = False  # only show the tip once per session
+
     # ------------------------------------------------------------------
     # Wire signals → controllers
     # ------------------------------------------------------------------
@@ -244,13 +258,86 @@ def run_gui(args: argparse.Namespace) -> int:
         window.status_bar.set_status(f"Scanning {directory}…")
         window.set_sidebar_status(f"Scanning…")
 
+    _analyse_poll_timer: Optional[QTimer] = None  # type: ignore[assignment]
+    _analyse_task = None
+    _reanalyse_count = 0  # tracks how many times re-analyse has been pressed
+
     def _on_analyse() -> None:
-        ai_ctrl.analyse_pending()
+        nonlocal _analyse_poll_timer, _analyse_task
+        _analyse_task = ai_ctrl.analyse_pending()
         window.status_bar.set_status("AI analysis started…")
         window.set_sidebar_status("Analysing…")
         window.set_step_status(1, "AI analysis in progress…")
+        _main_ai_modal.show_message("AI Analysis", "Scoring and classifying photos…")
+
+        if _analyse_poll_timer is None:
+            _analyse_poll_timer = QTimer()
+            _analyse_poll_timer.setInterval(300)
+            _analyse_poll_timer.timeout.connect(_on_analyse_poll)
+        _analyse_poll_timer.start()
+
+    def _on_analyse_poll() -> None:
+        nonlocal _analyse_poll_timer, _analyse_task
+        if _analyse_task is None or _analyse_task.future is None:
+            if _analyse_poll_timer:
+                _analyse_poll_timer.stop()
+            _main_ai_modal.hide_modal()
+            return
+        if not _analyse_task.future.done():
+            return  # still running
+        _analyse_poll_timer.stop()
+        _main_ai_modal.hide_modal()
+        result = _analyse_task.result
+        _analyse_task = None
+        # Update status bar with results
+        if isinstance(result, dict):
+            kept = result.get("keep", 0)
+            trashed = result.get("trash", 0)
+            errors = result.get("errors", 0)
+            total = result.get("analysed", 0)
+            strict_note = ""
+            if _reanalyse_count > 0:
+                strict_note = f" (strictness level {_reanalyse_count})"
+            window.status_bar.set_status(
+                f"Analysis complete — {total} photos: {kept} kept, {trashed} trashed, {errors} errors{strict_note}"
+            )
+            window.set_step_status(1, f"Done — {total} analysed")
+        else:
+            window.status_bar.set_status("AI analysis complete.")
+        window.set_sidebar_status("")
+        _refresh_library()
+
+        # Show tip bubble after first analysis completes
+        nonlocal _first_analysis_done
+        if not _first_analysis_done and _reanalyse_count == 0:
+            _first_analysis_done = True
+            # Delay slightly so the UI settles before positioning the bubble
+            QTimer.singleShot(600, _show_reanalyse_tip)
+
+    def _show_reanalyse_tip() -> None:
+        """Show a speech bubble near the Re-Analyse button."""
+        if not hasattr(window, '_reanalyse_btn') or not window._reanalyse_btn.isVisible():
+            return
+        _tip_bubble.show_at(
+            window._reanalyse_btn,
+            title="💡 Not happy with the results?",
+            body="Press <b>Re-Analyse All</b> to run the AI again with stricter thresholds. "
+                 "Each press makes it pickier!",
+            pointer=PointerSide.TOP,
+            pointer_offset=0.5,
+            button_text="Got it!",
+            auto_hide_ms=12000,
+        )
+
     def _on_reanalyse_all() -> None:
-        """Reset all photos to PENDING and re-run AI analysis."""
+        """Reset all photos to PENDING and re-run AI analysis.
+
+        Each subsequent press increases strictness — the AI becomes
+        pickier about which photos to keep.
+        """
+        nonlocal _analyse_poll_timer, _analyse_task, _reanalyse_count
+        _reanalyse_count += 1
+        strictness = _reanalyse_count * 0.05  # +5% per re-run
         db = DatabaseManager.get()
         session = db.get_session()
         try:
@@ -266,17 +353,28 @@ def run_gui(args: argparse.Namespace) -> int:
                 )
             )
             session.commit()
-            logger.info("Reset %d photos to PENDING for re-analysis", count)
+            logger.info("Reset %d photos to PENDING for re-analysis (strictness=%.2f)", count, strictness)
         except Exception:
             session.rollback()
             logger.exception("Failed to reset photo statuses")
         finally:
             session.close()
 
-        ai_ctrl.analyse_pending()
+        _analyse_task = ai_ctrl.analyse_pending(strictness=strictness)
+        strict_pct = int(strictness * 100)
         window.status_bar.set_status(
-            f"Re-analysing {count} photos with updated scorer\u2026"
+            f"Re-analysing {count} photos (strictness +{strict_pct}%)\u2026"
         )
+        level_label = f"Stricter (level {_reanalyse_count})" if _reanalyse_count > 0 else "Re-Analysing"
+        _main_ai_modal.show_message(
+            f"Re-Analysing All — {level_label}",
+            f"Scoring {count} photos with tighter thresholds\u2026",
+        )
+        if _analyse_poll_timer is None:
+            _analyse_poll_timer = QTimer()
+            _analyse_poll_timer.setInterval(300)
+            _analyse_poll_timer.timeout.connect(_on_analyse_poll)
+        _analyse_poll_timer.start()
     def _on_export() -> None:
         proc_ctrl.export_all_kept()
         window.status_bar.set_status("Batch export started…")
@@ -291,6 +389,7 @@ def run_gui(args: argparse.Namespace) -> int:
 
         window.status_bar.set_status("Scanning for duplicates…")
         _dup_task = ai_ctrl.detect_duplicates()
+        _main_ai_modal.show_message("Duplicate Detection", "Computing perceptual hashes…")
 
         # Poll every 200ms until the task completes
         if _dup_poll_timer is None:
@@ -307,12 +406,14 @@ def run_gui(args: argparse.Namespace) -> int:
         if _dup_task is None or _dup_task.future is None:
             if _dup_poll_timer:
                 _dup_poll_timer.stop()
+            _main_ai_modal.hide_modal()
             return
 
         if not _dup_task.future.done():
             return  # still running, check again next tick
 
         _dup_poll_timer.stop()
+        _main_ai_modal.hide_modal()
         result = _dup_task.result
         _dup_task = None
 
@@ -726,15 +827,18 @@ def run_gui(args: argparse.Namespace) -> int:
         if reply != QMessageBox.StandardButton.Yes:
             return
 
+        count = 0
         db = DatabaseManager.get()
         session = db.get_session()
         try:
-            count = session.query(Photo).delete()
+            count = session.query(Photo).delete(synchronize_session=False)
             session.commit()
             logger.info("Cleared library: %d photos removed", count)
         except Exception:
             session.rollback()
             logger.exception("Failed to clear library")
+            window.status_bar.set_status("Error: failed to clear library")
+            return
         finally:
             session.close()
 
@@ -742,6 +846,7 @@ def run_gui(args: argparse.Namespace) -> int:
         _last_export_fingerprint.clear()
         window.library_view.clear()
         window.export_gallery.clear()
+        window.set_review_photos([])
         _refresh_library()
         _refresh_exports()
         window.status_bar.set_status(f"Library cleared ({count} photos removed)")
@@ -1056,6 +1161,87 @@ def run_gui(args: argparse.Namespace) -> int:
     window.clear_library_requested.connect(_on_clear_library)
     window.open_export_folder_requested.connect(_on_open_export_folder)
     window.reanalyse_all_requested.connect(_on_reanalyse_all)
+
+    # ------------------------------------------------------------------
+    # Tutorial overlay
+    # ------------------------------------------------------------------
+    _tutorial_steps = [
+        TutorialStep(
+            title="👋 Welcome to Imagic!",
+            body="This quick tour will walk you through the five-step workflow. "
+                 "You can restart it any time from <b>Help → Start Tutorial</b>.",
+            target_name="_step_buttons.0",
+            pointer=PointerSide.LEFT,
+            pointer_offset=0.3,
+        ),
+        TutorialStep(
+            title="Step 1 — Import",
+            body="Start here! Click <b>Browse</b> to select a folder of RAW or JPEG "
+                 "photos. Imagic will scan and catalogue every image.",
+            target_name="_import_btn",
+            pointer=PointerSide.BOTTOM,
+            pointer_offset=0.5,
+        ),
+        TutorialStep(
+            title="Step 2 — AI Analysis",
+            body="The AI scores every photo for quality, sharpness, and exposure. "
+                 "It auto-classifies them as <b>Keep</b>, <b>Review</b>, or <b>Trash</b>.",
+            target_name="_analyse_btn",
+            pointer=PointerSide.BOTTOM,
+            pointer_offset=0.5,
+        ),
+        TutorialStep(
+            title="Re-Analyse for Stricter Results",
+            body="Not happy? Press <b>Re-Analyse All</b> — each press makes the AI "
+                 "pickier, raising the bar for \"keep\".",
+            target_name="_reanalyse_btn",
+            pointer=PointerSide.BOTTOM,
+            pointer_offset=0.5,
+        ),
+        TutorialStep(
+            title="Step 3 — Review & Cull",
+            body="Flip through photos and confirm the AI's suggestions. "
+                 "Mark keepers with ✓ or trash with ✗. Fast and visual.",
+            target_name="_review_grid",
+            pointer=PointerSide.LEFT,
+            pointer_offset=0.3,
+        ),
+        TutorialStep(
+            title="Step 4 — Edit",
+            body="Double-click any photo to open the full editor. "
+                 "Adjust exposure, colour, sharpness and more — or let the AI "
+                 "<b>Auto-Enhance</b> for you.",
+            target_name="photo_editor",
+            pointer=PointerSide.LEFT,
+            pointer_offset=0.3,
+        ),
+        TutorialStep(
+            title="Step 5 — Export",
+            body="When you're done, export all kept photos as high-quality JPEGs "
+                 "ready to share. That's it — enjoy!",
+            target_name="export_gallery",
+            pointer=PointerSide.LEFT,
+            pointer_offset=0.3,
+        ),
+    ]
+
+    _tutorial_overlay: Optional[TutorialOverlay] = None
+
+    def _on_start_tutorial() -> None:
+        nonlocal _tutorial_overlay
+        # Dismiss any tip bubble
+        _tip_bubble.dismiss()
+        # Go to the first step so sidebar is visible
+        window.go_to_step(0)
+        _tutorial_overlay = TutorialOverlay(
+            _tutorial_steps,
+            host=window.centralWidget(),
+            target_root=window,
+        )
+        _tutorial_overlay.finished.connect(lambda: window.status_bar.set_status("Tutorial finished — happy editing!"))
+        _tutorial_overlay.start()
+
+    window.tutorial_requested.connect(_on_start_tutorial)
 
     # Override settings dialog to inject current config.
     original_show_settings = window._show_settings

@@ -114,6 +114,7 @@ class MainWindow(QMainWindow):
     edit_step_entered = pyqtSignal()
     edit_photo_requested = pyqtSignal(int)
     review_status_changed = pyqtSignal(int, str)  # photo_id, new_status
+    tutorial_requested = pyqtSignal()
 
     STEPS = ["1. Import", "2. Analyse", "3. Review", "4. Edit", "5. Export"]
 
@@ -381,15 +382,15 @@ class MainWindow(QMainWindow):
         self._analyse_auto_cb.setStyleSheet(f"color: {_ACCENT}; font-size: 12px;")
         header.addWidget(self._analyse_auto_cb)
 
-        analyse_btn = QPushButton("Run AI Analysis")
-        analyse_btn.setStyleSheet(_SECONDARY_BTN)
-        analyse_btn.clicked.connect(self.analyse_requested.emit)
-        header.addWidget(analyse_btn)
+        self._analyse_btn = QPushButton("Run AI Analysis")
+        self._analyse_btn.setStyleSheet(_SECONDARY_BTN)
+        self._analyse_btn.clicked.connect(self.analyse_requested.emit)
+        header.addWidget(self._analyse_btn)
 
-        reanalyse_btn = QPushButton("Re-Analyse All")
-        reanalyse_btn.setStyleSheet(_SECONDARY_BTN)
-        reanalyse_btn.clicked.connect(self.reanalyse_all_requested.emit)
-        header.addWidget(reanalyse_btn)
+        self._reanalyse_btn = QPushButton("Re-Analyse All")
+        self._reanalyse_btn.setStyleSheet(_SECONDARY_BTN)
+        self._reanalyse_btn.clicked.connect(self.reanalyse_all_requested.emit)
+        header.addWidget(self._reanalyse_btn)
 
         next_btn = QPushButton("Next →")
         next_btn.setStyleSheet(_ACTION_BTN)
@@ -751,6 +752,13 @@ class MainWindow(QMainWindow):
             act = QAction(f"{key:20s}  {desc}", self)
             act.setEnabled(False)  # display-only
             sc_menu.addAction(act)
+
+        # -- Help menu --
+        help_menu = menu_bar.addMenu("&Help")
+        tutorial_action = QAction("Start &Tutorial", self)
+        tutorial_action.setShortcut(QKeySequence("Ctrl+T"))
+        tutorial_action.triggered.connect(self.tutorial_requested.emit)
+        help_menu.addAction(tutorial_action)
 
     # ==================================================================
     # Dialog fallbacks (main.py compat)

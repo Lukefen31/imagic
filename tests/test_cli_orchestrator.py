@@ -29,9 +29,10 @@ class TestCLIOrchestrator:
 
     def test_run_captures_stdout_stderr(self, tmp_path: Path) -> None:
         """The internal _run method should capture process output."""
+        import sys
         cli = CLIOrchestrator(max_retries=0)
         # Use a simple cross-platform command.
-        result = cli._run(["python", "-c", "print('hello')"])
+        result = cli._run([sys.executable, "-c", "print('hello')"])
         assert result.success
         assert "hello" in result.stdout
 

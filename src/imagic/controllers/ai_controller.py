@@ -60,14 +60,19 @@ class AIController:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def analyse_pending(self) -> TaskItem:
+    def analyse_pending(self, strictness: float = 0.0) -> TaskItem:
         """Score all ``PENDING`` photos and apply the decision engine.
+
+        Args:
+            strictness: Extra threshold tightening (0.0 = default,
+                each +0.05 raises keep and trash thresholds).
 
         Returns:
             ``TaskItem`` tracking the background analysis.
         """
         return self._queue.submit(
             self._analyse_and_decide,
+            strictness,
             name="AI analysis (pending)",
         )
 
@@ -85,7 +90,7 @@ class AIController:
     # ------------------------------------------------------------------
     # Workers
     # ------------------------------------------------------------------
-    def _analyse_and_decide(self) -> dict:
+    def _analyse_and_decide(self, strictness: float = 0.0) -> dict:
         """Score PENDING photos and classify them (worker thread)."""
         db = DatabaseManager.get()
         session = db.get_session()
@@ -226,12 +231,15 @@ class AIController:
                     # Decision engine — apply learned threshold adjustments.
                     from imagic.ai.feedback_learner import get_learner
                     adj = get_learner().get_score_adjustments()
-                    effective_keep = self._keep + adj.get("keep_shift", 0.0)
-                    effective_trash = self._trash + adj.get("trash_shift", 0.0)
-                    if adj.get("sample_count", 0) >= 5:
+                    effective_keep = self._keep + adj.get("keep_shift", 0.0) + strictness
+                    effective_trash = self._trash + adj.get("trash_shift", 0.0) + strictness
+                    # Clamp so they stay sensible
+                    effective_keep = min(effective_keep, 0.98)
+                    effective_trash = min(effective_trash, effective_keep - 0.05)
+                    if adj.get("sample_count", 0) >= 5 or strictness > 0:
                         logger.debug(
-                            "Learned thresholds: keep=%.3f trash=%.3f (%d samples)",
-                            effective_keep, effective_trash, adj["sample_count"],
+                            "Learned thresholds: keep=%.3f trash=%.3f (strictness=%.2f, %d samples)",
+                            effective_keep, effective_trash, strictness, adj.get("sample_count", 0),
                         )
 
                     if result.score >= effective_keep:

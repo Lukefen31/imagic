@@ -102,6 +102,7 @@ from imagic.services.preview_engine import (
     apply_color_grade as _apply_color_grade,
 )
 from imagic.services.editor_style_presets import get_editor_style_overrides
+from imagic.views.widgets.ai_loading_modal import AILoadingModal
 
 
 
@@ -356,6 +357,91 @@ def ai_auto_wb(rgb: np.ndarray) -> dict:
         "temperature": int(np.clip(temp_shift, -50, 50)),
         "tint": int(np.clip(tint_shift, -50, 50)),
     }
+
+
+# ======================================================================
+# AI Variation Engine
+# ======================================================================
+
+# How much each parameter type is allowed to vary (absolute range, per-side).
+# Conservative for tonal params, more generous for creative ones.
+_VARIATION_RANGES: dict[str, int] = {
+    "exposure": 8,
+    "contrast": 10,
+    "highlights": 12,
+    "shadows": 12,
+    "whites": 8,
+    "blacks": 8,
+    "temperature": 8,
+    "tint": 6,
+    "clarity": 10,
+    "dehaze": 8,
+    "vibrance": 12,
+    "saturation": 10,
+    "sharp_amount": 15,
+    "sharp_radius": 10,
+    "nr_luminance": 10,
+    "nr_color": 8,
+    "vignette_amount": 10,
+    "grain_amount": 5,
+}
+
+# Curated "flavour" offsets — the first re-run picks flavour 0, second
+# picks flavour 1, etc.  After exhausting flavours, seeded jitter is used.
+_FLAVOURS: list[dict[str, int]] = [
+    {"contrast": 8, "clarity": 6, "vibrance": 5, "shadows": 5},      # punchier
+    {"contrast": -6, "exposure": 4, "highlights": -8, "dehaze": 6},   # softer / lifted
+    {"vibrance": 12, "saturation": 6, "temperature": -5},             # cooler & vivid
+    {"temperature": 6, "tint": 3, "vibrance": -5, "contrast": 5},     # warmer & muted
+    {"clarity": -10, "contrast": -4, "shadows": 10, "grain_amount": 8},  # dreamy / film
+    {"dehaze": 12, "contrast": 6, "blacks": -6, "clarity": 8},        # crisp & bold
+]
+
+
+def vary_suggestions(base: dict, run: int, slider_ranges: dict[str, tuple] | None = None) -> dict:
+    """Return a varied copy of *base* suggestions for the given *run* index.
+
+    Run 0 returns the original (unmodified) suggestions.  Runs 1-6 blend in
+    curated flavour offsets.  Runs 7+ use seeded pseudo-random jitter so that
+    re-runs are deterministic per *run* number but different from each other.
+
+    Args:
+        base: The deterministic AI suggestions dict.
+        run: How many times the user has already triggered this AI tool on
+             the current photo (0 = first time).
+        slider_ranges: Optional mapping of key → (min, max) to clamp values.
+
+    Returns:
+        A new dict with varied parameter values.
+    """
+    if run == 0:
+        return dict(base)
+
+    import random
+    result = dict(base)
+
+    if run <= len(_FLAVOURS):
+        flavour = _FLAVOURS[run - 1]
+        for key, offset in flavour.items():
+            if key in result:
+                result[key] = result[key] + offset
+            else:
+                result[key] = offset
+    else:
+        rng = random.Random(run * 7919)  # deterministic per run
+        for key, value in base.items():
+            max_delta = _VARIATION_RANGES.get(key, 8)
+            jitter = rng.randint(-max_delta, max_delta)
+            result[key] = value + jitter
+
+    # Clamp to slider bounds if provided
+    if slider_ranges:
+        for key in result:
+            if key in slider_ranges:
+                lo, hi = slider_ranges[key]
+                result[key] = max(lo, min(hi, result[key]))
+
+    return result
 
 
 def ai_visual_refine(rgb: np.ndarray, suggestions: dict) -> dict:
@@ -1038,7 +1124,18 @@ class PhotoEditorWidget(QWidget):
         self._pending_ai_optimize = False
         self._batch_worker: Optional[_BatchOptimizeWorker] = None
 
+        # Track how many times each AI tool has been run per photo so
+        # re-runs produce varied results.  Key = (photo_index, tool_name).
+        self._ai_run_counter: dict[tuple, int] = {}
+        self._batch_optimize_run: int = 0
+
+        # AI loading overlay (created after _build_ui so it sits on top)
+        self._ai_modal: Optional[AILoadingModal] = None
+
         self._build_ui()
+
+        # Lazy-create the modal so it overlays the full widget
+        self._ai_modal = AILoadingModal(parent=self)
         if self._photos:
             self._load_photo(self._index)
 
@@ -1049,9 +1146,15 @@ class PhotoEditorWidget(QWidget):
         self._undo_stack.clear()
         self._redo_stack.clear()
         self._last_committed_params = None
+        self._ai_run_counter.clear()
         self._filmstrip.set_photos(photo_list)
         if photo_list:
             self._load_photo(current_index)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        if self._ai_modal and self._ai_modal.isVisible():
+            self._ai_modal.setGeometry(self.rect())
 
     # ------------------------------------------------------------------
     # UI Construction
@@ -1611,6 +1714,8 @@ class PhotoEditorWidget(QWidget):
             self._raw_rgb_preview = None
             self._optimize_btn.setEnabled(False)
             self._optimize_btn.setText("⏳ Decoding…")
+            if self._ai_modal:
+                self._ai_modal.show_message("Decoding RAW", fname)
             thumb = p.get("thumbnail_path", "")
             if thumb and Path(thumb).is_file():
                 pix = QPixmap(thumb)
@@ -1650,6 +1755,9 @@ class PhotoEditorWidget(QWidget):
             self._raw_rgb_preview = self._make_preview_proxy(rgb)
             self._optimize_btn.setEnabled(True)
             self._optimize_btn.setText("⚡ AI Optimize All")
+            # Dismiss decode overlay (only if batch optimize isn't running)
+            if self._ai_modal and not self._batch_worker:
+                self._ai_modal.hide_modal()
             self._rebuild_grade_thumbnails()
             self._update_preview()
 
@@ -2108,6 +2216,8 @@ class PhotoEditorWidget(QWidget):
         if not self._photos:
             return
 
+        run = self._next_ai_run("optimize_all")
+
         # Save current photo's params before starting batch
         if self._raw_rgb is not None:
             current_params = self._gather_params()
@@ -2118,6 +2228,14 @@ class PhotoEditorWidget(QWidget):
 
         self._optimize_btn.setEnabled(False)
         self._optimize_btn.setText("⏳ Optimizing all…")
+
+        # Show the AI loading overlay
+        n = len(self._photos)
+        if self._ai_modal:
+            title = "AI Optimizing Photos" if run == 0 else f"AI Optimizing (variation {run})"
+            self._ai_modal.show_message(title, f"Preparing {n} photos…", total=n)
+
+        self._batch_optimize_run = run  # stash for _on_batch_photo_done
         self._batch_worker = _BatchOptimizeWorker(
             self._photos, self._rgb_cache, user_style=user_style, parent=self
         )
@@ -2129,6 +2247,11 @@ class PhotoEditorWidget(QWidget):
         """A single photo was optimized by the batch worker."""
         # Cache the decoded RGB
         self._rgb_cache[index] = rgb
+
+        # Apply variation if this is a re-run
+        run = getattr(self, "_batch_optimize_run", 0)
+        if run > 0:
+            suggestions = vary_suggestions(suggestions, run, self._get_slider_bounds())
 
         # Build full params: start from defaults, apply suggestions
         params = {}
@@ -2145,6 +2268,11 @@ class PhotoEditorWidget(QWidget):
         n = len(self._photos)
         self._optimize_btn.setText(f"⏳ {index + 1}/{n}…")
 
+        # Update loading overlay progress
+        fname = self._photos[index].get("file_name", "")
+        if self._ai_modal:
+            self._ai_modal.set_progress(index + 1, n, fname)
+
         # If this is the currently displayed photo, update live
         if index == self._index:
             self._raw_rgb = rgb
@@ -2158,6 +2286,8 @@ class PhotoEditorWidget(QWidget):
         self._optimize_btn.setEnabled(True)
         self._optimize_btn.setText("⚡ AI Optimize All")
         self._batch_worker = None
+        if self._ai_modal:
+            self._ai_modal.hide_modal()
         logger.info("Batch AI optimize complete for %d photos", len(self._photos))
 
     # ------------------------------------------------------------------
@@ -2168,28 +2298,54 @@ class PhotoEditorWidget(QWidget):
         """Auto-enhance using AI analysis of the image."""
         if self._raw_rgb is None:
             return
+        run = self._next_ai_run("enhance")
+        if self._ai_modal:
+            label = "AI Auto-Enhance" if run == 0 else f"AI Auto-Enhance (variation {run})"
+            self._ai_modal.show_message(label, "Analysing image…")
         suggestions = ai_auto_enhance(self._raw_rgb)
+        suggestions = vary_suggestions(suggestions, run, self._get_slider_bounds())
         self._apply_ai_suggestions(suggestions)
+        if self._ai_modal:
+            self._ai_modal.hide_modal()
 
     def _ai_auto_wb(self) -> None:
         """Auto white balance using grey-world assumption."""
         if self._raw_rgb is None:
             return
+        run = self._next_ai_run("wb")
+        if self._ai_modal:
+            label = "AI White Balance" if run == 0 else f"AI White Balance (variation {run})"
+            self._ai_modal.show_message(label, "Calculating colour correction…")
         suggestions = ai_auto_wb(self._raw_rgb)
+        suggestions = vary_suggestions(suggestions, run, self._get_slider_bounds())
         self._apply_ai_suggestions(suggestions)
+        if self._ai_modal:
+            self._ai_modal.hide_modal()
 
     def _ai_denoise(self) -> None:
         """Aggressive AI denoise preset."""
-        self._apply_ai_suggestions({
+        run = self._next_ai_run("denoise")
+        if self._ai_modal:
+            label = "AI Denoise" if run == 0 else f"AI Denoise (variation {run})"
+            self._ai_modal.show_message(label, "Applying noise reduction…")
+        base = {
             "nr_luminance": 60,
             "nr_color": 50,
-            "sharp_amount": 30,  # compensate for softening
-        })
+            "sharp_amount": 30,
+        }
+        suggestions = vary_suggestions(base, run, self._get_slider_bounds())
+        self._apply_ai_suggestions(suggestions)
+        if self._ai_modal:
+            self._ai_modal.hide_modal()
 
     def _ai_sharpen(self) -> None:
         """Smart sharpening based on image content."""
         if self._raw_rgb is None:
             return
+        run = self._next_ai_run("sharpen")
+        if self._ai_modal:
+            label = "AI Smart Sharpen" if run == 0 else f"AI Smart Sharpen (variation {run})"
+            self._ai_modal.show_message(label, "Analysing sharpness…")
         # Analyze sharpness
         try:
             from scipy.ndimage import laplace
@@ -2203,21 +2359,42 @@ class PhotoEditorWidget(QWidget):
                 amount = 30
         except ImportError:
             amount = 50
-        self._apply_ai_suggestions({
-            "sharp_amount": amount,
-            "sharp_radius": 60,
-        })
+        base = {"sharp_amount": amount, "sharp_radius": 60}
+        suggestions = vary_suggestions(base, run, self._get_slider_bounds())
+        self._apply_ai_suggestions(suggestions)
+        if self._ai_modal:
+            self._ai_modal.hide_modal()
 
     def _ai_bw(self) -> None:
         """AI black & white conversion with optimal tonal adjustment."""
         if self._raw_rgb is None:
             return
+        run = self._next_ai_run("bw")
+        if self._ai_modal:
+            label = "AI B\u200a&\u200aW" if run == 0 else f"AI B\u200a&\u200aW (variation {run})"
+            self._ai_modal.show_message(label, "Converting to black & white…")
         self._grade_combo.setCurrentText("bw_classic")
-        self._apply_ai_suggestions({
-            "saturation": -100,
-            "contrast": 20,
-            "clarity": 15,
-        })
+        base = {"saturation": -100, "contrast": 20, "clarity": 15}
+        suggestions = vary_suggestions(base, run, self._get_slider_bounds())
+        # Always keep saturation pinned to -100 for true B&W
+        suggestions["saturation"] = -100
+        self._apply_ai_suggestions(suggestions)
+        if self._ai_modal:
+            self._ai_modal.hide_modal()
+
+    def _get_slider_bounds(self) -> dict[str, tuple]:
+        """Return {key: (min, max)} for every registered slider."""
+        return {
+            key: (s._slider.minimum(), s._slider.maximum())
+            for key, s in self._sliders.items()
+        }
+
+    def _next_ai_run(self, tool: str) -> int:
+        """Increment and return the run counter for *tool* on the current photo."""
+        key = (self._index, tool)
+        n = self._ai_run_counter.get(key, 0)
+        self._ai_run_counter[key] = n + 1
+        return n
 
     def _apply_ai_suggestions(self, suggestions: dict) -> None:
         """Apply AI-suggested values to sliders."""

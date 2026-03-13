@@ -157,13 +157,21 @@ class LibraryController:
                 query = query.filter(Photo.id.in_(photo_ids))
             photos: List[Photo] = query.all()
 
-            for photo in photos:
+            for i, photo in enumerate(photos, 1):
                 raw = Path(photo.file_path)
                 thumb_path = self._thumb_dir / f"{raw.stem}_thumb.jpg"
-                result = generate_thumbnail(raw, thumb_path, max_size=self._thumb_size)
-                if result:
-                    photo.thumbnail_path = str(result)
-                    generated += 1
+                try:
+                    result = generate_thumbnail(raw, thumb_path, max_size=self._thumb_size)
+                    if result:
+                        photo.thumbnail_path = str(result)
+                        generated += 1
+                except Exception:
+                    logger.exception("Thumbnail error for %s", raw)
+
+                # Commit in batches of 10 so progress is not lost if the
+                # application is closed or a later file causes a crash.
+                if i % 10 == 0:
+                    session.commit()
 
             session.commit()
             logger.info("Generated %d thumbnails.", generated)

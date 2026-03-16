@@ -1867,13 +1867,25 @@ class PhotoEditorWidget(QWidget):
     def _grade_save_one(self) -> None:
         """Persist the current color grade to this photo's overrides."""
         self._save_current_to_dict()
+        photo = self._photos[self._index]
+        pid = photo.get("id", 0)
+        raw = photo.get("manual_overrides", "{}")
+        try:
+            ov = json.loads(raw) if isinstance(raw, str) else (raw if raw else {})
+        except (json.JSONDecodeError, TypeError):
+            ov = {}
+        ov["_editor_touched"] = True
+        photo["manual_overrides"] = json.dumps(ov)
+        if pid:
+            self.edits_saved.emit([(pid, ov)])
         self._grade_apply_one.setText("✓ Saved!")
         QTimer.singleShot(1500, lambda: self._grade_apply_one.setText("Apply to This Photo"))
 
     def _grade_save_all(self) -> None:
-        """Apply current color grade + intensity to all photos in the batch."""
+        """Apply current color grade + intensity to all photos in the batch and persist."""
         grade = self._grade_combo.currentText()
         intensity = self._grade_intensity.value()
+        batch = []
         for p in self._photos:
             raw = p.get("manual_overrides", "{}")
             try:
@@ -1882,7 +1894,13 @@ class PhotoEditorWidget(QWidget):
                 ov = {}
             ov["color_grade"] = grade
             ov["color_grade_intensity"] = intensity
+            ov["_editor_touched"] = True
             p["manual_overrides"] = json.dumps(ov)
+            pid = p.get("id", 0)
+            if pid:
+                batch.append((pid, ov))
+        if batch:
+            self.edits_saved.emit(batch)
         self._grade_apply_all.setText(f"✓ Applied to {len(self._photos)}!")
         QTimer.singleShot(1500, lambda: self._grade_apply_all.setText("Apply to All Photos"))
 
@@ -2090,6 +2108,7 @@ class PhotoEditorWidget(QWidget):
             params["crop_y"] = self._crop_rect.y()
             params["crop_w"] = self._crop_rect.width()
             params["crop_h"] = self._crop_rect.height()
+        params["_editor_touched"] = True
         self._photos[self._index]["manual_overrides"] = json.dumps(params)
 
     def _save_all_edits(self) -> None:

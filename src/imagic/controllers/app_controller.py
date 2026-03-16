@@ -20,6 +20,8 @@ from imagic.services.cli_orchestrator import CLIOrchestrator
 from imagic.services.export_service import ExportService
 from imagic.services.task_queue import TaskQueue
 from imagic.utils.logger import setup_logging
+from imagic.utils.path_utils import discover_rawtherapee_cli
+from imagic.utils.runtime_paths import resolve_resource
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,7 @@ class AppController:
         # 2. Logging
         log_file = Path(self.settings.get_nested("app", "log_file", default="imagic.log"))
         log_level = self.settings.get_nested("app", "log_level", default="INFO")
-        logging_yaml = Path(__file__).resolve().parents[3] / "config" / "logging.yaml"
+        logging_yaml = resolve_resource("config", "logging.yaml")
         setup_logging(
             config_path=logging_yaml if logging_yaml.is_file() else None,
             log_file=log_file,
@@ -60,9 +62,14 @@ class AppController:
 
         # 5. CLI orchestrator
         cli_cfg = self.settings["cli_tools"]
+        rawtherapee_cli = cli_cfg.get("rawtherapee_cli", "")
+        if not rawtherapee_cli or not Path(rawtherapee_cli).is_file():
+            rawtherapee_cli = discover_rawtherapee_cli()
+            if rawtherapee_cli:
+                self.settings.update("cli_tools", "rawtherapee_cli", rawtherapee_cli)
         self.cli = CLIOrchestrator(
             darktable_cli=cli_cfg.get("darktable_cli", ""),
-            rawtherapee_cli=cli_cfg.get("rawtherapee_cli", ""),
+            rawtherapee_cli=rawtherapee_cli,
             exiftool=cli_cfg.get("exiftool", ""),
         )
 
@@ -77,7 +84,7 @@ class AppController:
         default_pp3 = Path(pp3_str) if pp3_str else None
         # Auto-detect bundled profile if none configured.
         if not default_pp3 or not default_pp3.is_file():
-            bundled = Path(__file__).resolve().parent.parent.parent.parent / "config" / "default_profile.pp3"
+            bundled = resolve_resource("config", "default_profile.pp3")
             if bundled.is_file():
                 default_pp3 = bundled
 

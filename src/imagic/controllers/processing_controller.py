@@ -7,6 +7,7 @@ via the ``TaskQueue``, and tracks progress.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Callable, List, Optional
 
 from imagic.models.database import DatabaseManager
@@ -96,6 +97,8 @@ class ProcessingController:
         results = {"exported": 0, "failed": 0, "errors": []}
 
         for pid in photo_ids:
+            # Yield CPU between exports so the editor stays responsive
+            time.sleep(0.05)
             try:
                 cli_result = self._export.export_photo(pid)
                 if cli_result.success:

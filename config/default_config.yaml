@@ -35,8 +35,8 @@ cli_tools:
 
 ai:
   enabled: true
-  keep_threshold: 0.8
-  trash_threshold: 0.3
+  keep_threshold: 0.5
+  trash_threshold: 0.35
   duplicate_hash_threshold: 5
 
 ui:

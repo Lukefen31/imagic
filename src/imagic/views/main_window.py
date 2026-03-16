@@ -38,6 +38,7 @@ from imagic.views.export_gallery import ExportGalleryView
 from imagic.views.library_view import LibraryView
 from imagic.views.photo_editor import PhotoEditorWidget
 from imagic.views.processing_view import ProcessingView
+from imagic.utils.runtime_paths import resolve_resource
 from imagic.views.review_grid import ReviewGridView
 from imagic.views.settings_view import SettingsView
 from imagic.views.widgets.status_bar import StatusBarWidget
@@ -150,12 +151,21 @@ class MainWindow(QMainWindow):
         sb_layout.setContentsMargins(0, 12, 0, 12)
         sb_layout.setSpacing(0)
 
-        logo = QLabel("IMAGIC")
+        logo = QLabel()
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo.setStyleSheet(
-            f"color: {_ACCENT}; font-size: 16px; font-weight: bold; "
-            f"padding: 16px 0; letter-spacing: 4px;"
-        )
+        logo.setStyleSheet("padding: 16px 12px;")
+        _wide_svg = resolve_resource("assets", "imagic-wide", "imagic-wide-lightgrey.svg")
+        if _wide_svg.is_file():
+            _pix = QPixmap(str(_wide_svg))
+            if not _pix.isNull():
+                _pix = _pix.scaledToWidth(150, Qt.TransformationMode.SmoothTransformation)
+                logo.setPixmap(_pix)
+        else:
+            logo.setText("IMAGIC")
+            logo.setStyleSheet(
+                f"color: {_ACCENT}; font-size: 16px; font-weight: bold; "
+                f"padding: 16px 0; letter-spacing: 4px;"
+            )
         sb_layout.addWidget(logo)
 
         self._step_buttons: list[QPushButton] = []
@@ -253,10 +263,10 @@ class MainWindow(QMainWindow):
         )
         row.addWidget(self._import_dir_edit, stretch=1)
 
-        browse_btn = QPushButton("Browse…")
-        browse_btn.setStyleSheet(_SECONDARY_BTN)
-        browse_btn.clicked.connect(self._browse_import)
-        row.addWidget(browse_btn)
+        self._browse_btn = QPushButton("Browse…")
+        self._browse_btn.setStyleSheet(_SECONDARY_BTN)
+        self._browse_btn.clicked.connect(self._browse_import)
+        row.addWidget(self._browse_btn)
         layout.addLayout(row)
 
         self._import_recursive_cb = QCheckBox("Scan subdirectories")
@@ -296,7 +306,7 @@ class MainWindow(QMainWindow):
         steps_row = QHBoxLayout()
         steps_row.setSpacing(20)
 
-        icons_dir = Path(__file__).resolve().parents[3] / "assets" / "icons"
+        icons_dir = resolve_resource("assets", "icons")
         step_data = [
             (str(icons_dir / "camera.svg"), "1. Organise your photos",
              "Put your images into a folder.\n"

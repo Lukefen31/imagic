@@ -31,6 +31,9 @@ dev = [
     "mypy>=1.5",
     "ruff>=0.1",
 ]
+packaging = [
+    "PyInstaller>=6.11",
+]
 
 [project.scripts]
 imagic = "imagic.main:main"

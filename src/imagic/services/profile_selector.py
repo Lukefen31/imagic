@@ -22,10 +22,12 @@ from typing import Optional
 
 import numpy as np
 
+from imagic.utils.runtime_paths import resolve_resource
+
 logger = logging.getLogger(__name__)
 
 # Directory containing the bundled PP3 presets (next to this file's package root).
-_PROFILES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "config" / "profiles"
+_PROFILES_DIR = resolve_resource("config", "profiles")
 
 
 @dataclass

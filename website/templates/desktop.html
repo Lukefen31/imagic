@@ -3,8 +3,103 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>imagic Desktop — Download and Buy</title>
-    <meta name="description" content="Buy imagic Desktop for one price, get the installer and your product key by email, and activate it directly in the app.">
+    <title>Buy imagic Desktop - $10 One-Time License | Windows, Mac &amp; Linux Photo Editor</title>
+    <meta name="description" content="Buy imagic Desktop for a one-time $10 payment. Get your license key by email instantly. AI photo culling, batch editing, RAW processing, no subscription, no Adobe account needed.">
+    <meta name="keywords" content="buy photo editing software, lightroom alternative one time payment, imagic desktop license, photo culling software buy, no subscription photo editor, one time photo editing software">
+    <link rel="canonical" href="https://imagic.app/desktop">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://imagic.app/desktop">
+    <meta property="og:title" content="Buy imagic Desktop - $10 One-Time License | AI Photo Culling Software">
+    <meta property="og:description" content="One-time $10 license for imagic Desktop, with unlimited AI photo culling, batch editing &amp; RAW processing on Windows, Mac &amp; Linux. No subscription ever.">
+    <meta property="og:image" content="/static/img/imagic-wide-white.svg">
+    <meta property="og:site_name" content="imagic">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Buy imagic Desktop - $10 One-Time License">
+    <meta name="twitter:description" content="One-time $10 for unlimited AI photo culling &amp; batch editing. No Lightroom subscription needed.">
+    <meta name="twitter:image" content="/static/img/imagic-wide-white.svg">
+
+    <!-- JSON-LD: Product -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": "imagic Desktop License",
+    "description": "One-time desktop license for imagic, AI-powered photo culling, batch editing, and RAW processing software for Windows, macOS, and Linux. No subscription required.",
+      "brand": { "@type": "Brand", "name": "imagic" },
+      "url": "https://imagic.app/desktop",
+      "offers": {
+        "@type": "Offer",
+        "price": "10.00",
+        "priceCurrency": "USD",
+        "availability": "https://schema.org/InStock",
+        "priceValidUntil": "2027-12-31",
+        "description": "One-time payment, unlimited license, product key delivered by email"
+      }
+    }
+    </script>
+
+    <!-- JSON-LD: FAQPage -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is the imagic Desktop license a one-time payment?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. You pay once ($10) and own the license forever. There are no recurring fees, no subscription, and no renewal costs."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I receive my product key?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "After payment is confirmed by Stripe, your license key and download links are emailed to the address you provide at checkout, usually within minutes."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I use imagic Desktop on multiple computers?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The license is device-bound, one active device at a time. If you activate on a new computer, the previous device is automatically deactivated. This gives you a clean transfer path with no extra steps."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What operating systems does imagic Desktop support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "imagic Desktop runs on Windows, macOS, and Linux. The same license key works on all three platforms."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the difference between the Standard and RawTherapee bundle?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The Standard installer includes imagic's full AI culling, editing, and JPEG/PNG export pipeline. The RawTherapee bundle adds true RAW demosaicing via RawTherapee for maximum export quality from RAW files. Both use the same license key."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need an Adobe account or subscription?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. imagic is completely independent of Adobe. No Creative Cloud account, no Adobe ID, and no internet connection is required after activation."
+          }
+        }
+      ]
+    }
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="/static/img/imagic-app-icon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,7 +150,7 @@
             <label class="desktop-email-label" for="desktop-email">Delivery email</label>
             <input id="desktop-email" class="desktop-email-input" type="email" value="{{ prefill_email }}" placeholder="you@example.com" autocomplete="email">
             <button id="desktop-buy-btn" class="btn btn-primary btn-lg desktop-buy-btn" onclick="startDesktopCheckout()">Buy Desktop License</button>
-            <p class="desktop-checkout-note" id="desktop-checkout-note">Includes the standard installer{% if desktop_bundle_available %} and the optional RawTherapee bundle{% endif %}.</p>
+            <p class="desktop-checkout-note" id="desktop-checkout-note">Includes the standard installer{% if desktop_bundle_available %} and the highly recommended RawTherapee bundle{% endif %}.</p>
             <div class="desktop-mini-facts">
                 <div><strong>Activation:</strong> enter your product key once in the app.</div>
                 <div><strong>Transfer:</strong> activating on a new device revokes the old device automatically.</div>
@@ -88,7 +183,7 @@
             <div class="desktop-benefit-card">
                 <div class="desktop-benefit-icon"><i class="fa-solid fa-camera-retro"></i></div>
                 <h3>RawTherapee option included</h3>
-                <p>If you want the full RAW pipeline, use the bundle build{% if not desktop_bundle_available %} once it is uploaded{% endif %} or the standard installer and point imagic at your own RawTherapee install.</p>
+                <p>If you want the full RAW pipeline, use the highly recommended bundle build{% if not desktop_bundle_available %} once it is uploaded{% endif %} or the standard installer and point imagic at your own RawTherapee install.</p>
             </div>
             <div class="desktop-benefit-card">
                 <div class="desktop-benefit-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
@@ -120,6 +215,73 @@
             <h2>Activation behavior</h2>
             <p>The product key is saved on the device after activation. If you later activate the same key on another device, the earlier activation stops working. That gives you a clean transfer path without allowing one key to stay active everywhere.</p>
             <p class="desktop-includes-small">That matches the app-side enforcement already built into the licensing backend and startup gate.</p>
+        </div>
+    </div>
+</section>
+
+<section class="section" id="desktop-faq" style="background: var(--bg-secondary);">
+    <div class="container">
+        <div class="section-title">Common <span class="gradient-text">questions</span></div>
+        <div class="section-subtitle">Everything you need to know before buying the imagic Desktop license.</div>
+
+        <div class="faq-grid" style="max-width: 860px; margin: 48px auto 0; display: flex; flex-direction: column; gap: 16px;">
+
+            <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
+                <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                    Is this a one-time payment or a subscription? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                </summary>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">100% one-time. You pay $10 once and own the license forever. No monthly charges, no annual renewal, no price increases. Unlike Adobe Lightroom at $9.99/month ($120/year), imagic Desktop is a single purchase.</p>
+            </details>
+
+            <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
+                <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                    How quickly do I receive my license key? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                </summary>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">Your license key and installer download links are emailed automatically once Stripe confirms payment, typically within 1-2 minutes. Check your spam folder if you don't see it. The key is also displayed on the confirmation page.</p>
+            </details>
+
+            <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
+                <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                    Can I use the license on multiple computers? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                </summary>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">Your license activates on one machine at a time. When you activate on a new device, the previous device is automatically deactivated. This makes switching to a new computer seamless, with no support ticket required, just activate on the new machine.</p>
+            </details>
+
+            <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
+                <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                    Which operating systems are supported? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                </summary>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">imagic Desktop runs on <strong>Windows, macOS, and Linux</strong>. The same license key activates on any platform. You can also install via Python: <code style="background: var(--bg-secondary); padding: 2px 8px; border-radius: 4px;">pip install imagic</code>.</p>
+            </details>
+
+            <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
+                <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                    What's the difference between Standard and the RawTherapee bundle? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                </summary>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">The <strong>Standard installer</strong> includes imagic's full AI culling pipeline, editor, and JPEG/PNG export. The <strong>recommended RawTherapee bundle</strong> adds true RAW demosaicing via RawTherapee, which is the best option for photographers who want maximum quality from RAW files (CR2, NEF, ARW, etc.) with zero manual setup. Both are included at the same $10 price.</p>
+            </details>
+
+            <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
+                <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                    Do I need an Adobe account or internet connection? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                </summary>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">No Adobe account, no Creative Cloud, no internet required after activation. imagic is completely independent of Adobe. All processing happens locally on your machine, so your photos stay private and speeds are limited only by your hardware.</p>
+            </details>
+
+            <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
+                <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                    What payment methods are accepted? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                </summary>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">Payments are processed securely by <strong>Stripe</strong>. All major credit and debit cards are accepted: Visa, Mastercard, American Express, and more. The checkout is PCI-compliant and your card details are never stored by imagic.</p>
+            </details>
+
+            <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
+                <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+                    Is there a free trial before buying? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                </summary>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">Yes. You can evaluate the desktop workflow before committing long term, and the license key unlocks unlimited photo processing. imagic is improved through active user feedback and direct iteration with the dev team, so the product keeps getting better based on real usage.</p>
+            </details>
+
         </div>
     </div>
 </section>

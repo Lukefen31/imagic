@@ -20,6 +20,8 @@ from typing import Optional, Tuple
 
 from PIL import Image
 
+from imagic.utils.path_utils import discover_darktable_cli, discover_rawtherapee_cli
+
 logger = logging.getLogger(__name__)
 
 _RAW_THUMBNAIL_CONCURRENCY = max(1, int(os.environ.get("IMAGIC_RAW_THUMBNAIL_CONCURRENCY", "1") or "1"))
@@ -67,12 +69,16 @@ def generate_thumbnail(
 
     # --- Strategy 1 & 2: rawpy -------------------------------------------
     if _RAWPY_AVAILABLE:
-        result = _generate_via_rawpy(raw_path, output_path, max_size, quality)
+        result = _generate_via_rawpy(raw_path, output_path, max_size, quality, embedded_only)
         if result is not None:
             return result
         logger.debug("rawpy strategies failed for %s — trying CLI fallback.", raw_path)
 
     # --- Strategy 3 & 4: CLI tools ---------------------------------------
+    if embedded_only:
+        logger.warning("No embedded RAW thumbnail available for %s", raw_path)
+        return None
+
     result = _generate_via_cli(raw_path, output_path, max_size, quality)
     if result is not None:
         return result
@@ -94,6 +100,7 @@ def _generate_via_rawpy(
     output_path: Path,
     max_size: Tuple[int, int],
     quality: int,
+    embedded_only: bool,
 ) -> Optional[Path]:
     """Try rawpy embedded preview, then full decode."""
     try:
@@ -174,9 +181,9 @@ def _resolve_cli_tools() -> Tuple[str, str]:
 
     # Last-resort discovery via PATH.
     if not rt_path:
-        rt_path = shutil.which("rawtherapee-cli") or ""
+        rt_path = discover_rawtherapee_cli()
     if not dt_path:
-        dt_path = shutil.which("darktable-cli") or ""
+        dt_path = discover_darktable_cli()
     return rt_path, dt_path
 
 

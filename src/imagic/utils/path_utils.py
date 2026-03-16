@@ -10,6 +10,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from imagic.utils.runtime_paths import find_bundled_rawtherapee_cli
+
 
 def normalise(path: str | Path) -> Path:
     """Resolve and normalise a path.
@@ -110,6 +112,10 @@ def discover_rawtherapee_cli() -> str:
     Returns:
         An absolute path string, or ``""`` if not found.
     """
+    bundled = find_bundled_rawtherapee_cli()
+    if bundled:
+        return str(bundled)
+
     found = _which("rawtherapee-cli")
     if found:
         return found

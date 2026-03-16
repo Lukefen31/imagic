@@ -45,8 +45,8 @@ class AIController:
         task_queue: TaskQueue,
         quality_scorer: Optional[BaseAnalyzer] = None,
         duplicate_detector: Optional[DuplicateDetector] = None,
-        keep_threshold: float = 0.8,
-        trash_threshold: float = 0.3,
+        keep_threshold: float = 0.50,
+        trash_threshold: float = 0.35,
         duplicate_hash_threshold: int = 10,
     ) -> None:
         self._queue = task_queue

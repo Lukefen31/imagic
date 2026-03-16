@@ -114,13 +114,13 @@ class SettingsView(QDialog):
         self._keep_spin = QDoubleSpinBox()
         self._keep_spin.setRange(0.0, 1.0)
         self._keep_spin.setSingleStep(0.05)
-        self._keep_spin.setValue(ai.get("keep_threshold", 0.8))
+        self._keep_spin.setValue(ai.get("keep_threshold", 0.50))
         form.addRow("Keep threshold (≥):", self._keep_spin)
 
         self._trash_spin = QDoubleSpinBox()
         self._trash_spin.setRange(0.0, 1.0)
         self._trash_spin.setSingleStep(0.05)
-        self._trash_spin.setValue(ai.get("trash_threshold", 0.3))
+        self._trash_spin.setValue(ai.get("trash_threshold", 0.35))
         form.addRow("Trash threshold (≤):", self._trash_spin)
 
         return tab

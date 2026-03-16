@@ -485,8 +485,8 @@ class CullingPreviewDialog(QDialog):
     def __init__(
         self,
         photos: List[Dict],
-        keep_threshold: float = 0.55,
-        trash_threshold: float = 0.40,
+        keep_threshold: float = 0.50,
+        trash_threshold: float = 0.35,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -771,13 +771,25 @@ class CullingPreviewDialog(QDialog):
         gallery.exec()
 
     def _on_gallery_status_changed(self, file_name: str, new_status: str) -> None:
+        # Find the source index for this file
+        src_idx = None
+        for i, p in enumerate(self._photos):
+            if p.get("file_name", "") == file_name:
+                p["status"] = new_status
+                src_idx = i
+                break
+
         self.status_changed.emit(file_name, new_status)
-        # Refresh table to reflect the change
+
+        # Refresh only the affected row (or re-filter if a filter is active)
         current_filter = self._filter_combo.currentText()
         if current_filter != "All":
             self._apply_filter(current_filter)
-        else:
-            self._populate_table()
+        elif src_idx is not None:
+            for vis_row, idx in enumerate(self._filtered_indices):
+                if idx == src_idx:
+                    self._fill_row(vis_row, src_idx)
+                    break
         self._update_summary()
 
     # ------------------------------------------------------------------

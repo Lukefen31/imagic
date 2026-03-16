@@ -98,7 +98,7 @@ function renderDesktopOrderStatus(data) {
     }
 
     const bundleBlock = data.bundle_download_url
-        ? `<a class="btn btn-secondary btn-lg" href="${data.bundle_download_url}">Download installer + RawTherapee bundle</a>`
+        ? `<a class="btn btn-secondary btn-lg" href="${data.bundle_download_url}">Download recommended installer + RawTherapee</a>`
         : '';
 
     const emailLine = data.email_sent

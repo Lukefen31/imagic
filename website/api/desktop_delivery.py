@@ -39,8 +39,8 @@ _VARIANT_CONFIG = {
     "rawtherapee": {
         "path_env": "IMAGIC_DESKTOP_BUNDLE_PATH",
         "url_env": "IMAGIC_DESKTOP_BUNDLE_URL",
-        "default_name": "imagic-desktop-plus-rawtherapee-setup.exe",
-        "label": "Windows installer + RawTherapee bundle",
+        "default_name": "imagic-desktop-recommended-rawtherapee-setup.exe",
+        "label": "Recommended Windows installer + RawTherapee bundle",
     },
 }
 
@@ -107,7 +107,7 @@ def send_desktop_purchase_email(
         f"- Standard installer: {standard_download_link}",
     ]
     if bundle_download_link:
-        plain_lines.append(f"- Installer + RawTherapee bundle: {bundle_download_link}")
+        plain_lines.append(f"- Recommended installer + RawTherapee bundle: {bundle_download_link}")
     plain_lines.extend(
         [
             "",
@@ -121,7 +121,7 @@ def send_desktop_purchase_email(
     bundle_block = ""
     if bundle_download_link:
         bundle_block = (
-            f"<p><strong>Installer + RawTherapee bundle:</strong> "
+            f"<p><strong>Recommended installer + RawTherapee bundle:</strong> "
             f"<a href=\"{bundle_download_link}\">Download the bundle</a></p>"
         )
 
@@ -135,7 +135,7 @@ def send_desktop_purchase_email(
             <p><strong>Standard installer:</strong> <a href="{standard_download_link}">Download imagic Desktop</a></p>
             {bundle_block}
             <p><strong>Order page:</strong> <a href="{order_status_link}">{order_status_link}</a></p>
-            <p>After install, imagic asks for your product key once and stores the activation on that device. If you move the same key to another device later, the older activation becomes invalid automatically.</p>
+                        <p>After install, imagic asks for your product key once and stores the activation on that device. If you keep the recommended RawTherapee bundle selected, the RAW pipeline is ready immediately with no manual CLI setup. If you move the same key to another device later, the older activation becomes invalid automatically.</p>
           </body>
         </html>
         """,

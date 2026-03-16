@@ -46,7 +46,16 @@ class StatusBarWidget(QStatusBar):
         Args:
             counts: Mapping of status → count (from ``AppController.get_pipeline_summary``).
         """
-        parts = [f"{k}: {v}" for k, v in counts.items() if v > 0]
+        keep = counts.get("keep", 0)
+        trash = counts.get("trash", 0)
+        review = counts.get("culled", 0)
+        parts = []
+        if keep:
+            parts.append(f"Keep: {keep}")
+        if trash:
+            parts.append(f"Trash: {trash}")
+        if review:
+            parts.append(f"Review: {review}")
         self._pipeline.setText("  |  ".join(parts))
 
     @pyqtSlot(int, int)

@@ -319,12 +319,12 @@ class FeedbackLearner:
         if keep_hints:
             # User keeps photos at this score range — lower the keep threshold
             thresholds["keep_shift"] = round(
-                -min(0.15, max(0.02, 0.8 - (sum(keep_hints) / len(keep_hints)))), 4
+                -min(0.15, max(0.02, 0.50 - (sum(keep_hints) / len(keep_hints)))), 4
             )
         if trash_hints:
             # User trashes photos at this score range — raise the trash threshold
             thresholds["trash_shift"] = round(
-                min(0.15, max(0.02, (sum(trash_hints) / len(trash_hints)) - 0.3)), 4
+                min(0.15, max(0.02, (sum(trash_hints) / len(trash_hints)) - 0.35)), 4
             )
 
         self._data["learned_thresholds"] = thresholds

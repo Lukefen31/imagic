@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ post.title }} - imagic Blog</title>
+    <meta name="description" content="{{ post.meta_description }}">
+    <meta name="keywords" content="{{ post.tags | join(', ') }}">
+    <link rel="canonical" href="https://imagic.app/blog/{{ post.slug }}">
+
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://imagic.app/blog/{{ post.slug }}">
+    <meta property="og:title" content="{{ post.title }}">
+    <meta property="og:description" content="{{ post.meta_description }}">
+    <meta property="og:site_name" content="imagic">
+    <meta property="article:published_time" content="{{ post.date }}">
+
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ post.title }}">
+    <meta name="twitter:description" content="{{ post.meta_description }}">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      "headline": "{{ post.title }}",
+      "description": "{{ post.meta_description }}",
+      "datePublished": "{{ post.date }}",
+      "dateModified": "{{ post.date }}",
+      "author": {
+        "@type": "Organization",
+        "name": "imagic",
+        "url": "https://imagic.app"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "imagic",
+        "url": "https://imagic.app"
+      },
+      "url": "https://imagic.app/blog/{{ post.slug }}",
+      "keywords": "{{ post.tags | join(', ') }}"
+    }
+    </script>
+
+    <link rel="icon" type="image/svg+xml" href="/static/img/imagic-app-icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <style>
+        .post-header {
+            padding: 80px 0 48px;
+            background: var(--bg-secondary);
+            text-align: center;
+        }
+        .post-header .post-meta {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .post-category {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent);
+        }
+        .post-date, .post-read-time {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+        .post-header h1 {
+            font-size: clamp(1.8rem, 4vw, 2.8rem);
+            line-height: 1.25;
+            max-width: 800px;
+            margin: 0 auto 20px;
+        }
+        .post-header .post-description {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            max-width: 680px;
+            margin: 0 auto 24px;
+            line-height: 1.65;
+        }
+        .post-tags {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .post-tag {
+            font-size: 0.8rem;
+            padding: 4px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            color: var(--text-muted);
+        }
+
+        .post-layout {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 48px;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 64px 24px;
+        }
+        @media (max-width: 900px) {
+            .post-layout { grid-template-columns: 1fr; }
+            .post-sidebar { order: -1; }
+        }
+
+        .post-content {
+            min-width: 0;
+            font-size: 1.05rem;
+            line-height: 1.8;
+            color: var(--text-secondary);
+        }
+        .post-content h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 40px 0 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .post-content h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 28px 0 12px;
+        }
+        .post-content p { margin-bottom: 20px; }
+        .post-content ul, .post-content ol {
+            margin: 0 0 20px 24px;
+        }
+        .post-content li { margin-bottom: 8px; }
+        .post-content strong { color: var(--text-primary); }
+        .post-content a { color: var(--accent); }
+        .post-content code {
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 0.9em;
+        }
+        .post-content blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 20px;
+            margin: 24px 0;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .post-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .sidebar-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .sidebar-card h4 {
+            font-size: 0.875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+        }
+        .sidebar-cta {
+            background: var(--bg-card);
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .sidebar-cta h4 { color: var(--accent); margin-bottom: 8px; font-size: 1rem; }
+        .sidebar-cta p { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5; }
+        .sidebar-cta .btn { width: 100%; justify-content: center; }
+
+        .related-posts {
+            margin-top: 64px;
+            padding-top: 48px;
+            border-top: 1px solid var(--border);
+        }
+        .related-posts h3 { margin-bottom: 24px; font-size: 1.2rem; }
+        .related-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .related-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.2s;
+        }
+        .related-card:hover { border-color: var(--accent); }
+        .related-card .cat { font-size: 0.75rem; font-weight: 700; color: var(--accent); text-transform: uppercase; margin-bottom: 8px; }
+        .related-card h4 { font-size: 0.95rem; line-height: 1.4; margin-bottom: 0; }
+        .related-card h4 a { color: var(--text-primary); text-decoration: none; }
+        .related-card h4 a:hover { color: var(--accent); }
+
+        .post-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 48px;
+            padding-top: 32px;
+            border-top: 1px solid var(--border);
+        }
+        .post-nav a {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            text-decoration: none;
+            color: var(--text-primary);
+            max-width: 48%;
+            transition: border-color 0.2s;
+            font-size: 0.9rem;
+        }
+        .post-nav a:hover { border-color: var(--accent); }
+        .post-nav .nav-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+        .post-nav .nav-prev { text-align: left; }
+        .post-nav .nav-next { text-align: right; margin-left: auto; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar scrolled" id="navbar">
+    <div class="container">
+        <a href="/" class="navbar-brand navbar-brand-wide">
+            <img src="/static/img/imagic-wide-white.svg" alt="imagic" class="brand-logo-wide">
+        </a>
+        <ul class="navbar-links" id="nav-links">
+            <li><a href="/">Home</a></li>
+            <li><a href="/#why-switch">Why Switch</a></li>
+            <li><a href="/#pricing">Pricing</a></li>
+            <li><a href="/blog">Blog</a></li>
+        </ul>
+        <div class="navbar-actions">
+            <a href="/desktop" class="btn btn-primary btn-sm">Download Desktop</a>
+            <button class="hamburger" id="hamburger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+</nav>
+
+<header class="post-header">
+    <div class="container">
+        <div class="post-meta">
+            <span class="post-category">{{ post.category }}</span>
+            <span class="post-date"><i class="fa-regular fa-calendar"></i> {{ post.date_display }}</span>
+            <span class="post-read-time"><i class="fa-regular fa-clock"></i> {{ post.read_time }}</span>
+        </div>
+        <h1>{{ post.title }}</h1>
+        <p class="post-description">{{ post.meta_description }}</p>
+        <div class="post-tags">
+            {% for tag in post.tags %}
+            <span class="post-tag">{{ tag }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</header>
+
+<div class="post-layout">
+    <main class="post-content" itemscope itemtype="https://schema.org/BlogPosting">
+        <meta itemprop="datePublished" content="{{ post.date }}">
+        <meta itemprop="headline" content="{{ post.title }}">
+        {{ post.html_content | safe }}
+
+        {% if related_posts %}
+        <div class="related-posts">
+            <h3>Related Articles</h3>
+            <div class="related-grid">
+                {% for rp in related_posts %}
+                <div class="related-card">
+                    <div class="cat">{{ rp.category }}</div>
+                    <h4><a href="/blog/{{ rp.slug }}">{{ rp.title }}</a></h4>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="post-nav">
+            {% if prev_post %}
+            <a href="/blog/{{ prev_post.slug }}" class="nav-prev">
+                <div class="nav-label">← Previous</div>
+                {{ prev_post.title }}
+            </a>
+            {% endif %}
+            {% if next_post %}
+            <a href="/blog/{{ next_post.slug }}" class="nav-next">
+                <div class="nav-label">Next →</div>
+                {{ next_post.title }}
+            </a>
+            {% endif %}
+        </div>
+    </main>
+
+    <aside class="post-sidebar">
+        <div class="sidebar-cta">
+            <h4><i class="fa-solid fa-sparkles"></i> Try imagic Free</h4>
+            <p>AI photo culling, batch editing, and RAW processing. One-time $10 desktop license with a direct feedback loop to the dev team.</p>
+            <a href="/desktop" class="btn btn-primary btn-sm"><i class="fa-solid fa-download"></i> Download Desktop</a>
+        </div>
+
+        <div class="sidebar-card">
+            <h4>Key Features</h4>
+            <ul style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px;">
+                <li style="font-size:0.875rem; color:var(--text-muted);"><i class="fa-solid fa-check" style="color:var(--accent); margin-right:8px;"></i>AI photo culling in seconds</li>
+                <li style="font-size:0.875rem; color:var(--text-muted);"><i class="fa-solid fa-check" style="color:var(--accent); margin-right:8px;"></i>Duplicate detection</li>
+                <li style="font-size:0.875rem; color:var(--text-muted);"><i class="fa-solid fa-check" style="color:var(--accent); margin-right:8px;"></i>Batch editing &amp; export</li>
+                <li style="font-size:0.875rem; color:var(--text-muted);"><i class="fa-solid fa-check" style="color:var(--accent); margin-right:8px;"></i>9+ RAW formats</li>
+                <li style="font-size:0.875rem; color:var(--text-muted);"><i class="fa-solid fa-check" style="color:var(--accent); margin-right:8px;"></i>Community-driven improvements</li>
+                <li style="font-size:0.875rem; color:var(--text-muted);"><i class="fa-solid fa-check" style="color:var(--accent); margin-right:8px;"></i>Windows, Mac, Linux</li>
+            </ul>
+        </div>
+
+        <div class="sidebar-card">
+            <h4>Browse by Category</h4>
+            <ul style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:6px;">
+                <li><a href="/blog?cat=Tips+%26+Workflow" style="color:var(--text-muted); font-size:0.875rem; text-decoration:none;">→ Tips &amp; Workflow</a></li>
+                <li><a href="/blog?cat=Software+Comparisons" style="color:var(--text-muted); font-size:0.875rem; text-decoration:none;">→ Software Comparisons</a></li>
+                <li><a href="/blog?cat=AI+%26+Technology" style="color:var(--text-muted); font-size:0.875rem; text-decoration:none;">→ AI &amp; Technology</a></li>
+                <li><a href="/blog?cat=Guides" style="color:var(--text-muted); font-size:0.875rem; text-decoration:none;">→ Guides</a></li>
+                <li><a href="/blog?cat=Industry+Insights" style="color:var(--text-muted); font-size:0.875rem; text-decoration:none;">→ Industry Insights</a></li>
+            </ul>
+        </div>
+    </aside>
+</div>
+
+<footer class="footer">
+    <div class="container">
+        <div class="footer-bottom" style="padding-top:0; border-top:none;">
+            <span>&copy; 2026 imagic. Built by Photographers For Photographers.</span>
+            <span><a href="/blog">← Back to Blog</a></span>
+        </div>
+    </div>
+</footer>
+
+</body>
+</html>

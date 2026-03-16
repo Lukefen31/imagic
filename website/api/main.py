@@ -22,6 +22,7 @@ from starlette.responses import RedirectResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .account_store import account_store
+from .blog_posts import get_published_posts, get_post_by_slug, get_related_posts
 from .desktop_delivery import resolve_download_target
 from .rate_limit import RateLimiter
 from .processing import (
@@ -137,6 +138,75 @@ async def desktop_download_page(request: Request):
             "desktop_bundle_available": resolve_download_target("rawtherapee") is not None,
         },
     )
+
+
+@app.get("/blog", response_class=HTMLResponse)
+async def blog_index(request: Request, cat: str = ""):
+    posts = get_published_posts()
+    if cat:
+        posts = [p for p in posts if p["category"] == cat]
+    for post in posts:
+        post["date_display"] = _format_date(post["date"])
+    return templates.TemplateResponse("blog_index.html", {"request": request, "posts": posts})
+
+
+@app.get("/blog/{slug}", response_class=HTMLResponse)
+async def blog_post(request: Request, slug: str):
+    post = get_post_by_slug(slug)
+    if post is None:
+        raise HTTPException(404, "Post not found.")
+    post["date_display"] = _format_date(post["date"])
+    # Build prev/next navigation
+    all_posts = get_published_posts()
+    idx = next((i for i, p in enumerate(all_posts) if p["slug"] == slug), None)
+    prev_post = all_posts[idx - 1] if idx and idx > 0 else None
+    next_post = all_posts[idx + 1] if idx is not None and idx < len(all_posts) - 1 else None
+    related = get_related_posts(slug, limit=3)
+    return templates.TemplateResponse(
+        "blog_post.html",
+        {
+            "request": request,
+            "post": post,
+            "prev_post": prev_post,
+            "next_post": next_post,
+            "related_posts": related,
+        },
+    )
+
+
+@app.get("/sitemap.xml")
+async def sitemap():
+    posts = get_published_posts()
+    urls = [
+        "<url><loc>https://imagic.app/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>",
+        "<url><loc>https://imagic.app/desktop</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>",
+        "<url><loc>https://imagic.app/blog</loc><changefreq>daily</changefreq><priority>0.8</priority></url>",
+    ]
+    for post in posts:
+        urls.append(
+            f"<url><loc>https://imagic.app/blog/{post['slug']}</loc>"
+            f"<lastmod>{post['date']}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>"
+        )
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    xml += "\n".join(urls)
+    xml += "\n</urlset>"
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.get("/robots.txt")
+async def robots():
+    content = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /uploads/\n\nSitemap: https://imagic.app/sitemap.xml\n"
+    return Response(content=content, media_type="text/plain")
+
+
+def _format_date(iso_date: str) -> str:
+    try:
+        from datetime import datetime as _dt
+        d = _dt.strptime(iso_date, "%Y-%m-%d")
+        return f"{d.strftime('%B')} {d.day}, {d.year}"
+    except Exception:
+        return iso_date
 
 
 @app.get("/desktop/thanks", response_class=HTMLResponse)

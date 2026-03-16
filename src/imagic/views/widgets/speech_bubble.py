@@ -19,6 +19,7 @@ from typing import Callable, List, Optional
 from PyQt6.QtCore import QPoint, QPropertyAnimation, QRect, QEasingCurve, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QBrush, QRegion
 from PyQt6.QtWidgets import (
+    QApplication,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
@@ -225,34 +226,64 @@ class SpeechBubble(QWidget):
         if parent is None or target is None:
             return
 
-        # Target centre in parent coordinates
-        target_rect = QRect(
-            target.mapTo(parent, QPoint(0, 0)),
-            target.size(),
-        )
+        # Target centre in parent coordinates via global space. This avoids
+        # bad offsets when the overlay sits above stacked pages and nested layouts.
+        target_top_left = parent.mapFromGlobal(target.mapToGlobal(QPoint(0, 0)))
+        target_rect = QRect(target_top_left, target.size())
         bw, bh = self.sizeHint().width(), self.sizeHint().height()
         gap = 6
+        preferred_pointer = self._pointer
 
-        if self._pointer == PointerSide.TOP:
-            # Bubble below target
-            x = target_rect.center().x() - int(bw * self._pointer_offset)
-            y = target_rect.bottom() + gap
-        elif self._pointer == PointerSide.BOTTOM:
-            x = target_rect.center().x() - int(bw * self._pointer_offset)
-            y = target_rect.top() - bh - gap
-        elif self._pointer == PointerSide.LEFT:
-            x = target_rect.right() + gap
-            y = target_rect.center().y() - int(bh * self._pointer_offset)
-        else:  # RIGHT
-            x = target_rect.left() - bw - gap
-            y = target_rect.center().y() - int(bh * self._pointer_offset)
+        def _candidate_rect(pointer: PointerSide) -> QRect:
+            if pointer == PointerSide.TOP:
+                x = target_rect.center().x() - int(bw * self._pointer_offset)
+                y = target_rect.bottom() + gap
+            elif pointer == PointerSide.BOTTOM:
+                x = target_rect.center().x() - int(bw * self._pointer_offset)
+                y = target_rect.top() - bh - gap
+            elif pointer == PointerSide.LEFT:
+                x = target_rect.right() + gap
+                y = target_rect.center().y() - int(bh * self._pointer_offset)
+            else:  # RIGHT
+                x = target_rect.left() - bw - gap
+                y = target_rect.center().y() - int(bh * self._pointer_offset)
+            return QRect(x, y, bw, bh)
 
-        # Clamp to parent bounds
-        pw, ph = parent.width(), parent.height()
-        x = max(8, min(x, pw - bw - 8))
-        y = max(8, min(y, ph - bh - 8))
+        def _clamp_rect(rect: QRect) -> QRect:
+            pw, ph = parent.width(), parent.height()
+            x = max(8, min(rect.x(), pw - bw - 8))
+            y = max(8, min(rect.y(), ph - bh - 8))
+            return QRect(x, y, bw, bh)
 
-        self.move(x, y)
+        def _score_rect(rect: QRect) -> tuple[int, int]:
+            overlap = 0
+            if rect.intersects(target_rect):
+                overlap_rect = rect.intersected(target_rect)
+                overlap = overlap_rect.width() * overlap_rect.height()
+            distance = abs(rect.center().x() - target_rect.center().x()) + abs(rect.center().y() - target_rect.center().y())
+            return (overlap, distance)
+
+        fallback_order = {
+            PointerSide.TOP: [PointerSide.TOP, PointerSide.RIGHT, PointerSide.LEFT, PointerSide.BOTTOM],
+            PointerSide.BOTTOM: [PointerSide.BOTTOM, PointerSide.RIGHT, PointerSide.LEFT, PointerSide.TOP],
+            PointerSide.LEFT: [PointerSide.LEFT, PointerSide.TOP, PointerSide.BOTTOM, PointerSide.RIGHT],
+            PointerSide.RIGHT: [PointerSide.RIGHT, PointerSide.TOP, PointerSide.BOTTOM, PointerSide.LEFT],
+        }
+
+        best_pointer = preferred_pointer
+        best_rect = _clamp_rect(_candidate_rect(preferred_pointer))
+        best_score = _score_rect(best_rect)
+
+        for pointer in fallback_order[preferred_pointer][1:]:
+            rect = _clamp_rect(_candidate_rect(pointer))
+            score = _score_rect(rect)
+            if score < best_score:
+                best_pointer = pointer
+                best_rect = rect
+                best_score = score
+
+        self._pointer = best_pointer
+        self.move(best_rect.x(), best_rect.y())
 
     # ── Paint ─────────────────────────────────────────────────────
     def paintEvent(self, event) -> None:  # type: ignore[override]
@@ -327,8 +358,11 @@ class TutorialStep:
     title: str
     body: str
     target_name: str  # attribute name on MainWindow to point at
+    page_index: Optional[int] = None
     pointer: PointerSide = PointerSide.TOP
     pointer_offset: float = 0.5
+    allow_target_interaction: bool = True
+    fill_highlight: bool = True
 
 
 class TutorialOverlay(QWidget):
@@ -433,6 +467,8 @@ class TutorialOverlay(QWidget):
 
     def _finish(self) -> None:
         self._bubble.dismiss()
+        if self._host:
+            self._host.removeEventFilter(self)
         self.hide()
         self.finished.emit()
 
@@ -441,8 +477,10 @@ class TutorialOverlay(QWidget):
         step = self._steps[self._current]
         n = len(self._steps)
 
+        self._prepare_step(step)
+
         target = self._resolve_target(step.target_name)
-        if target is None:
+        if target is None or not target.isVisible() or target.width() <= 0 or target.height() <= 0:
             logger.warning("Tutorial target '%s' not found, skipping.", step.target_name)
             self._next()
             return
@@ -466,16 +504,49 @@ class TutorialOverlay(QWidget):
         # Position nav below the bubble
         bx, by = self._bubble.x(), self._bubble.y()
         bw, bh = self._bubble.width(), self._bubble.height()
-
-        self._counter.move(bx + (bw - self._counter.width()) // 2, by + bh + 4)
         self._nav.adjustSize()
-        self._nav.move(bx + (bw - self._nav.width()) // 2, by + bh + 22)
+
+        target_rect = self._target_rect_in_overlay(target)
+        counter_x = bx + (bw - self._counter.width()) // 2
+        nav_x = bx + (bw - self._nav.width()) // 2
+
+        below_counter_y = by + bh + 4
+        below_nav_y = by + bh + 22
+        below_rect = QRect(
+            min(counter_x, nav_x),
+            below_counter_y,
+            max(self._counter.width(), self._nav.width()),
+            (below_nav_y + self._nav.height()) - below_counter_y,
+        )
+
+        place_above = below_rect.intersects(target_rect.adjusted(-8, -8, 8, 8)) or below_rect.bottom() > self.height() - 8
+
+        if place_above:
+            nav_y = max(8, by - self._nav.height() - 20)
+            counter_y = max(8, nav_y - self._counter.height() - 4)
+        else:
+            counter_y = below_counter_y
+            nav_y = below_nav_y
+
+        self._counter.move(counter_x, counter_y)
+        self._nav.move(nav_x, nav_y)
         self._nav.show()
         self._nav.raise_()
         self._counter.show()
         self._counter.raise_()
 
+        self._update_mask(target, step)
         self.update()
+
+    def _prepare_step(self, step: TutorialStep) -> None:
+        """Switch to the page that owns the current tutorial target."""
+        if step.page_index is None:
+            return
+
+        go_to_step = getattr(self._target_root, "go_to_step", None)
+        if callable(go_to_step):
+            go_to_step(step.page_index)
+            QApplication.processEvents()
 
     def _resolve_target(self, name: str) -> Optional[QWidget]:
         """Look up a widget on the target root by dotted attribute path.
@@ -498,6 +569,23 @@ class TutorialOverlay(QWidget):
             return obj
         return None
 
+    def _target_rect_in_overlay(self, target: QWidget) -> QRect:
+        """Map a target widget rect into overlay coordinates."""
+        top_left = self.mapFromGlobal(target.mapToGlobal(QPoint(0, 0)))
+        return QRect(top_left, target.size())
+
+    def _update_mask(self, target: Optional[QWidget], step: Optional[TutorialStep] = None) -> None:
+        """Allow clicks to pass through the active target while keeping tutorial UI interactive."""
+        if not self.isVisible():
+            return
+
+        region = QRegion(self.rect())
+        if target is not None and step is not None and step.allow_target_interaction:
+            target_rect = self._target_rect_in_overlay(target).adjusted(-6, -6, 6, 6)
+            region = region.subtracted(QRegion(target_rect))
+
+        self.setMask(region)
+
     # ── Paint (dim overlay with cut-out for target) ───────────────
     def paintEvent(self, event) -> None:  # type: ignore[override]
         painter = QPainter(self)
@@ -510,9 +598,8 @@ class TutorialOverlay(QWidget):
         if self._current < len(self._steps):
             step = self._steps[self._current]
             target = self._resolve_target(step.target_name)
-            if target is not None:
-                tl = target.mapTo(self, QPoint(0, 0))
-                tr = QRect(tl, target.size()).adjusted(-6, -6, 6, 6)
+            if target is not None and target.isVisible() and target.width() > 0 and target.height() > 0:
+                tr = self._target_rect_in_overlay(target).adjusted(-6, -6, 6, 6)
 
                 # Clear the cut-out
                 painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
@@ -523,18 +610,34 @@ class TutorialOverlay(QWidget):
                 # Draw highlight border
                 painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
                 painter.setPen(QPen(_ACCENT, 2))
-                painter.setBrush(QBrush(_HIGHLIGHT))
+                painter.setBrush(QBrush(_HIGHLIGHT) if step.fill_highlight else Qt.BrushStyle.NoBrush)
                 painter.drawRoundedRect(tr, 8, 8)
 
         painter.end()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
+        # Keep overlay filling the host and reposition the current step
+        if self._host and self.isVisible():
+            self.setGeometry(self._host.rect())
+            if self._current < len(self._steps):
+                self._show_step()
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
         if self._host:
             self.setGeometry(self._host.rect())
+            # Listen for host resize so overlay follows
+            self._host.installEventFilter(self)
+        self._update_mask(None, None)
+
+    def eventFilter(self, obj, event) -> bool:  # type: ignore[override]
+        from PyQt6.QtCore import QEvent
+        if obj is self._host and event.type() == QEvent.Type.Resize:
+            self.setGeometry(self._host.rect())
+            if self.isVisible() and self._current < len(self._steps):
+                self._show_step()
+        return super().eventFilter(obj, event)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         # Consume clicks so they don't pass through the overlay

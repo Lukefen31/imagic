@@ -51,8 +51,8 @@ DEFAULTS: dict = {
     },
     "ai": {
         "enabled": True,
-        "keep_threshold": 0.55,
-        "trash_threshold": 0.40,
+        "keep_threshold": 0.50,
+        "trash_threshold": 0.35,
         "duplicate_hash_threshold": 5,
         "models_directory": str(_APP_DIR / "models"),
     },
@@ -60,6 +60,8 @@ DEFAULTS: dict = {
         "theme": "dark",
         "thumbnail_grid_columns": 5,
         "show_status_bar": True,
+        "tutorial_version": 1,
+        "last_seen_tutorial_version": 0,
     },
     "security": {
         "require_activation": False,

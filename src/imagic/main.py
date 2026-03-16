@@ -14,15 +14,36 @@ import argparse
 import json
 import logging
 import sys
+import threading
 from pathlib import Path
 from typing import List, Optional
+
+from imagic.utils.runtime_paths import resolve_resource
 
 logger = logging.getLogger(__name__)
 
 
 def _resolve_desktop_icon_path() -> Path | None:
-    candidate = Path(__file__).resolve().parents[2] / "assets" / "icons" / "imagic-app-icon.svg"
-    return candidate if candidate.is_file() else None
+    assets = resolve_resource("assets")
+    # Prefer .ico on Windows for proper taskbar / search icon rendering
+    if sys.platform == "win32":
+        ico = assets / "imagic.ico"
+        if ico.is_file():
+            return ico
+    svg = assets / "imagic-icon.svg"
+    if not svg.is_file():
+        svg = assets / "icons" / "imagic-app-icon.svg"
+    return svg if svg.is_file() else None
+
+
+def _set_windows_app_id() -> None:
+    """Set the Windows AppUserModelID so the taskbar groups windows
+    under the Imagic icon instead of a generic Python icon."""
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "imagic.desktop.app"
+        )
 
 
 def _ensure_desktop_activation(qt_app, app_controller) -> bool:
@@ -147,8 +168,8 @@ def run_headless(args: argparse.Namespace) -> int:
     lib_ctrl = LibraryController(task_queue=app.task_queue)
     ai_ctrl = AIController(
         task_queue=app.task_queue,
-        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.8)),
-        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.3)),
+        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.50)),
+        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.35)),
         duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=10)),
     )
     proc_ctrl = ProcessingController(
@@ -210,6 +231,7 @@ def run_gui(args: argparse.Namespace) -> int:
         TutorialStep,
     )
 
+    _set_windows_app_id()
     qt_app = QApplication(sys.argv)
     qt_app.setApplicationName("Imagic")
     icon_path = _resolve_desktop_icon_path()
@@ -229,8 +251,8 @@ def run_gui(args: argparse.Namespace) -> int:
     )
     ai_ctrl = AIController(
         task_queue=app.task_queue,
-        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.8)),
-        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.3)),
+        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.50)),
+        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.35)),
         duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=10)),
     )
     proc_ctrl = ProcessingController(
@@ -535,7 +557,7 @@ def run_gui(args: argparse.Namespace) -> int:
         db = DatabaseManager.get()
         session = db.get_session()
         try:
-            photos = session.query(Photo).order_by(Photo.created_at.desc()).limit(500).all()
+            photos = session.query(Photo).order_by(Photo.created_at.desc()).all()
             data = [
                 {
                     "id": p.id,
@@ -636,6 +658,7 @@ def run_gui(args: argparse.Namespace) -> int:
         def _apply_style(preset: str) -> None:
             s2 = db.get_session()
             updated = 0
+            skipped = 0
             try:
                 targets = (
                     s2.query(Photo)
@@ -650,6 +673,11 @@ def run_gui(args: argparse.Namespace) -> int:
                         overrides = json.loads(raw) if raw else {}
                     except (json.JSONDecodeError, TypeError):
                         overrides = {}
+
+                    # Skip photos that were manually edited in the editor
+                    if overrides.get("_editor_touched"):
+                        skipped += 1
+                        continue
 
                     if preset in LEGACY_STYLE_PRESETS:
                         photo.scene_preset = preset
@@ -672,9 +700,10 @@ def run_gui(args: argparse.Namespace) -> int:
 
             app.export_service.set_forced_preset(None)
             _refresh_library()
-            window.status_bar.set_status(
-                f"Applied '{preset}' to {updated} photos. Editor and export will use the same edit stack."
-            )
+            msg = f"Applied '{preset}' to {updated} photos."
+            if skipped:
+                msg += f" Skipped {skipped} with manual edits."
+            window.status_bar.set_status(msg)
 
         dialog.style_chosen.connect(_apply_style)
         dialog.exec()
@@ -690,8 +719,11 @@ def run_gui(args: argparse.Namespace) -> int:
             photos = (
                 session.query(Photo)
                 .filter(Photo.quality_score.isnot(None))
+                .filter(Photo.status.notin_([
+                    PhotoStatus.PENDING.value,
+                    PhotoStatus.ANALYZING.value,
+                ]))
                 .order_by(Photo.quality_score.asc())
-                .limit(600)
                 .all()
             )
             data = [
@@ -716,96 +748,102 @@ def run_gui(args: argparse.Namespace) -> int:
             )
             return
 
-        keep_t = float(app.settings.get_nested("ai", "keep_threshold", default=0.55))
-        trash_t = float(app.settings.get_nested("ai", "trash_threshold", default=0.40))
+        keep_t = float(app.settings.get_nested("ai", "keep_threshold", default=0.50))
+        trash_t = float(app.settings.get_nested("ai", "trash_threshold", default=0.35))
         dialog = CullingPreviewDialog(data, keep_t, trash_t, window)
         dialog.status_changed.connect(_on_culling_status_changed)
         dialog.exec()
 
     def _on_culling_status_changed(file_name: str, new_status: str) -> None:
         """Persist a manual cull-status override and record feedback."""
-        from imagic.ai.feedback_learner import get_learner
+        def _persist():
+            from imagic.ai.feedback_learner import get_learner
 
-        db = DatabaseManager.get()
-        session = db.get_session()
-        try:
-            photo = session.query(Photo).filter(Photo.file_name == file_name).first()
-            if photo:
-                old_status = photo.status
-                photo.status = new_status
-                session.commit()
-                logger.info("Manual cull override: %s → %s", file_name, new_status)
+            db = DatabaseManager.get()
+            session = db.get_session()
+            try:
+                photo = session.query(Photo).filter(Photo.file_name == file_name).first()
+                if photo:
+                    old_status = photo.status
+                    photo.status = new_status
+                    session.commit()
+                    logger.info("Manual cull override: %s → %s", file_name, new_status)
 
-                # Record feedback for the learner
-                metric_scores = {}
-                if photo.cull_reasons:
-                    try:
-                        reasons = json.loads(photo.cull_reasons)
-                        for r in reasons:
-                            m = r.get("metric", "").lower()
-                            s = r.get("score")
-                            if s is not None:
-                                metric_scores[m] = s
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+                    # Record feedback for the learner
+                    metric_scores = {}
+                    if photo.cull_reasons:
+                        try:
+                            reasons = json.loads(photo.cull_reasons)
+                            for r in reasons:
+                                m = r.get("metric", "").lower()
+                                s = r.get("score")
+                                if s is not None:
+                                    metric_scores[m] = s
+                        except (json.JSONDecodeError, TypeError):
+                            pass
 
-                learner = get_learner()
-                learner.record_cull_feedback(
-                    file_name=file_name,
-                    auto_decision=old_status,
-                    user_decision=new_status,
-                    quality_score=photo.quality_score or 0.0,
-                    metric_scores=metric_scores,
-                    iso=photo.exif_iso,
-                    mean_brightness=128.0,
-                )
-        except Exception:
-            session.rollback()
-            logger.exception("Failed to update cull status for %s", file_name)
-        finally:
-            session.close()
+                    learner = get_learner()
+                    learner.record_cull_feedback(
+                        file_name=file_name,
+                        auto_decision=old_status,
+                        user_decision=new_status,
+                        quality_score=photo.quality_score or 0.0,
+                        metric_scores=metric_scores,
+                        iso=photo.exif_iso,
+                        mean_brightness=128.0,
+                    )
+            except Exception:
+                session.rollback()
+                logger.exception("Failed to update cull status for %s", file_name)
+            finally:
+                session.close()
+
+        threading.Thread(target=_persist, daemon=True).start()
 
     def _on_review_status_changed(photo_id: int, new_status: str) -> None:
         """Persist a keep/trash decision from the review grid."""
-        from imagic.ai.feedback_learner import get_learner
+        def _persist():
+            from imagic.ai.feedback_learner import get_learner
 
-        db = DatabaseManager.get()
-        session = db.get_session()
-        try:
-            photo = session.get(Photo, photo_id)
-            if photo:
-                old_status = photo.status
-                photo.status = new_status
-                session.commit()
-                logger.info("Review override: photo %d → %s", photo_id, new_status)
+            db = DatabaseManager.get()
+            session = db.get_session()
+            try:
+                photo = session.get(Photo, photo_id)
+                if photo:
+                    old_status = photo.status
+                    photo.status = new_status
+                    session.commit()
+                    logger.info("Review override: photo %d → %s", photo_id, new_status)
 
-                metric_scores = {}
-                if photo.cull_reasons:
-                    try:
-                        reasons = json.loads(photo.cull_reasons)
-                        for r in reasons:
-                            m = r.get("metric", "").lower()
-                            s = r.get("score")
-                            if s is not None:
-                                metric_scores[m] = s
-                    except (json.JSONDecodeError, TypeError):
-                        pass
+                    metric_scores = {}
+                    if photo.cull_reasons:
+                        try:
+                            reasons = json.loads(photo.cull_reasons)
+                            for r in reasons:
+                                m = r.get("metric", "").lower()
+                                s = r.get("score")
+                                if s is not None:
+                                    metric_scores[m] = s
+                        except (json.JSONDecodeError, TypeError):
+                            pass
 
-                learner = get_learner()
-                learner.record_cull_feedback(
-                    file_name=photo.file_name,
-                    auto_decision=old_status,
-                    user_decision=new_status,
-                    quality_score=photo.quality_score or 0.0,
-                    metric_scores=metric_scores,
-                    iso=photo.exif_iso,
-                    mean_brightness=128.0,
-                )
-        except Exception:
-            session.rollback()
-            logger.exception("Failed to update review status for photo %d", photo_id)
-        finally:
-            session.close()
+                    learner = get_learner()
+                    learner.record_cull_feedback(
+                        file_name=photo.file_name,
+                        auto_decision=old_status,
+                        user_decision=new_status,
+                        quality_score=photo.quality_score or 0.0,
+                        metric_scores=metric_scores,
+                        iso=photo.exif_iso,
+                        mean_brightness=128.0,
+                    )
+            except Exception:
+                session.rollback()
+                logger.exception("Failed to update review status for photo %d", photo_id)
+            finally:
+                session.close()
+
+        threading.Thread(target=_persist, daemon=True).start()
 
     # ------------------------------------------------------------------
     # Export gallery / image viewer handlers
@@ -1170,41 +1208,52 @@ def run_gui(args: argparse.Namespace) -> int:
             title="👋 Welcome to Imagic!",
             body="This quick tour will walk you through the five-step workflow. "
                  "You can restart it any time from <b>Help → Start Tutorial</b>.",
-            target_name="_step_buttons.0",
-            pointer=PointerSide.LEFT,
-            pointer_offset=0.3,
+            target_name="_browse_btn",
+            page_index=0,
+            pointer=PointerSide.BOTTOM,
+            pointer_offset=0.5,
+            allow_target_interaction=True,
         ),
         TutorialStep(
             title="Step 1 — Import",
-            body="Start here! Click <b>Browse</b> to select a folder of RAW or JPEG "
-                 "photos. Imagic will scan and catalogue every image.",
+            body="Once you've selected a folder, click <b>Import Photos</b> to "
+                 "scan and catalogue every RAW, JPEG, and TIFF image.",
             target_name="_import_btn",
-            pointer=PointerSide.BOTTOM,
+            page_index=0,
+            pointer=PointerSide.TOP,
             pointer_offset=0.5,
+            allow_target_interaction=True,
         ),
         TutorialStep(
             title="Step 2 — AI Analysis",
             body="The AI scores every photo for quality, sharpness, and exposure. "
                  "It auto-classifies them as <b>Keep</b>, <b>Review</b>, or <b>Trash</b>.",
             target_name="_analyse_btn",
-            pointer=PointerSide.BOTTOM,
+            page_index=1,
+            pointer=PointerSide.TOP,
             pointer_offset=0.5,
+            allow_target_interaction=True,
         ),
         TutorialStep(
             title="Re-Analyse for Stricter Results",
             body="Not happy? Press <b>Re-Analyse All</b> — each press makes the AI "
                  "pickier, raising the bar for \"keep\".",
             target_name="_reanalyse_btn",
-            pointer=PointerSide.BOTTOM,
+            page_index=1,
+            pointer=PointerSide.TOP,
             pointer_offset=0.5,
+            allow_target_interaction=True,
         ),
         TutorialStep(
             title="Step 3 — Review & Cull",
             body="Flip through photos and confirm the AI's suggestions. "
                  "Mark keepers with ✓ or trash with ✗. Fast and visual.",
             target_name="_review_grid",
+            page_index=2,
             pointer=PointerSide.LEFT,
             pointer_offset=0.3,
+            allow_target_interaction=True,
+            fill_highlight=False,
         ),
         TutorialStep(
             title="Step 4 — Edit",
@@ -1212,16 +1261,22 @@ def run_gui(args: argparse.Namespace) -> int:
                  "Adjust exposure, colour, sharpness and more — or let the AI "
                  "<b>Auto-Enhance</b> for you.",
             target_name="photo_editor",
+            page_index=3,
             pointer=PointerSide.LEFT,
             pointer_offset=0.3,
+            allow_target_interaction=True,
+            fill_highlight=False,
         ),
         TutorialStep(
             title="Step 5 — Export",
             body="When you're done, export all kept photos as high-quality JPEGs "
                  "ready to share. That's it — enjoy!",
             target_name="export_gallery",
+            page_index=4,
             pointer=PointerSide.LEFT,
             pointer_offset=0.3,
+            allow_target_interaction=True,
+            fill_highlight=False,
         ),
     ]
 
@@ -1235,10 +1290,16 @@ def run_gui(args: argparse.Namespace) -> int:
         window.go_to_step(0)
         _tutorial_overlay = TutorialOverlay(
             _tutorial_steps,
-            host=window.centralWidget(),
+            host=window,
             target_root=window,
         )
-        _tutorial_overlay.finished.connect(lambda: window.status_bar.set_status("Tutorial finished — happy editing!"))
+        def _on_tutorial_finished():
+            window.status_bar.set_status("Tutorial finished — happy editing!")
+            current_ver = app.settings.get_nested("ui", "tutorial_version", default=1)
+            app.settings.update("ui", "last_seen_tutorial_version", current_ver)
+            app.settings.save()
+
+        _tutorial_overlay.finished.connect(_on_tutorial_finished)
         _tutorial_overlay.start()
 
     window.tutorial_requested.connect(_on_start_tutorial)
@@ -1254,6 +1315,13 @@ def run_gui(args: argparse.Namespace) -> int:
     window.show()
     _refresh_library()   # initial load
     _refresh_exports()   # populate export gallery
+
+    # Auto-launch tutorial on first run or after a feature update
+    _current_tutorial_ver = app.settings.get_nested("ui", "tutorial_version", default=1)
+    _seen_tutorial_ver = app.settings.get_nested("ui", "last_seen_tutorial_version", default=0)
+    if _seen_tutorial_ver < _current_tutorial_ver:
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(600, _on_start_tutorial)
 
     exit_code = qt_app.exec()
     app.shutdown()

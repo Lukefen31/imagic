@@ -42,6 +42,12 @@ _VARIANT_CONFIG = {
         "default_name": "imagic-desktop-recommended-rawtherapee-setup.exe",
         "label": "Recommended Windows installer + RawTherapee bundle",
     },
+    "macos": {
+        "path_env": "IMAGIC_DESKTOP_MACOS_PATH",
+        "url_env": "IMAGIC_DESKTOP_MACOS_URL",
+        "default_name": "imagic-desktop.dmg",
+        "label": "macOS installer (includes RawTherapee)",
+    },
 }
 
 
@@ -89,6 +95,7 @@ def send_desktop_purchase_email(
     standard_download_link: str,
     bundle_download_link: str | None,
     order_status_link: str,
+    macos_download_link: str | None = None,
 ) -> None:
     if not email_configured():
         raise RuntimeError("Desktop purchase email is not configured.")
@@ -108,6 +115,8 @@ def send_desktop_purchase_email(
     ]
     if bundle_download_link:
         plain_lines.append(f"- Recommended installer + RawTherapee bundle: {bundle_download_link}")
+    if macos_download_link:
+        plain_lines.append(f"- macOS installer (includes RawTherapee): {macos_download_link}")
     plain_lines.extend(
         [
             "",
@@ -125,6 +134,13 @@ def send_desktop_purchase_email(
             f"<a href=\"{bundle_download_link}\">Download the bundle</a></p>"
         )
 
+    macos_block = ""
+    if macos_download_link:
+        macos_block = (
+            f"<p><strong>macOS installer (includes RawTherapee):</strong> "
+            f"<a href=\"{macos_download_link}\">Download for macOS</a></p>"
+        )
+
     message.add_alternative(
         f"""
         <html>
@@ -134,6 +150,7 @@ def send_desktop_purchase_email(
             <p><strong>Product key:</strong> {license_key}</p>
             <p><strong>Standard installer:</strong> <a href="{standard_download_link}">Download imagic Desktop</a></p>
             {bundle_block}
+            {macos_block}
             <p><strong>Order page:</strong> <a href="{order_status_link}">{order_status_link}</a></p>
                         <p>After install, imagic asks for your product key once and stores the activation on that device. If you keep the recommended RawTherapee bundle selected, the RAW pipeline is ready immediately with no manual CLI setup. If you move the same key to another device later, the older activation becomes invalid automatically.</p>
           </body>

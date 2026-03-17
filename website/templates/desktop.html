@@ -150,7 +150,7 @@
             <label class="desktop-email-label" for="desktop-email">Delivery email</label>
             <input id="desktop-email" class="desktop-email-input" type="email" value="{{ prefill_email }}" placeholder="you@example.com" autocomplete="email">
             <button id="desktop-buy-btn" class="btn btn-primary btn-lg desktop-buy-btn" onclick="startDesktopCheckout()">Buy Desktop License</button>
-            <p class="desktop-checkout-note" id="desktop-checkout-note">Includes the standard installer{% if desktop_bundle_available %} and the highly recommended RawTherapee bundle{% endif %}.</p>
+            <p class="desktop-checkout-note" id="desktop-checkout-note">Includes the standard installer{% if desktop_bundle_available %}, the highly recommended RawTherapee bundle{% endif %}{% if macos_available %}, and a macOS installer{% endif %}.</p>
             <div class="desktop-mini-facts">
                 <div><strong>Activation:</strong> enter your product key once in the app.</div>
                 <div><strong>Transfer:</strong> activating on a new device revokes the old device automatically.</div>

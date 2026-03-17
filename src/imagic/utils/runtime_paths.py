@@ -18,6 +18,17 @@ def install_root() -> Path:
     return _source_root()
 
 
+def _app_bundle_root() -> Path | None:
+    """If running inside a macOS .app bundle, return the .app root."""
+    if platform.system() != "Darwin" or not getattr(sys, "frozen", False):
+        return None
+    exe = Path(sys.executable).resolve()
+    # Typical path: imagic.app/Contents/MacOS/imagic
+    if exe.parent.name == "MacOS" and exe.parents[1].name == "Contents":
+        return exe.parents[2]
+    return None
+
+
 def resource_root() -> Path:
     """Return the root directory used for packaged data files."""
     meipass = getattr(sys, "_MEIPASS", None)
@@ -29,7 +40,12 @@ def resource_root() -> Path:
 def resolve_resource(*parts: str) -> Path:
     """Resolve a resource path in both source and frozen builds."""
     relative = Path(*parts)
-    for base in (resource_root(), install_root(), _source_root()):
+    bundle = _app_bundle_root()
+    candidates = [resource_root(), install_root()]
+    if bundle:
+        candidates.insert(0, bundle / "Contents" / "Resources")
+    candidates.append(_source_root())
+    for base in candidates:
         candidate = base / relative
         if candidate.exists():
             return candidate
@@ -73,7 +89,11 @@ def find_bundled_rawtherapee_cli() -> Path | None:
     """
     patterns = _rawtherapee_candidate_patterns()
     seen: set[Path] = set()
-    for base in (install_root(), resource_root()):
+    search_bases = [install_root(), resource_root()]
+    bundle = _app_bundle_root()
+    if bundle:
+        search_bases.insert(0, bundle / "Contents" / "Resources")
+    for base in search_bases:
         for pattern in patterns:
             for candidate in base.glob(pattern):
                 resolved = candidate.resolve()

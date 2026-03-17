@@ -97,13 +97,24 @@ function renderDesktopOrderStatus(data) {
         return;
     }
 
-    const bundleBlock = data.bundle_download_url
-        ? `<a class="btn btn-secondary btn-lg" href="${data.bundle_download_url}">Download recommended installer + RawTherapee</a>`
+    const isMac = /Mac|Macintosh/i.test(navigator.userAgent || '');
+
+    const winStandard = data.download_url
+        ? `<a class="btn ${isMac ? 'btn-secondary' : 'btn-primary'} btn-lg" href="${data.download_url}"><i class="fa-brands fa-windows"></i> Download for Windows</a>`
+        : '';
+    const winBundle = data.bundle_download_url
+        ? `<a class="btn ${isMac ? 'btn-secondary' : 'btn-secondary'} btn-lg" href="${data.bundle_download_url}"><i class="fa-brands fa-windows"></i> Windows + RawTherapee</a>`
+        : '';
+    const macBtn = data.macos_download_url
+        ? `<a class="btn ${isMac ? 'btn-primary' : 'btn-secondary'} btn-lg" href="${data.macos_download_url}"><i class="fa-brands fa-apple"></i> Download for macOS</a>`
         : '';
 
     const emailLine = data.email_sent
         ? `<p>We also emailed the same links to <strong>${data.delivery_email}</strong>.</p>`
         : `<p>Email delivery is still pending${data.email_error ? `: ${data.email_error}` : '.'}</p>`;
+
+    // Put the platform-matching button first
+    const buttons = isMac ? [macBtn, winStandard, winBundle] : [winStandard, winBundle, macBtn];
 
     root.innerHTML = `
         <div class="desktop-order-ready">
@@ -111,8 +122,7 @@ function renderDesktopOrderStatus(data) {
             <div class="desktop-license-key">${data.license_key}</div>
             ${emailLine}
             <div class="desktop-download-actions">
-                <a class="btn btn-primary btn-lg" href="${data.download_url}">Download installer</a>
-                ${bundleBlock}
+                ${buttons.filter(Boolean).join('\n                ')}
             </div>
         </div>`;
 }

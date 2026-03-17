@@ -6,12 +6,24 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
 
+IS_MACOS = platform.system() == "Darwin"
+IS_WINDOWS = platform.system() == "Windows"
+
 project_root = Path(SPECPATH).parents[1]
 entry_script = project_root / "launch_imagic.pyw"
-icon_path = project_root / "packaging" / "windows" / "branding" / "imagic-app-icon.ico"
+
+# --- Icon selection ---
 icon_arg = None
-if platform.system() == "Windows" and icon_path.is_file():
-    icon_arg = str(icon_path)
+if IS_WINDOWS:
+    win_icon = project_root / "packaging" / "windows" / "branding" / "imagic-app-icon.ico"
+    if win_icon.is_file():
+        icon_arg = str(win_icon)
+
+mac_icns = None
+if IS_MACOS:
+    icns_path = project_root / "packaging" / "macos" / "branding" / "imagic.icns"
+    if icns_path.is_file():
+        mac_icns = str(icns_path)
 
 datas = [
     (str(project_root / "assets"), "assets"),
@@ -63,3 +75,21 @@ coll = COLLECT(
     upx_exclude=[],
     name="imagic",
 )
+
+# --- macOS: wrap in a proper .app bundle ---
+if IS_MACOS:
+    app = BUNDLE(
+        coll,
+        name="imagic.app",
+        icon=mac_icns,
+        bundle_identifier="com.imagic.desktop",
+        info_plist={
+            "CFBundleDisplayName": "imagic",
+            "CFBundleName": "imagic",
+            "CFBundleShortVersionString": "0.1.0",
+            "CFBundleVersion": "0.1.0",
+            "NSHighResolutionCapable": True,
+            "NSRequiresAquaSystemAppearance": False,
+            "LSMinimumSystemVersion": "12.0",
+        },
+    )

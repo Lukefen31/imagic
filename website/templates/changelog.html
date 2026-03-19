@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Changelog - imagic | Version History &amp; Release Notes</title>
+    <meta name="description" content="See what's new in imagic. Full version history, release notes, and upcoming features for the AI photo culling and editing software.">
+    <link rel="canonical" href="https://imagic.ink/changelog">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://imagic.ink/changelog">
+    <meta property="og:title" content="Changelog - imagic">
+    <meta property="og:description" content="Full version history and release notes for imagic.">
+    <meta property="og:site_name" content="imagic">
+
+    <link rel="icon" type="image/svg+xml" href="/static/img/imagic-app-icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <style>
+        .changelog-hero {
+            padding: 80px 0 48px;
+            background: var(--bg-secondary);
+            text-align: center;
+        }
+        .changelog-hero h1 { font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 16px; }
+        .changelog-hero p { color: var(--text-muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto; }
+
+        .changelog-timeline {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        .changelog-entry {
+            position: relative;
+            padding: 0 0 48px 40px;
+            border-left: 2px solid var(--border-color);
+        }
+        .changelog-entry:last-child { padding-bottom: 0; }
+        .changelog-entry::before {
+            content: '';
+            position: absolute;
+            left: -7px;
+            top: 4px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        .changelog-version {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .changelog-version h2 {
+            font-size: 1.35rem;
+            margin: 0;
+        }
+        .changelog-version .changelog-date {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .changelog-tag {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 6px;
+            margin-bottom: 6px;
+        }
+        .tag-new { background: rgba(34,197,94,0.12); color: #22c55e; }
+        .tag-improved { background: rgba(99,102,241,0.12); color: var(--accent); }
+        .tag-fixed { background: rgba(251,191,36,0.12); color: #fbbf24; }
+
+        .changelog-entry ul { padding-left: 18px; margin: 8px 0 0; }
+        .changelog-entry li {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar" id="navbar">
+    <div class="container">
+        <a href="/" class="navbar-brand navbar-brand-wide">
+            <img src="/static/img/imagic-wide-white.svg" alt="imagic" class="brand-logo-wide">
+        </a>
+        <ul class="navbar-links" id="nav-links">
+            <li><a href="/#why-switch">Why Switch</a></li>
+            <li><a href="/#showcase">How It Works</a></li>
+            <li><a href="/#pricing">Pricing</a></li>
+            <li><a href="/blog">Blog</a></li>
+            <li><a href="/docs">Docs</a></li>
+        </ul>
+        <div class="navbar-actions">
+            <a href="/desktop" class="btn btn-primary btn-sm">Download Desktop</a>
+            <button class="hamburger" id="hamburger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+</nav>
+
+<div class="changelog-hero">
+    <div class="container">
+        <h1><i class="fa-solid fa-clock-rotate-left"></i> <span class="gradient-text">Changelog</span></h1>
+        <p>Everything that's shipped. Follow along as imagic evolves.</p>
+    </div>
+</div>
+
+<section class="section">
+    <div class="container">
+        <div class="changelog-timeline">
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
+                    <h2>v0.1.0</h2>
+                    <span class="changelog-date">March 2026</span>
+                </div>
+                <span class="changelog-tag tag-new">New</span>
+                <ul>
+                    <li>Initial public release of imagic Desktop for Windows and macOS</li>
+                    <li>AI quality scoring across 5 metrics: sharpness, exposure, noise, composition, detail</li>
+                    <li>Burst &amp; duplicate detection with perceptual hashing</li>
+                    <li>Full editing suite: histogram, exposure, colour grading, sharpening, noise reduction</li>
+                    <li>6 editing style presets with live preview thumbnails</li>
+                    <li>30+ cinematic colour grades (LUT-based)</li>
+                    <li>Batch export with multi-threaded processing</li>
+                    <li>Crash-resilient export pipeline with auto-resume</li>
+                    <li>RawTherapee integration for true RAW demosaicing</li>
+                    <li>Scene-aware profile auto-selection (portrait, landscape, low-light, high-contrast)</li>
+                    <li>PP3 profile generation for RawTherapee</li>
+                    <li>Feedback learning AI that adapts to your keep/trash decisions</li>
+                    <li>CLI &amp; headless mode for automation</li>
+                    <li>License activation system with offline use after first activation</li>
+                    <li>9+ RAW format support: CR2, CR3, NEF, ARW, RAF, ORF, RW2, DNG, PEF</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
+                    <h2>What's next</h2>
+                    <span class="changelog-date">Upcoming</span>
+                </div>
+                <span class="changelog-tag tag-improved">Planned</span>
+                <ul>
+                    <li>Linux desktop builds</li>
+                    <li>Browser-based version (coming later in 2026)</li>
+                    <li>Smart auto-crop with confidence scoring</li>
+                    <li>Face detection and portrait-aware culling</li>
+                    <li>Plugin system for custom export pipelines</li>
+                    <li>Improved feedback learning with per-category style models</li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="container">
+        <div class="footer-bottom" style="padding-top:0; border-top:none;">
+            <span>&copy; 2026 imagic. Built by Photographers For Photographers.</span>
+            <span><a href="/">← Back to homepage</a></span>
+        </div>
+    </div>
+</footer>
+
+<script>
+document.getElementById('hamburger')?.addEventListener('click', () => {
+    document.getElementById('nav-links')?.classList.toggle('active');
+});
+</script>
+
+</body>
+</html>

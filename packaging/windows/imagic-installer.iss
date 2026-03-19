@@ -38,6 +38,7 @@ PrivilegesRequired=admin
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\imagic.exe
 SetupIconFile=..\..\packaging\windows\branding\imagic-app-icon.ico
+LicenseFile=..\..\packaging\EULA.txt
 
 [Types]
 #if IncludeRawTherapee == "1"

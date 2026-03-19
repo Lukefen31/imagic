@@ -98,7 +98,15 @@ function renderDesktopOrderStatus(data) {
     }
 
     const bundleBlock = data.bundle_download_url
-        ? `<a class="btn btn-secondary btn-lg" href="${data.bundle_download_url}">Download recommended installer + RawTherapee</a>`
+        ? `<a class="btn btn-secondary btn-lg" href="${data.bundle_download_url}"><i class="fa-brands fa-windows"></i> Download Windows installer + RawTherapee bundle</a>`
+        : '';
+
+    const macosBlock = data.macos_download_url
+        ? `<a class="btn btn-primary btn-lg" href="${data.macos_download_url}"><i class="fa-brands fa-apple"></i> Download macOS installer</a>`
+        : '';
+
+    const macosBundleBlock = data.macos_bundle_download_url
+        ? `<a class="btn btn-secondary btn-lg" href="${data.macos_bundle_download_url}"><i class="fa-brands fa-apple"></i> Download macOS installer + RawTherapee bundle</a>`
         : '';
 
     const emailLine = data.email_sent
@@ -111,8 +119,10 @@ function renderDesktopOrderStatus(data) {
             <div class="desktop-license-key">${data.license_key}</div>
             ${emailLine}
             <div class="desktop-download-actions">
-                <a class="btn btn-primary btn-lg" href="${data.download_url}">Download installer</a>
+                <a class="btn btn-primary btn-lg" href="${data.download_url}"><i class="fa-brands fa-windows"></i> Download Windows installer</a>
                 ${bundleBlock}
+                ${macosBlock}
+                ${macosBundleBlock}
             </div>
         </div>`;
 }

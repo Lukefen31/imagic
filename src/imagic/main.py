@@ -14,36 +14,10 @@ import argparse
 import json
 import logging
 import sys
-import threading
 from pathlib import Path
 from typing import List, Optional
 
-from imagic.utils.runtime_paths import resolve_resource
-
 logger = logging.getLogger(__name__)
-
-
-def _resolve_desktop_icon_path() -> Path | None:
-    assets = resolve_resource("assets")
-    # Prefer .ico on Windows for proper taskbar / search icon rendering
-    if sys.platform == "win32":
-        ico = assets / "imagic.ico"
-        if ico.is_file():
-            return ico
-    svg = assets / "imagic-icon.svg"
-    if not svg.is_file():
-        svg = assets / "icons" / "imagic-app-icon.svg"
-    return svg if svg.is_file() else None
-
-
-def _set_windows_app_id() -> None:
-    """Set the Windows AppUserModelID so the taskbar groups windows
-    under the Imagic icon instead of a generic Python icon."""
-    if sys.platform == "win32":
-        import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "imagic.desktop.app"
-        )
 
 
 def _ensure_desktop_activation(qt_app, app_controller) -> bool:
@@ -100,6 +74,36 @@ def _ensure_desktop_activation(qt_app, app_controller) -> bool:
         return True
 
     return False
+
+
+def _check_for_updates_async(app_controller) -> None:
+    """Fire-and-forget update check in a background thread."""
+    import threading
+
+    from imagic import __version__
+    from imagic.services.license_client import DesktopLicenseClient
+
+    base_url = str(
+        app_controller.settings.get_nested("security", "license_api_base_url", default="")
+    ).strip()
+    if not base_url:
+        return
+
+    def _check():
+        try:
+            client = DesktopLicenseClient(base_url, timeout_s=5.0)
+            result = client.check_for_update(__version__)
+            if result:
+                app_controller._pending_update = result
+                logger.info(
+                    "Update available: %s (current: %s)",
+                    result.get("latest_version"),
+                    __version__,
+                )
+        except Exception:
+            pass
+
+    threading.Thread(target=_check, daemon=True).start()
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -168,8 +172,8 @@ def run_headless(args: argparse.Namespace) -> int:
     lib_ctrl = LibraryController(task_queue=app.task_queue)
     ai_ctrl = AIController(
         task_queue=app.task_queue,
-        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.50)),
-        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.35)),
+        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.8)),
+        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.3)),
         duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=10)),
     )
     proc_ctrl = ProcessingController(
@@ -208,7 +212,6 @@ def run_gui(args: argparse.Namespace) -> int:
         Exit code from the Qt event loop.
     """
     from PyQt6.QtCore import QTimer
-    from PyQt6.QtGui import QIcon
     from PyQt6.QtWidgets import QApplication, QMessageBox
 
     from imagic.controllers.app_controller import AppController
@@ -223,26 +226,16 @@ def run_gui(args: argparse.Namespace) -> int:
     from imagic.views.main_window import MainWindow
     from imagic.views.photo_editor import PhotoEditorWidget
     from imagic.views.style_chooser import StyleChooserDialog
-    from imagic.views.widgets.ai_loading_modal import AILoadingModal
-    from imagic.views.widgets.speech_bubble import (
-        SpeechBubble,
-        PointerSide,
-        TutorialOverlay,
-        TutorialStep,
-    )
 
-    _set_windows_app_id()
     qt_app = QApplication(sys.argv)
     qt_app.setApplicationName("Imagic")
-    icon_path = _resolve_desktop_icon_path()
-    if icon_path is not None:
-        qt_app.setWindowIcon(QIcon(str(icon_path)))
 
     # Bootstrap
     app = AppController(config_path=args.config)
     if not _ensure_desktop_activation(qt_app, app):
         app.shutdown()
         return 1
+    _check_for_updates_async(app)
     app.resume_pending_work()
 
     lib_ctrl = LibraryController(
@@ -251,8 +244,8 @@ def run_gui(args: argparse.Namespace) -> int:
     )
     ai_ctrl = AIController(
         task_queue=app.task_queue,
-        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.50)),
-        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.35)),
+        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.8)),
+        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.3)),
         duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=10)),
     )
     proc_ctrl = ProcessingController(
@@ -262,15 +255,6 @@ def run_gui(args: argparse.Namespace) -> int:
 
     # Create main window
     window = MainWindow()
-    if icon_path is not None:
-        window.setWindowIcon(QIcon(str(icon_path)))
-
-    # AI loading overlay on the main window
-    _main_ai_modal = AILoadingModal(parent=window)
-
-    # Speech bubble for post-analysis tips
-    _tip_bubble = SpeechBubble(parent=window.centralWidget())
-    _first_analysis_done = False  # only show the tip once per session
 
     # ------------------------------------------------------------------
     # Wire signals → controllers
@@ -280,86 +264,13 @@ def run_gui(args: argparse.Namespace) -> int:
         window.status_bar.set_status(f"Scanning {directory}…")
         window.set_sidebar_status(f"Scanning…")
 
-    _analyse_poll_timer: Optional[QTimer] = None  # type: ignore[assignment]
-    _analyse_task = None
-    _reanalyse_count = 0  # tracks how many times re-analyse has been pressed
-
     def _on_analyse() -> None:
-        nonlocal _analyse_poll_timer, _analyse_task
-        _analyse_task = ai_ctrl.analyse_pending()
+        ai_ctrl.analyse_pending()
         window.status_bar.set_status("AI analysis started…")
         window.set_sidebar_status("Analysing…")
         window.set_step_status(1, "AI analysis in progress…")
-        _main_ai_modal.show_message("AI Analysis", "Scoring and classifying photos…")
-
-        if _analyse_poll_timer is None:
-            _analyse_poll_timer = QTimer()
-            _analyse_poll_timer.setInterval(300)
-            _analyse_poll_timer.timeout.connect(_on_analyse_poll)
-        _analyse_poll_timer.start()
-
-    def _on_analyse_poll() -> None:
-        nonlocal _analyse_poll_timer, _analyse_task
-        if _analyse_task is None or _analyse_task.future is None:
-            if _analyse_poll_timer:
-                _analyse_poll_timer.stop()
-            _main_ai_modal.hide_modal()
-            return
-        if not _analyse_task.future.done():
-            return  # still running
-        _analyse_poll_timer.stop()
-        _main_ai_modal.hide_modal()
-        result = _analyse_task.result
-        _analyse_task = None
-        # Update status bar with results
-        if isinstance(result, dict):
-            kept = result.get("keep", 0)
-            trashed = result.get("trash", 0)
-            errors = result.get("errors", 0)
-            total = result.get("analysed", 0)
-            strict_note = ""
-            if _reanalyse_count > 0:
-                strict_note = f" (strictness level {_reanalyse_count})"
-            window.status_bar.set_status(
-                f"Analysis complete — {total} photos: {kept} kept, {trashed} trashed, {errors} errors{strict_note}"
-            )
-            window.set_step_status(1, f"Done — {total} analysed")
-        else:
-            window.status_bar.set_status("AI analysis complete.")
-        window.set_sidebar_status("")
-        _refresh_library()
-
-        # Show tip bubble after first analysis completes
-        nonlocal _first_analysis_done
-        if not _first_analysis_done and _reanalyse_count == 0:
-            _first_analysis_done = True
-            # Delay slightly so the UI settles before positioning the bubble
-            QTimer.singleShot(600, _show_reanalyse_tip)
-
-    def _show_reanalyse_tip() -> None:
-        """Show a speech bubble near the Re-Analyse button."""
-        if not hasattr(window, '_reanalyse_btn') or not window._reanalyse_btn.isVisible():
-            return
-        _tip_bubble.show_at(
-            window._reanalyse_btn,
-            title="💡 Not happy with the results?",
-            body="Press <b>Re-Analyse All</b> to run the AI again with stricter thresholds. "
-                 "Each press makes it pickier!",
-            pointer=PointerSide.TOP,
-            pointer_offset=0.5,
-            button_text="Got it!",
-            auto_hide_ms=12000,
-        )
-
     def _on_reanalyse_all() -> None:
-        """Reset all photos to PENDING and re-run AI analysis.
-
-        Each subsequent press increases strictness — the AI becomes
-        pickier about which photos to keep.
-        """
-        nonlocal _analyse_poll_timer, _analyse_task, _reanalyse_count
-        _reanalyse_count += 1
-        strictness = _reanalyse_count * 0.05  # +5% per re-run
+        """Reset all photos to PENDING and re-run AI analysis."""
         db = DatabaseManager.get()
         session = db.get_session()
         try:
@@ -375,28 +286,17 @@ def run_gui(args: argparse.Namespace) -> int:
                 )
             )
             session.commit()
-            logger.info("Reset %d photos to PENDING for re-analysis (strictness=%.2f)", count, strictness)
+            logger.info("Reset %d photos to PENDING for re-analysis", count)
         except Exception:
             session.rollback()
             logger.exception("Failed to reset photo statuses")
         finally:
             session.close()
 
-        _analyse_task = ai_ctrl.analyse_pending(strictness=strictness)
-        strict_pct = int(strictness * 100)
+        ai_ctrl.analyse_pending()
         window.status_bar.set_status(
-            f"Re-analysing {count} photos (strictness +{strict_pct}%)\u2026"
+            f"Re-analysing {count} photos with updated scorer\u2026"
         )
-        level_label = f"Stricter (level {_reanalyse_count})" if _reanalyse_count > 0 else "Re-Analysing"
-        _main_ai_modal.show_message(
-            f"Re-Analysing All — {level_label}",
-            f"Scoring {count} photos with tighter thresholds\u2026",
-        )
-        if _analyse_poll_timer is None:
-            _analyse_poll_timer = QTimer()
-            _analyse_poll_timer.setInterval(300)
-            _analyse_poll_timer.timeout.connect(_on_analyse_poll)
-        _analyse_poll_timer.start()
     def _on_export() -> None:
         proc_ctrl.export_all_kept()
         window.status_bar.set_status("Batch export started…")
@@ -411,7 +311,6 @@ def run_gui(args: argparse.Namespace) -> int:
 
         window.status_bar.set_status("Scanning for duplicates…")
         _dup_task = ai_ctrl.detect_duplicates()
-        _main_ai_modal.show_message("Duplicate Detection", "Computing perceptual hashes…")
 
         # Poll every 200ms until the task completes
         if _dup_poll_timer is None:
@@ -428,14 +327,12 @@ def run_gui(args: argparse.Namespace) -> int:
         if _dup_task is None or _dup_task.future is None:
             if _dup_poll_timer:
                 _dup_poll_timer.stop()
-            _main_ai_modal.hide_modal()
             return
 
         if not _dup_task.future.done():
             return  # still running, check again next tick
 
         _dup_poll_timer.stop()
-        _main_ai_modal.hide_modal()
         result = _dup_task.result
         _dup_task = None
 
@@ -557,7 +454,7 @@ def run_gui(args: argparse.Namespace) -> int:
         db = DatabaseManager.get()
         session = db.get_session()
         try:
-            photos = session.query(Photo).order_by(Photo.created_at.desc()).all()
+            photos = session.query(Photo).order_by(Photo.created_at.desc()).limit(500).all()
             data = [
                 {
                     "id": p.id,
@@ -658,7 +555,6 @@ def run_gui(args: argparse.Namespace) -> int:
         def _apply_style(preset: str) -> None:
             s2 = db.get_session()
             updated = 0
-            skipped = 0
             try:
                 targets = (
                     s2.query(Photo)
@@ -673,11 +569,6 @@ def run_gui(args: argparse.Namespace) -> int:
                         overrides = json.loads(raw) if raw else {}
                     except (json.JSONDecodeError, TypeError):
                         overrides = {}
-
-                    # Skip photos that were manually edited in the editor
-                    if overrides.get("_editor_touched"):
-                        skipped += 1
-                        continue
 
                     if preset in LEGACY_STYLE_PRESETS:
                         photo.scene_preset = preset
@@ -700,10 +591,9 @@ def run_gui(args: argparse.Namespace) -> int:
 
             app.export_service.set_forced_preset(None)
             _refresh_library()
-            msg = f"Applied '{preset}' to {updated} photos."
-            if skipped:
-                msg += f" Skipped {skipped} with manual edits."
-            window.status_bar.set_status(msg)
+            window.status_bar.set_status(
+                f"Applied '{preset}' to {updated} photos. Editor and export will use the same edit stack."
+            )
 
         dialog.style_chosen.connect(_apply_style)
         dialog.exec()
@@ -719,11 +609,8 @@ def run_gui(args: argparse.Namespace) -> int:
             photos = (
                 session.query(Photo)
                 .filter(Photo.quality_score.isnot(None))
-                .filter(Photo.status.notin_([
-                    PhotoStatus.PENDING.value,
-                    PhotoStatus.ANALYZING.value,
-                ]))
                 .order_by(Photo.quality_score.asc())
+                .limit(600)
                 .all()
             )
             data = [
@@ -748,102 +635,96 @@ def run_gui(args: argparse.Namespace) -> int:
             )
             return
 
-        keep_t = float(app.settings.get_nested("ai", "keep_threshold", default=0.50))
-        trash_t = float(app.settings.get_nested("ai", "trash_threshold", default=0.35))
+        keep_t = float(app.settings.get_nested("ai", "keep_threshold", default=0.55))
+        trash_t = float(app.settings.get_nested("ai", "trash_threshold", default=0.40))
         dialog = CullingPreviewDialog(data, keep_t, trash_t, window)
         dialog.status_changed.connect(_on_culling_status_changed)
         dialog.exec()
 
     def _on_culling_status_changed(file_name: str, new_status: str) -> None:
         """Persist a manual cull-status override and record feedback."""
-        def _persist():
-            from imagic.ai.feedback_learner import get_learner
+        from imagic.ai.feedback_learner import get_learner
 
-            db = DatabaseManager.get()
-            session = db.get_session()
-            try:
-                photo = session.query(Photo).filter(Photo.file_name == file_name).first()
-                if photo:
-                    old_status = photo.status
-                    photo.status = new_status
-                    session.commit()
-                    logger.info("Manual cull override: %s → %s", file_name, new_status)
+        db = DatabaseManager.get()
+        session = db.get_session()
+        try:
+            photo = session.query(Photo).filter(Photo.file_name == file_name).first()
+            if photo:
+                old_status = photo.status
+                photo.status = new_status
+                session.commit()
+                logger.info("Manual cull override: %s → %s", file_name, new_status)
 
-                    # Record feedback for the learner
-                    metric_scores = {}
-                    if photo.cull_reasons:
-                        try:
-                            reasons = json.loads(photo.cull_reasons)
-                            for r in reasons:
-                                m = r.get("metric", "").lower()
-                                s = r.get("score")
-                                if s is not None:
-                                    metric_scores[m] = s
-                        except (json.JSONDecodeError, TypeError):
-                            pass
+                # Record feedback for the learner
+                metric_scores = {}
+                if photo.cull_reasons:
+                    try:
+                        reasons = json.loads(photo.cull_reasons)
+                        for r in reasons:
+                            m = r.get("metric", "").lower()
+                            s = r.get("score")
+                            if s is not None:
+                                metric_scores[m] = s
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
-                    learner = get_learner()
-                    learner.record_cull_feedback(
-                        file_name=file_name,
-                        auto_decision=old_status,
-                        user_decision=new_status,
-                        quality_score=photo.quality_score or 0.0,
-                        metric_scores=metric_scores,
-                        iso=photo.exif_iso,
-                        mean_brightness=128.0,
-                    )
-            except Exception:
-                session.rollback()
-                logger.exception("Failed to update cull status for %s", file_name)
-            finally:
-                session.close()
-
-        threading.Thread(target=_persist, daemon=True).start()
+                learner = get_learner()
+                learner.record_cull_feedback(
+                    file_name=file_name,
+                    auto_decision=old_status,
+                    user_decision=new_status,
+                    quality_score=photo.quality_score or 0.0,
+                    metric_scores=metric_scores,
+                    iso=photo.exif_iso,
+                    mean_brightness=128.0,
+                )
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to update cull status for %s", file_name)
+        finally:
+            session.close()
 
     def _on_review_status_changed(photo_id: int, new_status: str) -> None:
         """Persist a keep/trash decision from the review grid."""
-        def _persist():
-            from imagic.ai.feedback_learner import get_learner
+        from imagic.ai.feedback_learner import get_learner
 
-            db = DatabaseManager.get()
-            session = db.get_session()
-            try:
-                photo = session.get(Photo, photo_id)
-                if photo:
-                    old_status = photo.status
-                    photo.status = new_status
-                    session.commit()
-                    logger.info("Review override: photo %d → %s", photo_id, new_status)
+        db = DatabaseManager.get()
+        session = db.get_session()
+        try:
+            photo = session.get(Photo, photo_id)
+            if photo:
+                old_status = photo.status
+                photo.status = new_status
+                session.commit()
+                logger.info("Review override: photo %d → %s", photo_id, new_status)
 
-                    metric_scores = {}
-                    if photo.cull_reasons:
-                        try:
-                            reasons = json.loads(photo.cull_reasons)
-                            for r in reasons:
-                                m = r.get("metric", "").lower()
-                                s = r.get("score")
-                                if s is not None:
-                                    metric_scores[m] = s
-                        except (json.JSONDecodeError, TypeError):
-                            pass
+                metric_scores = {}
+                if photo.cull_reasons:
+                    try:
+                        reasons = json.loads(photo.cull_reasons)
+                        for r in reasons:
+                            m = r.get("metric", "").lower()
+                            s = r.get("score")
+                            if s is not None:
+                                metric_scores[m] = s
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
-                    learner = get_learner()
-                    learner.record_cull_feedback(
-                        file_name=photo.file_name,
-                        auto_decision=old_status,
-                        user_decision=new_status,
-                        quality_score=photo.quality_score or 0.0,
-                        metric_scores=metric_scores,
-                        iso=photo.exif_iso,
-                        mean_brightness=128.0,
-                    )
-            except Exception:
-                session.rollback()
-                logger.exception("Failed to update review status for photo %d", photo_id)
-            finally:
-                session.close()
-
-        threading.Thread(target=_persist, daemon=True).start()
+                learner = get_learner()
+                learner.record_cull_feedback(
+                    file_name=photo.file_name,
+                    auto_decision=old_status,
+                    user_decision=new_status,
+                    quality_score=photo.quality_score or 0.0,
+                    metric_scores=metric_scores,
+                    iso=photo.exif_iso,
+                    mean_brightness=128.0,
+                )
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to update review status for photo %d", photo_id)
+        finally:
+            session.close()
 
     # ------------------------------------------------------------------
     # Export gallery / image viewer handlers
@@ -865,18 +746,15 @@ def run_gui(args: argparse.Namespace) -> int:
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        count = 0
         db = DatabaseManager.get()
         session = db.get_session()
         try:
-            count = session.query(Photo).delete(synchronize_session=False)
+            count = session.query(Photo).delete()
             session.commit()
             logger.info("Cleared library: %d photos removed", count)
         except Exception:
             session.rollback()
             logger.exception("Failed to clear library")
-            window.status_bar.set_status("Error: failed to clear library")
-            return
         finally:
             session.close()
 
@@ -884,14 +762,14 @@ def run_gui(args: argparse.Namespace) -> int:
         _last_export_fingerprint.clear()
         window.library_view.clear()
         window.export_gallery.clear()
-        window.set_review_photos([])
         _refresh_library()
         _refresh_exports()
         window.status_bar.set_status(f"Library cleared ({count} photos removed)")
 
     def _on_open_export_folder() -> None:
         """Open the export output directory in the system file manager."""
-        from imagic.utils.path_utils import open_file_manager
+        import os
+        import subprocess
 
         export_dir = Path(
             app.settings.get_nested("processing", "output_directory", default="exports")
@@ -899,7 +777,7 @@ def run_gui(args: argparse.Namespace) -> int:
         if not export_dir.is_absolute():
             export_dir = Path.home() / ".imagic" / export_dir
         export_dir.mkdir(parents=True, exist_ok=True)
-        open_file_manager(export_dir)
+        subprocess.Popen(["explorer", str(export_dir)])
 
     def _refresh_exports() -> None:
         """Populate the export gallery tab with exported photos."""
@@ -1200,110 +1078,6 @@ def run_gui(args: argparse.Namespace) -> int:
     window.open_export_folder_requested.connect(_on_open_export_folder)
     window.reanalyse_all_requested.connect(_on_reanalyse_all)
 
-    # ------------------------------------------------------------------
-    # Tutorial overlay
-    # ------------------------------------------------------------------
-    _tutorial_steps = [
-        TutorialStep(
-            title="👋 Welcome to Imagic!",
-            body="This quick tour will walk you through the five-step workflow. "
-                 "You can restart it any time from <b>Help → Start Tutorial</b>.",
-            target_name="_browse_btn",
-            page_index=0,
-            pointer=PointerSide.BOTTOM,
-            pointer_offset=0.5,
-            allow_target_interaction=True,
-        ),
-        TutorialStep(
-            title="Step 1 — Import",
-            body="Once you've selected a folder, click <b>Import Photos</b> to "
-                 "scan and catalogue every RAW, JPEG, and TIFF image.",
-            target_name="_import_btn",
-            page_index=0,
-            pointer=PointerSide.TOP,
-            pointer_offset=0.5,
-            allow_target_interaction=True,
-        ),
-        TutorialStep(
-            title="Step 2 — AI Analysis",
-            body="The AI scores every photo for quality, sharpness, and exposure. "
-                 "It auto-classifies them as <b>Keep</b>, <b>Review</b>, or <b>Trash</b>.",
-            target_name="_analyse_btn",
-            page_index=1,
-            pointer=PointerSide.TOP,
-            pointer_offset=0.5,
-            allow_target_interaction=True,
-        ),
-        TutorialStep(
-            title="Re-Analyse for Stricter Results",
-            body="Not happy? Press <b>Re-Analyse All</b> — each press makes the AI "
-                 "pickier, raising the bar for \"keep\".",
-            target_name="_reanalyse_btn",
-            page_index=1,
-            pointer=PointerSide.TOP,
-            pointer_offset=0.5,
-            allow_target_interaction=True,
-        ),
-        TutorialStep(
-            title="Step 3 — Review & Cull",
-            body="Flip through photos and confirm the AI's suggestions. "
-                 "Mark keepers with ✓ or trash with ✗. Fast and visual.",
-            target_name="_review_grid",
-            page_index=2,
-            pointer=PointerSide.LEFT,
-            pointer_offset=0.3,
-            allow_target_interaction=True,
-            fill_highlight=False,
-        ),
-        TutorialStep(
-            title="Step 4 — Edit",
-            body="Double-click any photo to open the full editor. "
-                 "Adjust exposure, colour, sharpness and more — or let the AI "
-                 "<b>Auto-Enhance</b> for you.",
-            target_name="photo_editor",
-            page_index=3,
-            pointer=PointerSide.LEFT,
-            pointer_offset=0.3,
-            allow_target_interaction=True,
-            fill_highlight=False,
-        ),
-        TutorialStep(
-            title="Step 5 — Export",
-            body="When you're done, export all kept photos as high-quality JPEGs "
-                 "ready to share. That's it — enjoy!",
-            target_name="export_gallery",
-            page_index=4,
-            pointer=PointerSide.LEFT,
-            pointer_offset=0.3,
-            allow_target_interaction=True,
-            fill_highlight=False,
-        ),
-    ]
-
-    _tutorial_overlay: Optional[TutorialOverlay] = None
-
-    def _on_start_tutorial() -> None:
-        nonlocal _tutorial_overlay
-        # Dismiss any tip bubble
-        _tip_bubble.dismiss()
-        # Go to the first step so sidebar is visible
-        window.go_to_step(0)
-        _tutorial_overlay = TutorialOverlay(
-            _tutorial_steps,
-            host=window,
-            target_root=window,
-        )
-        def _on_tutorial_finished():
-            window.status_bar.set_status("Tutorial finished — happy editing!")
-            current_ver = app.settings.get_nested("ui", "tutorial_version", default=1)
-            app.settings.update("ui", "last_seen_tutorial_version", current_ver)
-            app.settings.save()
-
-        _tutorial_overlay.finished.connect(_on_tutorial_finished)
-        _tutorial_overlay.start()
-
-    window.tutorial_requested.connect(_on_start_tutorial)
-
     # Override settings dialog to inject current config.
     original_show_settings = window._show_settings
 
@@ -1316,12 +1090,21 @@ def run_gui(args: argparse.Namespace) -> int:
     _refresh_library()   # initial load
     _refresh_exports()   # populate export gallery
 
-    # Auto-launch tutorial on first run or after a feature update
-    _current_tutorial_ver = app.settings.get_nested("ui", "tutorial_version", default=1)
-    _seen_tutorial_ver = app.settings.get_nested("ui", "last_seen_tutorial_version", default=0)
-    if _seen_tutorial_ver < _current_tutorial_ver:
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(600, _on_start_tutorial)
+    # Show update notification if one was found during startup
+    from PyQt6.QtCore import QTimer
+
+    def _show_update_banner():
+        update_info = getattr(app, "_pending_update", None)
+        if update_info:
+            from imagic import __version__
+            latest = update_info.get("latest_version", "")
+            url = update_info.get("download_url", "")
+            window.status_bar.set_status(
+                f"Update available: v{latest} (you have v{__version__})"
+                f'{" — visit " + url + " to download" if url else ""}'
+            )
+
+    QTimer.singleShot(2000, _show_update_banner)
 
     exit_code = qt_app.exec()
     app.shutdown()

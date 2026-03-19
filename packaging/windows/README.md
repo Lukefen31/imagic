@@ -58,8 +58,13 @@ The recommended installer includes an optional but preselected RawTherapee compo
 Point the website backend at the generated installers:
 
 ```powershell
+# Windows
 $env:IMAGIC_DESKTOP_INSTALLER_PATH = "C:\path\to\imagic-desktop-setup.exe"
 $env:IMAGIC_DESKTOP_BUNDLE_PATH = "C:\path\to\imagic-desktop-recommended-rawtherapee-setup.exe"
+
+# macOS (or use the _URL variants for remote hosting)
+$env:IMAGIC_DESKTOP_MACOS_INSTALLER_URL = "https://example.com/imagic-desktop.dmg"
+$env:IMAGIC_DESKTOP_MACOS_BUNDLE_URL = "https://example.com/imagic-desktop-plus-rawtherapee.dmg"
 ```
 
 The checkout flow will then expose both download links automatically.

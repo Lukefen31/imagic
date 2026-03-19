@@ -85,3 +85,36 @@ class DesktopLicenseClient:
                 "device_id": get_device_id(),
             },
         )
+
+    def check_for_update(self, current_version: str) -> dict[str, Any] | None:
+        """Check if a newer version is available.
+
+        Returns a dict with 'latest_version' and 'download_url' if an update
+        is available, or None if already up to date (or on error).
+        """
+        if not self.enabled:
+            return None
+        try:
+            req = request.Request(
+                f"{self._base_url}/api/desktop/latest-version",
+                method="GET",
+            )
+            with request.urlopen(req, timeout=self._timeout_s) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            latest = data.get("latest_version", "")
+            if latest and _version_tuple(latest) > _version_tuple(current_version):
+                return data
+        except Exception:
+            pass
+        return None
+
+
+def _version_tuple(version_string: str) -> tuple[int, ...]:
+    """Parse '1.2.3' into (1, 2, 3) for comparison."""
+    parts = []
+    for segment in version_string.strip().split("."):
+        try:
+            parts.append(int(segment))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)

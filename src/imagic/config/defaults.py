@@ -64,8 +64,8 @@ DEFAULTS: dict = {
         "last_seen_tutorial_version": 0,
     },
     "security": {
-        "require_activation": False,
-        "license_api_base_url": "",
+        "require_activation": True,
+        "license_api_base_url": "https://imagic.ink",
         "license_email": "",
         "license_key": "",
         "activation_token": "",

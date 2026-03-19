@@ -1,5 +1,122 @@
 # Imagic — Dev Log
 
+## 2026-03-18/19 — Session: Launch readiness, licensing, email, installer hosting
+
+**Branch:** `main`
+
+---
+
+### What was done this session
+
+#### 1. Linux Marked "Coming Soon"
+- `index.html` — Linux download button replaced with disabled "Coming Soon" badge.
+- `desktop.html` — Added platform availability pills (Windows ✓, macOS ✓, Linux — Coming Soon). Checkout note updated.
+- `blog_post.html` — Changed "Windows, Mac, Linux" to "Windows & Mac (Linux coming soon)".
+
+#### 2. macOS Delivery Variants
+- `desktop_delivery.py` — Added `standard_macos` and `rawtherapee_macos` variants with env vars `IMAGIC_DESKTOP_MACOS_INSTALLER_PATH/_URL` and `IMAGIC_DESKTOP_MACOS_BUNDLE_PATH/_URL`. Added `VALID_VARIANTS` set.
+- `account_store.py` — Expanded variant whitelist to include macOS variants.
+- `stripe_integration.py` — Fulfillment now issues macOS download tokens and passes macOS links to email.
+- `main.py` (website) — `/api/desktop/order-status` returns `macos_download_url` and `macos_bundle_download_url`.
+- `desktop.js` — Platform-labeled download buttons with OS icons (Windows/macOS).
+
+#### 3. Activation Gate Enforced
+- `defaults.py` — Changed `require_activation` from `False` to `True`, set `license_api_base_url` to `https://imagic.ink`.
+- `default_config.yaml` — Mirrored same changes.
+- Fresh installs now require product key activation before the app is usable.
+
+#### 4. EULA
+- **NEW:** `packaging/EULA.txt` — 10-section end-user license agreement.
+- `imagic-installer.iss` — Added `LicenseFile=..\..\packaging\EULA.txt` so Inno Setup shows EULA acceptance during install.
+
+#### 5. Update Checker
+- `license_client.py` — Added `check_for_update(current_version)` method calling `GET /api/desktop/latest-version`. Added `_version_tuple()` for semantic version comparison.
+- `main.py` (desktop) — Added `_check_for_updates_async()` background thread after activation. 2-second delayed status bar notification if update available.
+- `main.py` (website) — New endpoint `GET /api/desktop/latest-version` driven by `IMAGIC_DESKTOP_LATEST_VERSION` env var (defaults to "0.1.0").
+
+#### 6. Email Delivery (Resend SMTP)
+- Configured Resend as SMTP provider (`smtp.resend.com:465` SSL, from `snap@imagic.ink`).
+- DNS records on Namecheap: DKIM, SPF (`send` subdomain), DMARC, MX for Resend.
+- All SMTP secrets set on Fly.io.
+
+#### 7. Email Receiving (ImprovMX)
+- Set up ImprovMX for `imagic.ink` forwarding to personal inbox.
+- Aliases: `snap@imagic.ink` (sales), `help@imagic.ink` (support).
+- Both aliases configured as Gmail "Send mail as" via Resend SMTP.
+
+#### 8. Installer Hosting
+- Windows installers (`imagic-desktop-setup.exe`, `imagic-desktop-recommended-rawtherapee-setup.exe`) uploaded to GitHub Releases at `Lukefen31/imagic-releases v0.1.0`.
+- macOS installer (`imagic-desktop.dmg`) uploaded from MacBook to same release.
+- Fly.io env vars set: `IMAGIC_DESKTOP_INSTALLER_URL`, `IMAGIC_DESKTOP_BUNDLE_URL`, `IMAGIC_DESKTOP_MACOS_INSTALLER_URL`.
+
+#### 9. Stripe Webhook Verified
+- Webhook endpoint: `https://imagic.ink/api/stripe/webhook` (custom domain confirmed on Fly.io with SSL).
+- Listening for `checkout.session.completed`. Signing secret updated on Fly.io.
+
+#### 10. Custom Domain
+- `imagic.ink` and `www.imagic.ink` confirmed as custom domains on Fly.io with issued SSL certs.
+- License API base URL updated from `imagic-ink.fly.dev` to `imagic.ink`.
+
+---
+
+### Files changed (20 files)
+
+| File | Change |
+|------|--------|
+| `config/default_config.yaml` | `require_activation: true`, `license_api_base_url` → `https://imagic.ink` |
+| `packaging/EULA.txt` | **NEW** — End-user license agreement |
+| `packaging/windows/imagic-installer.iss` | Added `LicenseFile` for EULA |
+| `packaging/windows/README.md` | Added macOS env var docs |
+| `src/imagic/config/defaults.py` | `require_activation: True`, `license_api_base_url` → `https://imagic.ink` |
+| `src/imagic/main.py` | Update checker (`_check_for_updates_async`), status bar notification |
+| `src/imagic/services/license_client.py` | `check_for_update()`, `_version_tuple()` |
+| `website/api/account_store.py` | macOS variant whitelist |
+| `website/api/desktop_delivery.py` | macOS variants, `VALID_VARIANTS`, email with platform sections |
+| `website/api/main.py` | macOS order-status links, `/api/desktop/latest-version` endpoint |
+| `website/api/stripe_integration.py` | macOS download token fulfillment |
+| `website/static/css/editor.css` | Styling updates |
+| `website/static/css/style.css` | Styling updates |
+| `website/static/js/desktop.js` | Platform-labeled download buttons |
+| `website/templates/app.html` | Template updates |
+| `website/templates/blog_post.html` | "Linux coming soon" text |
+| `website/templates/desktop.html` | Platform pills, checkout note |
+| `website/templates/desktop_thanks.html` | Template updates |
+| `website/templates/index.html` | Linux "Coming Soon" badge |
+| `DEVLOG.md` | This entry |
+
+---
+
+### macOS rebuild required
+
+The macOS DMG (`v0.1.0-macos`) was built before this session's changes. After pulling on Mac, rebuild the DMG to include:
+- Activation gate (`require_activation: True`)
+- License API URL (`https://imagic.ink`)
+- Update checker in `main.py` and `license_client.py`
+
+```bash
+cd ~/path/to/imagic
+git pull origin main
+# Rebuild DMG using packaging/macos/build-desktop.sh
+```
+
+Then re-upload to `Lukefen31/imagic-releases` as an updated asset on the `v0.1.0` release.
+
+---
+
+### Infrastructure summary
+
+| Service | Detail |
+|---------|--------|
+| Hosting | Fly.io (`imagic-ink`, LHR region) |
+| Domain | `imagic.ink` + `www.imagic.ink` (SSL issued) |
+| Payments | Stripe (live, €10 one-time, `price_1TCROrQtDHMLMuXb4aBbuFYa`) |
+| Email out | Resend (`smtp.resend.com:465`, from `snap@imagic.ink`) |
+| Email in | ImprovMX → personal inbox (`snap@`, `help@`) |
+| Installers | GitHub Releases (`Lukefen31/imagic-releases`) |
+| Webhook | `https://imagic.ink/api/stripe/webhook` |
+
+---
+
 ## 2026-03-13 — Session: AI UX polish, speech bubble & tutorial overlay
 
 **Commit:** `ac20459` (pushed to `origin/main`)  

@@ -45,8 +45,8 @@ ui:
   show_status_bar: true
 
 security:
-  require_activation: false
-  license_api_base_url: ""
+  require_activation: true
+  license_api_base_url: "https://imagic.ink"
   license_email: ""
   license_key: ""
   activation_token: ""

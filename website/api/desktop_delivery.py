@@ -39,10 +39,24 @@ _VARIANT_CONFIG = {
     "rawtherapee": {
         "path_env": "IMAGIC_DESKTOP_BUNDLE_PATH",
         "url_env": "IMAGIC_DESKTOP_BUNDLE_URL",
-        "default_name": "imagic-desktop-recommended-rawtherapee-setup.exe",
-        "label": "Recommended Windows installer + RawTherapee bundle",
+        "default_name": "imagic-desktop-plus-rawtherapee-setup.exe",
+        "label": "Windows installer + RawTherapee bundle",
+    },
+    "standard_macos": {
+        "path_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_PATH",
+        "url_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_URL",
+        "default_name": "imagic-desktop.dmg",
+        "label": "macOS installer",
+    },
+    "rawtherapee_macos": {
+        "path_env": "IMAGIC_DESKTOP_MACOS_BUNDLE_PATH",
+        "url_env": "IMAGIC_DESKTOP_MACOS_BUNDLE_URL",
+        "default_name": "imagic-desktop-plus-rawtherapee.dmg",
+        "label": "macOS installer + RawTherapee bundle",
     },
 }
+
+VALID_VARIANTS = set(_VARIANT_CONFIG.keys())
 
 
 def email_configured() -> bool:
@@ -88,7 +102,9 @@ def send_desktop_purchase_email(
     license_key: str,
     standard_download_link: str,
     bundle_download_link: str | None,
-    order_status_link: str,
+    macos_standard_download_link: str | None = None,
+    macos_bundle_download_link: str | None = None,
+    order_status_link: str = "",
 ) -> None:
     if not email_configured():
         raise RuntimeError("Desktop purchase email is not configured.")
@@ -103,11 +119,17 @@ def send_desktop_purchase_email(
         "",
         f"Product key: {license_key}",
         "",
-        "Downloads:",
-        f"- Standard installer: {standard_download_link}",
+        "Downloads — Windows:",
+        f"- Windows installer: {standard_download_link}",
     ]
     if bundle_download_link:
-        plain_lines.append(f"- Recommended installer + RawTherapee bundle: {bundle_download_link}")
+        plain_lines.append(f"- Windows installer + RawTherapee bundle: {bundle_download_link}")
+    if macos_standard_download_link:
+        plain_lines.append("")
+        plain_lines.append("Downloads — macOS:")
+        plain_lines.append(f"- macOS installer: {macos_standard_download_link}")
+    if macos_bundle_download_link:
+        plain_lines.append(f"- macOS installer + RawTherapee bundle: {macos_bundle_download_link}")
     plain_lines.extend(
         [
             "",
@@ -121,8 +143,20 @@ def send_desktop_purchase_email(
     bundle_block = ""
     if bundle_download_link:
         bundle_block = (
-            f"<p><strong>Recommended installer + RawTherapee bundle:</strong> "
+            f"<p><strong>Windows installer + RawTherapee bundle:</strong> "
             f"<a href=\"{bundle_download_link}\">Download the bundle</a></p>"
+        )
+
+    macos_block = ""
+    if macos_standard_download_link:
+        macos_block += (
+            f"<p><strong>macOS installer:</strong> "
+            f"<a href=\"{macos_standard_download_link}\">Download for macOS</a></p>"
+        )
+    if macos_bundle_download_link:
+        macos_block += (
+            f"<p><strong>macOS installer + RawTherapee bundle:</strong> "
+            f"<a href=\"{macos_bundle_download_link}\">Download the macOS bundle</a></p>"
         )
 
     message.add_alternative(
@@ -132,10 +166,12 @@ def send_desktop_purchase_email(
             <h2>Your imagic Desktop order is ready</h2>
             <p>Thanks for buying imagic Desktop.</p>
             <p><strong>Product key:</strong> {license_key}</p>
-            <p><strong>Standard installer:</strong> <a href="{standard_download_link}">Download imagic Desktop</a></p>
+            <h3 style="margin-top:1.5em;">Windows</h3>
+            <p><strong>Windows installer:</strong> <a href="{standard_download_link}">Download imagic Desktop for Windows</a></p>
             {bundle_block}
+            {f'<h3 style="margin-top:1.5em;">macOS</h3>' + macos_block if macos_block else ''}
             <p><strong>Order page:</strong> <a href="{order_status_link}">{order_status_link}</a></p>
-                        <p>After install, imagic asks for your product key once and stores the activation on that device. If you keep the recommended RawTherapee bundle selected, the RAW pipeline is ready immediately with no manual CLI setup. If you move the same key to another device later, the older activation becomes invalid automatically.</p>
+            <p>After install, imagic asks for your product key once and stores the activation on that device. If you move the same key to another device later, the older activation becomes invalid automatically.</p>
           </body>
         </html>
         """,

@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import os
 import shutil
-import threading
 import uuid
 from datetime import date
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -22,20 +21,14 @@ from starlette.responses import RedirectResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .account_store import account_store
-from .blog_posts import get_published_posts, get_post_by_slug, get_related_posts
 from .desktop_delivery import resolve_download_target
 from .rate_limit import RateLimiter
 from .processing import (
-    RAW_EXTENSIONS,
     analyse_quality,
     detect_duplicates,
     suggest_crop,
     generate_grade_previews,
-    generate_display_thumbnail,
-    load_cached_analysis_result,
     native_export,
-    prepare_analysis_source,
-    save_cached_analysis_result,
 )
 from .stripe_integration import (
     create_checkout_session,
@@ -60,7 +53,6 @@ ALLOWED_EXTENSIONS = {
     ".iiq", ".rwl", ".mrw", ".x3f",
 }
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB (RAW files can be large)
-UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 BASE_URL = os.environ.get("IMAGIC_BASE_URL", "http://localhost:8000").rstrip("/")
 COOKIE_SECURE = os.environ.get(
     "IMAGIC_COOKIE_SECURE",
@@ -99,8 +91,6 @@ DEFAULT_CREDIT_PACK_SIZE = 500
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_OAUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
-_THUMBNAIL_LOCKS: dict[str, threading.Lock] = {}
-_THUMBNAIL_LOCKS_GUARD = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Pages
@@ -120,10 +110,9 @@ async def favicon():
     return Response(status_code=204)
 
 
-@app.get("/app")
+@app.get("/app", response_class=HTMLResponse)
 async def web_app(request: Request):
-    """Web app is paused — redirect visitors to the homepage."""
-    return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse("app.html", {"request": request})
 
 
 @app.get("/desktop", response_class=HTMLResponse)
@@ -138,75 +127,6 @@ async def desktop_download_page(request: Request):
             "desktop_bundle_available": resolve_download_target("rawtherapee") is not None,
         },
     )
-
-
-@app.get("/blog", response_class=HTMLResponse)
-async def blog_index(request: Request, cat: str = ""):
-    posts = get_published_posts()
-    if cat:
-        posts = [p for p in posts if p["category"] == cat]
-    for post in posts:
-        post["date_display"] = _format_date(post["date"])
-    return templates.TemplateResponse("blog_index.html", {"request": request, "posts": posts})
-
-
-@app.get("/blog/{slug}", response_class=HTMLResponse)
-async def blog_post(request: Request, slug: str):
-    post = get_post_by_slug(slug)
-    if post is None:
-        raise HTTPException(404, "Post not found.")
-    post["date_display"] = _format_date(post["date"])
-    # Build prev/next navigation
-    all_posts = get_published_posts()
-    idx = next((i for i, p in enumerate(all_posts) if p["slug"] == slug), None)
-    prev_post = all_posts[idx - 1] if idx and idx > 0 else None
-    next_post = all_posts[idx + 1] if idx is not None and idx < len(all_posts) - 1 else None
-    related = get_related_posts(slug, limit=3)
-    return templates.TemplateResponse(
-        "blog_post.html",
-        {
-            "request": request,
-            "post": post,
-            "prev_post": prev_post,
-            "next_post": next_post,
-            "related_posts": related,
-        },
-    )
-
-
-@app.get("/sitemap.xml")
-async def sitemap():
-    posts = get_published_posts()
-    urls = [
-        "<url><loc>https://imagic.app/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>",
-        "<url><loc>https://imagic.app/desktop</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>",
-        "<url><loc>https://imagic.app/blog</loc><changefreq>daily</changefreq><priority>0.8</priority></url>",
-    ]
-    for post in posts:
-        urls.append(
-            f"<url><loc>https://imagic.app/blog/{post['slug']}</loc>"
-            f"<lastmod>{post['date']}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>"
-        )
-    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    xml += "\n".join(urls)
-    xml += "\n</urlset>"
-    return Response(content=xml, media_type="application/xml")
-
-
-@app.get("/robots.txt")
-async def robots():
-    content = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /uploads/\n\nSitemap: https://imagic.app/sitemap.xml\n"
-    return Response(content=content, media_type="text/plain")
-
-
-def _format_date(iso_date: str) -> str:
-    try:
-        from datetime import datetime as _dt
-        d = _dt.strptime(iso_date, "%Y-%m-%d")
-        return f"{d.strftime('%B')} {d.day}, {d.year}"
-    except Exception:
-        return iso_date
 
 
 @app.get("/desktop/thanks", response_class=HTMLResponse)
@@ -284,34 +204,6 @@ def _validate_file(file: UploadFile) -> None:
         )
 
 
-async def _store_upload(file: UploadFile, session_dir: Path) -> dict[str, str | int]:
-    ext = Path(file.filename).suffix.lower()
-    size = 0
-    file_id = uuid.uuid4().hex[:16]
-    temp_path = session_dir / f"{file_id}.upload"
-
-    try:
-        with temp_path.open("wb") as handle:
-            while True:
-                chunk = await file.read(UPLOAD_CHUNK_SIZE)
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > MAX_FILE_SIZE:
-                    raise HTTPException(413, f"File '{file.filename}' exceeds 100 MB limit.")
-                handle.write(chunk)
-    finally:
-        await file.close()
-
-    dest = session_dir / f"{file_id}{ext}"
-    temp_path.replace(dest)
-    return {
-        "file_id": file_id,
-        "filename": file.filename,
-        "size": size,
-    }
-
-
 @app.post("/api/upload")
 async def upload_photos(
     request: Request,
@@ -342,7 +234,21 @@ async def upload_photos(
     uploaded = []
     for f in files:
         _validate_file(f)
-        uploaded.append(await _store_upload(f, session_dir))
+
+        content = await f.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(413, f"File '{f.filename}' exceeds 100 MB limit.")
+
+        file_id = hashlib.sha256(content).hexdigest()[:16]
+        ext = Path(f.filename).suffix.lower()
+        dest = session_dir / f"{file_id}{ext}"
+        dest.write_bytes(content)
+
+        uploaded.append({
+            "file_id": file_id,
+            "filename": f.filename,
+            "size": len(content),
+        })
 
     free_to_consume = min(len(files), free_remaining)
     paid_to_consume = max(0, len(files) - free_to_consume)
@@ -377,15 +283,7 @@ async def analyse_session(session_id: str):
     for img_path in images:
         if img_path.suffix.lower() not in ALLOWED_EXTENSIONS:
             continue
-
-        cached = load_cached_analysis_result(img_path)
-        if cached is not None:
-            score_data = cached
-        else:
-            analysis_source = await run_in_threadpool(prepare_analysis_source, img_path)
-            score_data = await run_in_threadpool(analyse_quality, analysis_source)
-            await run_in_threadpool(save_cached_analysis_result, img_path, score_data)
-
+        score_data = analyse_quality(img_path)
         results.append({
             "file_id": img_path.stem,
             "filename": img_path.name,
@@ -461,7 +359,7 @@ async def download_file(session_id: str, filename: str):
 
 
 @app.get("/api/thumbnail/{session_id}/{file_id}")
-async def get_thumbnail(session_id: str, file_id: str, kind: str = "grid"):
+async def get_thumbnail(session_id: str, file_id: str):
     """Get a display-size JPEG thumbnail for a photo.
 
     Generates a resized JPEG the first time and caches it so subsequent
@@ -471,38 +369,20 @@ async def get_thumbnail(session_id: str, file_id: str, kind: str = "grid"):
     img_path = _find_image(session_id, file_id)
     thumb_dir = img_path.parent / "thumbs"
     thumb_dir.mkdir(exist_ok=True)
-    clean_kind = kind if kind in {"grid", "editor"} else "grid"
-    thumb_path = thumb_dir / f"{img_path.stem}.{clean_kind}.jpg"
-
-    max_size = (320, 320) if clean_kind == "grid" else (1280, 1280)
-    raw_embedded_only = clean_kind == "grid"
+    thumb_path = thumb_dir / f"{img_path.stem}.jpg"
 
     if not thumb_path.exists():
-        generated = await run_in_threadpool(
-            _ensure_cached_thumbnail,
-            img_path,
-            thumb_path,
-            max_size,
-            82 if clean_kind == "grid" else 88,
-            raw_embedded_only,
-        )
-        if not generated or not thumb_path.exists():
-            raise HTTPException(500, "Thumbnail generation failed.")
+        try:
+            from PIL import Image
+            img = Image.open(img_path)
+            img = img.convert("RGB")
+            img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+            img.save(str(thumb_path), "JPEG", quality=85, optimize=True)
+        except Exception:
+            # If thumbnail generation fails, try serving the original
+            return FileResponse(img_path)
 
     return FileResponse(thumb_path, media_type="image/jpeg")
-
-
-@app.get("/api/editor-source/{session_id}/{file_id}")
-async def get_editor_source(session_id: str, file_id: str):
-    """Return the best editor source for a file.
-
-    Native browser formats are served directly so the editor works from the
-    original upload. RAW/TIFF-like formats fall back to the cached editor JPEG.
-    """
-    img_path = _find_image(session_id, file_id)
-    if img_path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-        return FileResponse(img_path)
-    return await get_thumbnail(session_id, file_id, kind="editor")
 
 
 # ---------------------------------------------------------------------------
@@ -529,28 +409,6 @@ async def get_usage(request: Request):
         "google_oauth_enabled": GOOGLE_OAUTH_ENABLED,
         "date": date.today().isoformat(),
     }
-
-
-@app.get("/api/session/{session_id}")
-async def get_session_metadata(session_id: str):
-    """Return lightweight metadata for a saved upload session.
-
-    Used by the web app to validate persisted local state before trying to
-    restore thumbnails, editor state, or exports after a hard refresh.
-    """
-    session_dir = _get_session_dir(session_id)
-    files = []
-    for path in session_dir.glob("*"):
-        if not path.is_file() or path.suffix.lower() not in ALLOWED_EXTENSIONS:
-            continue
-        files.append({
-            "file_id": path.stem,
-            "filename": path.name,
-            "size": path.stat().st_size,
-        })
-
-    files.sort(key=lambda item: item["filename"].lower())
-    return {"session_id": session_id, "files": files}
 
 
 @app.post("/api/auth/register")
@@ -778,6 +636,15 @@ async def desktop_order_status(session_id: str):
         bundle = account_store.issue_desktop_download(session_id, "rawtherapee")
         bundle_link = f"/desktop/download/{bundle['token']}"
 
+    macos_standard_link = None
+    if resolve_download_target("standard_macos") is not None:
+        macos_standard = account_store.issue_desktop_download(session_id, "standard_macos")
+        macos_standard_link = f"/desktop/download/{macos_standard['token']}"
+    macos_bundle_link = None
+    if resolve_download_target("rawtherapee_macos") is not None:
+        macos_bundle = account_store.issue_desktop_download(session_id, "rawtherapee_macos")
+        macos_bundle_link = f"/desktop/download/{macos_bundle['token']}"
+
     return {
         "ready": True,
         "pending": False,
@@ -787,6 +654,8 @@ async def desktop_order_status(session_id: str):
         "email_error": purchase.get("email_error") or "",
         "download_url": f"/desktop/download/{standard['token']}",
         "bundle_download_url": bundle_link,
+        "macos_download_url": macos_standard_link,
+        "macos_bundle_download_url": macos_bundle_link,
     }
 
 
@@ -802,6 +671,18 @@ async def desktop_download(token: str):
     if target["kind"] == "redirect":
         return RedirectResponse(url=target["url"], status_code=302)
     return FileResponse(target["path"], filename=target["filename"])
+
+
+DESKTOP_LATEST_VERSION = os.environ.get("IMAGIC_DESKTOP_LATEST_VERSION", "0.1.0").strip()
+
+
+@app.get("/api/desktop/latest-version")
+async def desktop_latest_version():
+    """Return the latest desktop app version and download page URL."""
+    return {
+        "latest_version": DESKTOP_LATEST_VERSION,
+        "download_url": f"{BASE_URL}/desktop",
+    }
 
 
 @app.post("/api/stripe/webhook")
@@ -851,33 +732,3 @@ def _find_image(session_id: str, file_id: str) -> Path:
         if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS:
             return f
     raise HTTPException(404, f"Image '{file_id}' not found.")
-
-
-def _get_thumbnail_lock(path: Path) -> threading.Lock:
-    key = str(path.resolve())
-    with _THUMBNAIL_LOCKS_GUARD:
-        lock = _THUMBNAIL_LOCKS.get(key)
-        if lock is None:
-            lock = threading.Lock()
-            _THUMBNAIL_LOCKS[key] = lock
-        return lock
-
-
-def _ensure_cached_thumbnail(
-    image_path: Path,
-    output_path: Path,
-    max_size: tuple[int, int],
-    quality: int,
-    raw_embedded_only: bool,
-) -> bool:
-    lock = _get_thumbnail_lock(output_path)
-    with lock:
-        if output_path.exists():
-            return True
-        return generate_display_thumbnail(
-            image_path,
-            output_path,
-            max_size=max_size,
-            quality=quality,
-            raw_embedded_only=raw_embedded_only,
-        )

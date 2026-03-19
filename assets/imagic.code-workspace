@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../../Downloads/imagic-logos"
+		}
+	],
+	"settings": {
+		"workbench.colorTheme": "Imagic",
+		"liveServer.settings.multiRootWorkspaceName": "imagic"
+	}
+}

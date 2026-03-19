@@ -6,10 +6,10 @@
     <title>{{ post.title }} - imagic Blog</title>
     <meta name="description" content="{{ post.meta_description }}">
     <meta name="keywords" content="{{ post.tags | join(', ') }}">
-    <link rel="canonical" href="https://imagic.app/blog/{{ post.slug }}">
+    <link rel="canonical" href="https://imagic.ink/blog/{{ post.slug }}">
 
     <meta property="og:type" content="article">
-    <meta property="og:url" content="https://imagic.app/blog/{{ post.slug }}">
+    <meta property="og:url" content="https://imagic.ink/blog/{{ post.slug }}">
     <meta property="og:title" content="{{ post.title }}">
     <meta property="og:description" content="{{ post.meta_description }}">
     <meta property="og:site_name" content="imagic">
@@ -30,14 +30,14 @@
       "author": {
         "@type": "Organization",
         "name": "imagic",
-        "url": "https://imagic.app"
+        "url": "https://imagic.ink"
       },
       "publisher": {
         "@type": "Organization",
         "name": "imagic",
-        "url": "https://imagic.app"
+        "url": "https://imagic.ink"
       },
-      "url": "https://imagic.app/blog/{{ post.slug }}",
+      "url": "https://imagic.ink/blog/{{ post.slug }}",
       "keywords": "{{ post.tags | join(', ') }}"
     }
     </script>

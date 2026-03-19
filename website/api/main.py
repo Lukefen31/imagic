@@ -125,6 +125,7 @@ async def desktop_download_page(request: Request):
             "prefill_email": user["email"] if user else "",
             "desktop_checkout_enabled": desktop_is_configured(),
             "desktop_bundle_available": resolve_download_target("rawtherapee") is not None,
+            "macos_available": resolve_download_target("macos") is not None,
         },
     )
 
@@ -636,14 +637,10 @@ async def desktop_order_status(session_id: str):
         bundle = account_store.issue_desktop_download(session_id, "rawtherapee")
         bundle_link = f"/desktop/download/{bundle['token']}"
 
-    macos_standard_link = None
-    if resolve_download_target("standard_macos") is not None:
-        macos_standard = account_store.issue_desktop_download(session_id, "standard_macos")
-        macos_standard_link = f"/desktop/download/{macos_standard['token']}"
-    macos_bundle_link = None
-    if resolve_download_target("rawtherapee_macos") is not None:
-        macos_bundle = account_store.issue_desktop_download(session_id, "rawtherapee_macos")
-        macos_bundle_link = f"/desktop/download/{macos_bundle['token']}"
+    macos_link = None
+    if resolve_download_target("macos") is not None:
+        macos = account_store.issue_desktop_download(session_id, "macos")
+        macos_link = f"/desktop/download/{macos['token']}"
 
     return {
         "ready": True,
@@ -654,8 +651,7 @@ async def desktop_order_status(session_id: str):
         "email_error": purchase.get("email_error") or "",
         "download_url": f"/desktop/download/{standard['token']}",
         "bundle_download_url": bundle_link,
-        "macos_download_url": macos_standard_link,
-        "macos_bundle_download_url": macos_bundle_link,
+        "macos_download_url": macos_link,
     }
 
 

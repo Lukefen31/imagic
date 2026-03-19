@@ -86,20 +86,69 @@
 
 ---
 
-### macOS rebuild required
+### macOS rebuild required — IMPORTANT
 
-The macOS DMG (`v0.1.0-macos`) was built before this session's changes. After pulling on Mac, rebuild the DMG to include:
-- Activation gate (`require_activation: True`)
-- License API URL (`https://imagic.ink`)
-- Update checker in `main.py` and `license_client.py`
+The current macOS DMG on GitHub Releases was built **before** this session's changes.
+It is missing critical functionality. The DMG **must be rebuilt** on the MacBook after pulling.
+
+#### What the current DMG is missing
+
+1. **Activation gate is OFF** — the app launches without asking for a product key. Users could use the app for free.
+   - Fix is in: `src/imagic/config/defaults.py` → `require_activation: True`
+   - Fix is in: `config/default_config.yaml` → `require_activation: true`
+
+2. **License API URL is blank** — even if activation were on, it wouldn't know where to call.
+   - Fix is in: `src/imagic/config/defaults.py` → `license_api_base_url: "https://imagic.ink"`
+   - Fix is in: `config/default_config.yaml` → `license_api_base_url: "https://imagic.ink"`
+
+3. **No update checker** — the app won't notify users when a new version is available.
+   - Fix is in: `src/imagic/main.py` → `_check_for_updates_async()` function
+   - Fix is in: `src/imagic/services/license_client.py` → `check_for_update()` method
+
+4. **No EULA** — The EULA file exists at `packaging/EULA.txt` but the macOS build script doesn't currently reference it. Consider adding it to the DMG or showing it on first launch (optional, lower priority).
+
+#### Rebuild steps on Mac
 
 ```bash
+# 1. Pull the latest code
 cd ~/path/to/imagic
 git pull origin main
-# Rebuild DMG using packaging/macos/build-desktop.sh
+
+# 2. Verify the critical changes are present
+grep -n "require_activation" src/imagic/config/defaults.py
+#   Expected output: "require_activation": True
+
+grep -n "license_api_base_url" src/imagic/config/defaults.py
+#   Expected output: "license_api_base_url": "https://imagic.ink"
+
+grep -n "_check_for_updates_async" src/imagic/main.py
+#   Expected: should find the function definition
+
+grep -n "check_for_update" src/imagic/services/license_client.py
+#   Expected: should find the method definition
+
+# 3. Make sure venv is set up and deps installed
+source .venv/bin/activate  # or: python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+# 4. Run the macOS build script
+chmod +x packaging/macos/build-desktop.sh
+./packaging/macos/build-desktop.sh
+
+# 5. The output DMG will be at dist/macos/imagic-desktop.dmg (or similar)
+# Verify it exists:
+ls -lh dist/macos/*.dmg
+
+# 6. Upload the new DMG to replace the old one on GitHub Releases
+gh release upload v0.1.0 dist/macos/imagic-desktop.dmg --repo Lukefen31/imagic-releases --clobber
 ```
 
-Then re-upload to `Lukefen31/imagic-releases` as an updated asset on the `v0.1.0` release.
+#### How to verify the rebuild worked
+
+1. Mount the new DMG, drag imagic to Applications, launch it
+2. It **should prompt for a product key** before showing the main UI
+3. Enter a test key or dismiss — the gate should block access until activated
+4. After activation, check the status bar after ~2 seconds — no "Update available" message should appear (since version matches `0.1.0`)
 
 ---
 

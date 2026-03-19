@@ -42,17 +42,11 @@ _VARIANT_CONFIG = {
         "default_name": "imagic-desktop-plus-rawtherapee-setup.exe",
         "label": "Windows installer + RawTherapee bundle",
     },
-    "standard_macos": {
+    "macos": {
         "path_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_PATH",
         "url_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_URL",
         "default_name": "imagic-desktop.dmg",
-        "label": "macOS installer",
-    },
-    "rawtherapee_macos": {
-        "path_env": "IMAGIC_DESKTOP_MACOS_BUNDLE_PATH",
-        "url_env": "IMAGIC_DESKTOP_MACOS_BUNDLE_URL",
-        "default_name": "imagic-desktop-plus-rawtherapee.dmg",
-        "label": "macOS installer + RawTherapee bundle",
+        "label": "macOS installer (includes RawTherapee)",
     },
 }
 
@@ -102,9 +96,8 @@ def send_desktop_purchase_email(
     license_key: str,
     standard_download_link: str,
     bundle_download_link: str | None,
-    macos_standard_download_link: str | None = None,
-    macos_bundle_download_link: str | None = None,
-    order_status_link: str = "",
+    order_status_link: str,
+    macos_download_link: str | None = None,
 ) -> None:
     if not email_configured():
         raise RuntimeError("Desktop purchase email is not configured.")
@@ -124,12 +117,10 @@ def send_desktop_purchase_email(
     ]
     if bundle_download_link:
         plain_lines.append(f"- Windows installer + RawTherapee bundle: {bundle_download_link}")
-    if macos_standard_download_link:
+    if macos_download_link:
         plain_lines.append("")
         plain_lines.append("Downloads — macOS:")
-        plain_lines.append(f"- macOS installer: {macos_standard_download_link}")
-    if macos_bundle_download_link:
-        plain_lines.append(f"- macOS installer + RawTherapee bundle: {macos_bundle_download_link}")
+        plain_lines.append(f"- macOS installer (includes RawTherapee): {macos_download_link}")
     plain_lines.extend(
         [
             "",
@@ -148,15 +139,10 @@ def send_desktop_purchase_email(
         )
 
     macos_block = ""
-    if macos_standard_download_link:
-        macos_block += (
-            f"<p><strong>macOS installer:</strong> "
-            f"<a href=\"{macos_standard_download_link}\">Download for macOS</a></p>"
-        )
-    if macos_bundle_download_link:
-        macos_block += (
-            f"<p><strong>macOS installer + RawTherapee bundle:</strong> "
-            f"<a href=\"{macos_bundle_download_link}\">Download the macOS bundle</a></p>"
+    if macos_download_link:
+        macos_block = (
+            f"<p><strong>macOS installer (includes RawTherapee):</strong> "
+            f"<a href=\"{macos_download_link}\">Download for macOS</a></p>"
         )
 
     message.add_alternative(

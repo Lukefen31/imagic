@@ -32,6 +32,8 @@ datas = [
 
 hiddenimports = collect_submodules("imagic")
 
+# Runtime hook that adds PyQt6/Qt6/bin to the DLL search path
+_qt_rthook = str(project_root / "packaging" / "windows" / "rthook_pyqt6.py")
 
 a = Analysis(
     [str(entry_script)],
@@ -41,7 +43,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[_qt_rthook],
     excludes=[],
     noarchive=False,
 )

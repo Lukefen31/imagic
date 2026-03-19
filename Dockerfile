@@ -42,4 +42,4 @@ EXPOSE 8080
 # Fly.io uses PORT env var; gunicorn for production
 ENV WEB_CONCURRENCY=1
 
-CMD ["sh", "-c", "gunicorn website.api.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8080 --workers ${WEB_CONCURRENCY:-1} --timeout 120 --preload --log-level debug"]
+CMD ["sh", "-c", "gunicorn website.api.main:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8080 --workers ${WEB_CONCURRENCY:-1} --timeout 120 --preload"]

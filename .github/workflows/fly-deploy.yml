@@ -1,10 +1,13 @@
 # See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
+# Disabled: deploying locally with flyctl until FLY_API_TOKEN is configured.
+# To re-enable: uncomment the 'on' trigger and set FLY_API_TOKEN in GitHub repo secrets.
 
 name: Fly Deploy
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:    # manual-only until token is set
+#  push:
+#    branches:
+#      - main
 jobs:
   deploy:
     name: Deploy app

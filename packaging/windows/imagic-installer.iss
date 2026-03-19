@@ -86,8 +86,8 @@ procedure AddBrandLogo();
 begin
   ExtractTemporaryFile('imagic-wide-installer-logo.bmp');
 
-  BrandLogoImage := TBitmapImage.Create(WizardForm.SelectComponentsPage);
-  BrandLogoImage.Parent := WizardForm;
+  BrandLogoImage := TBitmapImage.Create(WizardForm);
+  BrandLogoImage.Parent := WizardForm.NextButton.Parent;
   BrandLogoImage.AutoSize := True;
   BrandLogoImage.Bitmap.LoadFromFile(ExpandConstant('{tmp}\imagic-wide-installer-logo.bmp'));
   WizardForm.WizardSmallBitmapImage.Visible := False;

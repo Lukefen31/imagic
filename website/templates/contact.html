@@ -20,55 +20,241 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
     <style>
+        /* Hero */
         .contact-hero {
-            padding: 80px 0 48px;
-            background: var(--bg-secondary);
+            padding: 100px 0 64px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
         }
-        .contact-hero h1 { font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 16px; }
-        .contact-hero p { color: var(--text-muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto; }
+        .contact-hero::before {
+            content: '';
+            position: absolute;
+            top: -120px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            opacity: 0.25;
+            pointer-events: none;
+        }
+        .contact-hero h1 {
+            font-size: clamp(2.2rem, 5vw, 3.2rem);
+            font-weight: 800;
+            margin-bottom: 16px;
+            position: relative;
+        }
+        .contact-hero .hero-sub {
+            color: var(--text-secondary);
+            font-size: 1.15rem;
+            max-width: 560px;
+            margin: 0 auto;
+            line-height: 1.7;
+            position: relative;
+        }
 
-        .contact-grid {
+        /* Email spotlight */
+        .email-section { padding: 80px 0; }
+        .email-cards {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 24px;
-            max-width: 800px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 28px;
+            max-width: 760px;
             margin: 0 auto;
         }
-
-        .contact-card {
+        .email-card {
             background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 32px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px 32px 36px;
             text-align: center;
-            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
         }
-        .contact-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+        .email-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 48px rgba(0,0,0,0.3);
+            border-color: var(--accent);
         }
-        .contact-card .card-icon {
-            font-size: 2.5rem;
-            margin-bottom: 16px;
+        .email-card .icon-ring {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 1.6rem;
+        }
+        .email-card .icon-ring.primary {
+            background: linear-gradient(135deg, rgba(255,152,0,0.15), rgba(255,167,38,0.08));
+            color: var(--accent);
+            border: 1px solid rgba(255,152,0,0.25);
+        }
+        .email-card .icon-ring.secondary {
+            background: linear-gradient(135deg, rgba(76,175,80,0.12), rgba(129,199,132,0.06));
+            color: var(--success);
+            border: 1px solid rgba(76,175,80,0.25);
+        }
+        .email-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .email-card .email-desc {
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+            line-height: 1.65;
+            margin-bottom: 24px;
+        }
+        .email-card .email-addr {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 28px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1.05rem;
+            letter-spacing: 0.01em;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .email-card .email-addr.accent {
+            background: var(--accent);
+            color: #000;
+        }
+        .email-card .email-addr.accent:hover {
+            background: var(--accent-light);
+            transform: scale(1.03);
+            color: #000;
+        }
+        .email-card .email-addr.green {
+            background: var(--success);
+            color: #fff;
+        }
+        .email-card .email-addr.green:hover {
+            background: #66bb6a;
+            transform: scale(1.03);
+            color: #fff;
+        }
+
+        /* Divider */
+        .section-divider {
+            width: 48px;
+            height: 3px;
+            border-radius: 3px;
+            background: var(--accent);
+            margin: 0 auto 48px;
+            opacity: 0.5;
+        }
+
+        /* Channels heading */
+        .channels-heading {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        .channels-heading h2 {
+            font-size: clamp(1.4rem, 3vw, 1.8rem);
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .channels-heading p {
+            color: var(--text-secondary);
+            font-size: 0.98rem;
+        }
+
+        /* Channel grid */
+        .channels-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            max-width: 820px;
+            margin: 0 auto;
+        }
+        .channel-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 24px;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+        }
+        .channel-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+            border-color: rgba(255,152,0,0.3);
+        }
+        .channel-card .ch-icon {
+            flex-shrink: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            background: var(--bg-card);
+            color: var(--accent);
+            border: 1px solid var(--border);
+        }
+        .channel-card .ch-body h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .channel-card .ch-body p {
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            line-height: 1.55;
+            margin-bottom: 10px;
+        }
+        .channel-card .ch-link {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--accent);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .channel-card .ch-link:hover { gap: 8px; }
+        .channel-card .ch-link i { font-size: 0.75rem; transition: margin-left 0.2s; }
+
+        /* Response banner */
+        .response-banner {
+            max-width: 640px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 32px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            text-align: left;
+        }
+        .response-banner .banner-icon {
+            flex-shrink: 0;
+            font-size: 2rem;
             color: var(--accent);
         }
-        .contact-card h3 { font-size: 1.2rem; margin-bottom: 8px; }
-        .contact-card p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            line-height: 1.6;
-            margin-bottom: 20px;
+        .response-banner .banner-text strong {
+            display: block;
+            font-size: 1rem;
+            margin-bottom: 4px;
         }
-        .contact-card .btn { width: 100%; }
+        .response-banner .banner-text span {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
 
-        .contact-note {
-            max-width: 600px;
-            margin: 0 auto;
-            text-align: center;
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            line-height: 1.7;
+        @media (max-width: 600px) {
+            .email-cards { grid-template-columns: 1fr; }
+            .channels-grid { grid-template-columns: 1fr; }
+            .response-banner { flex-direction: column; text-align: center; }
         }
     </style>
 </head>
@@ -95,60 +281,146 @@
     </div>
 </nav>
 
+<!-- Hero -->
 <div class="contact-hero">
     <div class="container">
-        <h1><i class="fa-solid fa-envelope"></i> <span class="gradient-text">Contact Us</span></h1>
-        <p>Have a question, found a bug, or want to say hello? We'd love to hear from you.</p>
+        <h1><span class="gradient-text">Get in Touch</span></h1>
+        <p class="hero-sub">We're a small team that reads every message. Whether it's a support question, a partnership idea, or just to say hello — we're here.</p>
     </div>
 </div>
 
-<section class="section">
+<!-- Email spotlight -->
+<section class="email-section">
     <div class="container">
-        <div class="contact-grid">
+        <div class="email-cards">
 
-            <div class="contact-card">
-                <div class="card-icon"><i class="fa-solid fa-envelope"></i></div>
-                <h3>Email</h3>
-                <p>Best for support questions, license issues, partnerships, or anything that doesn't fit elsewhere.</p>
-                <a href="mailto:snap@imagic.ink" class="btn btn-primary">snap@imagic.ink</a>
+            <div class="email-card">
+                <div class="icon-ring primary"><i class="fa-solid fa-headset"></i></div>
+                <h3>Support &amp; Help</h3>
+                <p class="email-desc">License issues, technical problems, installation help, or anything you need a hand with.</p>
+                <a href="mailto:help@imagic.ink" class="email-addr green"><i class="fa-solid fa-envelope"></i> help@imagic.ink</a>
             </div>
 
-            <div class="contact-card">
-                <div class="card-icon"><i class="fa-solid fa-bug"></i></div>
-                <h3>Report a Bug</h3>
-                <p>Something broken? Open a GitHub issue with steps to reproduce and we'll get on it.</p>
-                <a href="https://github.com/Lukefen31/imagic/issues/new?labels=bug" target="_blank" rel="noopener" class="btn btn-secondary">Open an issue</a>
-            </div>
-
-            <div class="contact-card">
-                <div class="card-icon"><i class="fa-solid fa-lightbulb"></i></div>
-                <h3>Feature Request</h3>
-                <p>Got an idea? We build based on real feedback — your suggestion shapes the roadmap.</p>
-                <a href="https://github.com/Lukefen31/imagic/issues/new?labels=enhancement" target="_blank" rel="noopener" class="btn btn-secondary">Suggest a feature</a>
-            </div>
-
-            <div class="contact-card">
-                <div class="card-icon"><i class="fa-brands fa-github"></i></div>
-                <h3>Community</h3>
-                <p>Browse discussions, ask questions, and connect with other photographers.</p>
-                <a href="/community" class="btn btn-secondary">Join the community</a>
+            <div class="email-card">
+                <div class="icon-ring secondary"><i class="fa-solid fa-camera-retro"></i></div>
+                <h3>General &amp; Partnerships</h3>
+                <p class="email-desc">Feedback, press enquiries, collaboration ideas, or anything else you'd like to share.</p>
+                <a href="mailto:snap@imagic.ink" class="email-addr accent"><i class="fa-solid fa-envelope"></i> snap@imagic.ink</a>
             </div>
 
         </div>
     </div>
 </section>
 
+<!-- Other channels -->
 <section class="section" style="padding-top: 0;">
     <div class="container">
-        <p class="contact-note">We're a small team and read every message. Typical response time is within 24 hours on weekdays.</p>
+        <div class="section-divider"></div>
+        <div class="channels-heading">
+            <h2>Other Ways to Reach Us</h2>
+            <p>Prefer open-source channels? We're active on GitHub too.</p>
+        </div>
+
+        <div class="channels-grid">
+
+            <div class="channel-card">
+                <div class="ch-icon"><i class="fa-solid fa-bug"></i></div>
+                <div class="ch-body">
+                    <h4>Report a Bug</h4>
+                    <p>Found something broken? Open an issue and we'll get on it.</p>
+                    <a href="https://github.com/Lukefen31/imagic/issues/new?labels=bug" target="_blank" rel="noopener" class="ch-link">Open issue <i class="fa-solid fa-arrow-right"></i></a>
+                </div>
+            </div>
+
+            <div class="channel-card">
+                <div class="ch-icon"><i class="fa-solid fa-lightbulb"></i></div>
+                <div class="ch-body">
+                    <h4>Feature Request</h4>
+                    <p>Your ideas shape the roadmap. Tell us what you want built next.</p>
+                    <a href="https://github.com/Lukefen31/imagic/issues/new?labels=enhancement" target="_blank" rel="noopener" class="ch-link">Suggest feature <i class="fa-solid fa-arrow-right"></i></a>
+                </div>
+            </div>
+
+            <div class="channel-card">
+                <div class="ch-icon"><i class="fa-brands fa-github"></i></div>
+                <div class="ch-body">
+                    <h4>Community</h4>
+                    <p>Discussions, tips, and workflows from other photographers.</p>
+                    <a href="/community" class="ch-link">Join community <i class="fa-solid fa-arrow-right"></i></a>
+                </div>
+            </div>
+
+            <div class="channel-card">
+                <div class="ch-icon"><i class="fa-solid fa-mug-hot"></i></div>
+                <div class="ch-body">
+                    <h4>Support the Project</h4>
+                    <p>imagic is community-driven. Every coffee helps us ship faster.</p>
+                    <a href="https://ko-fi.com/imagic" target="_blank" rel="noopener" class="ch-link">Buy us a coffee <i class="fa-solid fa-arrow-right"></i></a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- Response time banner -->
+<section class="section" style="padding-top: 0; padding-bottom: 80px;">
+    <div class="container">
+        <div class="response-banner">
+            <div class="banner-icon"><i class="fa-solid fa-clock"></i></div>
+            <div class="banner-text">
+                <strong>Typical response time: within 24 hours</strong>
+                <span>We're in the EU timezone and reply Monday through Friday. Urgent issues get bumped to the top.</span>
+            </div>
+        </div>
     </div>
 </section>
 
 <footer class="footer">
     <div class="container">
-        <div class="footer-bottom" style="padding-top:0; border-top:none;">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <a href="/" class="navbar-brand navbar-brand-wide">
+                    <img src="/static/img/imagic-wide-white.svg" alt="imagic" class="brand-logo-wide">
+                </a>
+                <p>AI-powered photo culling and batch processing, shaped by photographer feedback and a fast-moving product roadmap.</p>
+                <div class="footer-social">
+                    <a href="https://github.com/Lukefen31/imagic" target="_blank" rel="noopener" aria-label="GitHub"><i class="fa-brands fa-github"></i></a>
+                    <a href="mailto:snap@imagic.ink" aria-label="Email"><i class="fa-solid fa-envelope"></i></a>
+                </div>
+            </div>
+            <div class="footer-col">
+                <h4>Product</h4>
+                <ul>
+                    <li><a href="/#why-switch">Why Switch</a></li>
+                    <li><a href="/#ai-assistant">AI Assistant</a></li>
+                    <li><a href="/#versions">Versions</a></li>
+                    <li><a href="/#pricing">Pricing</a></li>
+                    <li><a href="/desktop">Desktop Download</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h4>Resources</h4>
+                <ul>
+                    <li><a href="/blog">Blog</a></li>
+                    <li><a href="/docs">Documentation</a></li>
+                    <li><a href="/changelog">Changelog</a></li>
+                    <li><a href="/community">Community</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h4>Support</h4>
+                <ul>
+                    <li><a href="https://ko-fi.com/imagic" target="_blank" rel="noopener"><i class="fa-solid fa-mug-hot"></i> Buy Us a Coffee</a></li>
+                    <li><a href="https://github.com/Lukefen31/imagic/issues/new?labels=bug" target="_blank" rel="noopener">Report a Bug</a></li>
+                    <li><a href="https://github.com/Lukefen31/imagic/issues/new?labels=enhancement" target="_blank" rel="noopener">Feature Request</a></li>
+                    <li><a href="/contact">Contact</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
             <span>&copy; 2026 imagic. Built by Photographers For Photographers.</span>
-            <span><a href="/">← Back to homepage</a></span>
+            <span>Shaped for Efficiency, Built with Attention to Detail</span>
         </div>
     </div>
 </footer>

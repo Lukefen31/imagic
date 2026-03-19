@@ -82,10 +82,10 @@
         },
         {
           "@type": "Question",
-          "name": "What is the difference between the Standard and RawTherapee bundle?",
+          "name": "Is RawTherapee included with imagic Desktop?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The Standard installer includes imagic's full AI culling, editing, and JPEG/PNG export pipeline. The RawTherapee bundle adds true RAW demosaicing via RawTherapee for maximum export quality from RAW files. Both use the same license key."
+            "text": "Yes. The Windows installer ships with RawTherapee built in for true RAW demosaicing (CR2, NEF, ARW, etc.) with zero extra setup. On macOS and Linux you can point imagic at your own RawTherapee install."
           }
         },
         {
@@ -150,7 +150,7 @@
             <label class="desktop-email-label" for="desktop-email">Delivery email</label>
             <input id="desktop-email" class="desktop-email-input" type="email" value="{{ prefill_email }}" placeholder="you@example.com" autocomplete="email">
             <button id="desktop-buy-btn" class="btn btn-primary btn-lg desktop-buy-btn" onclick="startDesktopCheckout()">Buy Desktop License</button>
-            <p class="desktop-checkout-note" id="desktop-checkout-note">Includes the standard installer{% if desktop_bundle_available %} and the highly recommended RawTherapee bundle{% endif %}.</p>
+            <p class="desktop-checkout-note" id="desktop-checkout-note">Includes the full installer with RawTherapee integration.</p>
             <div class="desktop-mini-facts">
                 <div><strong>Activation:</strong> enter your product key once in the app.</div>
                 <div><strong>Transfer:</strong> activating on a new device revokes the old device automatically.</div>
@@ -182,8 +182,8 @@
             </div>
             <div class="desktop-benefit-card">
                 <div class="desktop-benefit-icon"><i class="fa-solid fa-camera-retro"></i></div>
-                <h3>RawTherapee option included</h3>
-                <p>If you want the full RAW pipeline, use the highly recommended bundle build{% if not desktop_bundle_available %} once it is uploaded{% endif %} or the standard installer and point imagic at your own RawTherapee install.</p>
+                <h3>RawTherapee included</h3>
+                <p>The Windows installer ships with RawTherapee built in for full RAW demosaicing. On macOS and Linux, point imagic at your own RawTherapee install for the same pipeline.</p>
             </div>
             <div class="desktop-benefit-card">
                 <div class="desktop-benefit-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
@@ -256,9 +256,9 @@
 
             <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
                 <summary style="font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
-                    What's the difference between Standard and the RawTherapee bundle? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
+                    Is RawTherapee included? <i class="fa-solid fa-chevron-down" style="color: var(--accent); flex-shrink:0; font-size:0.85rem;"></i>
                 </summary>
-                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">The <strong>Standard installer</strong> includes imagic's full AI culling pipeline, editor, and JPEG/PNG export. The <strong>recommended RawTherapee bundle</strong> adds true RAW demosaicing via RawTherapee, which is the best option for photographers who want maximum quality from RAW files (CR2, NEF, ARW, etc.) with zero manual setup. Both are included at the same $10 price.</p>
+                <p style="margin-top: 12px; color: var(--text-muted); line-height: 1.7;">Yes. The Windows installer ships with RawTherapee built in, giving you true RAW demosaicing for CR2, NEF, ARW, and other formats with zero extra setup. On macOS and Linux you can point imagic at your own RawTherapee install for the same RAW pipeline.</p>
             </details>
 
             <details class="faq-item" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; cursor: pointer;">
@@ -291,27 +291,20 @@
         <div class="section-title">Download <span class="gradient-text">imagic Desktop</span></div>
         <div class="section-subtitle">Download the installer, then buy a license key to activate. The same $10 key works on every platform.</div>
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-top: 2.5rem;">
-            <!-- Windows Bundle (recommended) -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; margin-top: 2.5rem;">
+            <!-- Windows -->
             <div style="background: var(--bg-card); border: 2px solid var(--accent); border-radius: 12px; padding: 2rem 1.5rem; text-align: center;">
                 <i class="fa-brands fa-windows" style="font-size: 2rem; color: var(--accent); margin-bottom: 0.75rem;"></i>
-                <h3 style="margin-bottom: 0.25rem;">Windows + RawTherapee</h3>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Recommended &mdash; full RAW processing pipeline included.</p>
-                <a href="/desktop/get/rawtherapee" class="btn btn-primary btn-lg" style="width: 100%;">Download Bundle</a>
-            </div>
-            <!-- Windows Standard -->
-            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem 1.5rem; text-align: center;">
-                <i class="fa-brands fa-windows" style="font-size: 2rem; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
-                <h3 style="margin-bottom: 0.25rem;">Windows Standard</h3>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">imagic only &mdash; bring your own RawTherapee if needed.</p>
-                <a href="/desktop/get/standard" class="btn btn-secondary btn-lg" style="width: 100%;">Download Standard</a>
+                <h3 style="margin-bottom: 0.25rem;">Windows</h3>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Full installer with RawTherapee RAW processing included.</p>
+                <a href="/desktop/get/rawtherapee" class="btn btn-primary btn-lg" style="width: 100%;">Download for Windows</a>
             </div>
             <!-- macOS -->
-            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem 1.5rem; text-align: center;">
-                <i class="fa-brands fa-apple" style="font-size: 2rem; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
+            <div style="background: var(--bg-card); border: 2px solid var(--accent); border-radius: 12px; padding: 2rem 1.5rem; text-align: center;">
+                <i class="fa-brands fa-apple" style="font-size: 2rem; color: var(--accent); margin-bottom: 0.75rem;"></i>
                 <h3 style="margin-bottom: 0.25rem;">macOS</h3>
                 <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">Universal DMG for Apple Silicon &amp; Intel Macs.</p>
-                <a href="/desktop/get/standard_macos" class="btn btn-secondary btn-lg" style="width: 100%;">Download macOS</a>
+                <a href="/desktop/get/standard_macos" class="btn btn-secondary btn-lg" style="width: 100%;">Download for macOS</a>
             </div>
         </div>
 

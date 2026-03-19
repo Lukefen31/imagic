@@ -97,24 +97,21 @@ function renderDesktopOrderStatus(data) {
         return;
     }
 
-    const isMac = /Mac|Macintosh/i.test(navigator.userAgent || '');
+    const bundleBlock = data.bundle_download_url
+        ? `<a class="btn btn-secondary btn-lg" href="${data.bundle_download_url}"><i class="fa-brands fa-windows"></i> Download Windows installer + RawTherapee bundle</a>`
+        : '';
 
-    const winStandard = data.download_url
-        ? `<a class="btn ${isMac ? 'btn-secondary' : 'btn-primary'} btn-lg" href="${data.download_url}"><i class="fa-brands fa-windows"></i> Download for Windows</a>`
+    const macosBlock = data.macos_download_url
+        ? `<a class="btn btn-primary btn-lg" href="${data.macos_download_url}"><i class="fa-brands fa-apple"></i> Download macOS installer</a>`
         : '';
-    const winBundle = data.bundle_download_url
-        ? `<a class="btn btn-secondary btn-lg" href="${data.bundle_download_url}"><i class="fa-brands fa-windows"></i> Windows + RawTherapee</a>`
-        : '';
-    const macBtn = data.macos_download_url
-        ? `<a class="btn ${isMac ? 'btn-primary' : 'btn-secondary'} btn-lg" href="${data.macos_download_url}"><i class="fa-brands fa-apple"></i> Download for macOS</a>`
+
+    const macosBundleBlock = data.macos_bundle_download_url
+        ? `<a class="btn btn-secondary btn-lg" href="${data.macos_bundle_download_url}"><i class="fa-brands fa-apple"></i> Download macOS installer + RawTherapee bundle</a>`
         : '';
 
     const emailLine = data.email_sent
         ? `<p>We also emailed the same links to <strong>${data.delivery_email}</strong>.</p>`
         : `<p>Email delivery is still pending${data.email_error ? `: ${data.email_error}` : '.'}</p>`;
-
-    // Put the platform-matching button first
-    const buttons = isMac ? [macBtn, winStandard, winBundle] : [winStandard, winBundle, macBtn];
 
     root.innerHTML = `
         <div class="desktop-order-ready">
@@ -122,7 +119,10 @@ function renderDesktopOrderStatus(data) {
             <div class="desktop-license-key">${data.license_key}</div>
             ${emailLine}
             <div class="desktop-download-actions">
-                ${buttons.filter(Boolean).join('\n                ')}
+                <a class="btn btn-primary btn-lg" href="${data.download_url}"><i class="fa-brands fa-windows"></i> Download Windows installer</a>
+                ${bundleBlock}
+                ${macosBlock}
+                ${macosBundleBlock}
             </div>
         </div>`;
 }

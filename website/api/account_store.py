@@ -567,7 +567,7 @@ class AccountStore:
     def issue_desktop_download(self, stripe_session_id: str, variant: str) -> dict:
         clean_session_id = stripe_session_id.strip()
         clean_variant = variant.strip().lower()
-        if clean_variant not in {"standard", "rawtherapee", "macos", "standard_macos", "rawtherapee_macos"}:
+        if clean_variant not in {"standard", "rawtherapee", "standard_macos", "rawtherapee_macos"}:
             raise ValueError("Unknown desktop download variant.")
 
         token = secrets.token_urlsafe(32)

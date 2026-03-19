@@ -201,18 +201,25 @@ def _handle_desktop_checkout_completed(session: dict) -> None:
         if resolve_download_target("rawtherapee") is not None:
             bundle = account_store.issue_desktop_download(session_id, "rawtherapee")
             bundle_link = build_download_link(str(bundle["token"]))
-        macos_link = None
-        if resolve_download_target("macos") is not None:
-            macos = account_store.issue_desktop_download(session_id, "macos")
-            macos_link = build_download_link(str(macos["token"]))
+
+        macos_standard_link = None
+        if resolve_download_target("standard_macos") is not None:
+            macos_standard = account_store.issue_desktop_download(session_id, "standard_macos")
+            macos_standard_link = build_download_link(str(macos_standard["token"]))
+        macos_bundle_link = None
+        if resolve_download_target("rawtherapee_macos") is not None:
+            macos_bundle = account_store.issue_desktop_download(session_id, "rawtherapee_macos")
+            macos_bundle_link = build_download_link(str(macos_bundle["token"]))
+
         order_url = f"{BASE_URL}/desktop/thanks?session_id={session_id}"
         send_desktop_purchase_email(
             recipient_email=delivery_email,
             license_key=str(purchase["license_key"]),
             standard_download_link=build_download_link(str(standard["token"])),
             bundle_download_link=bundle_link,
+            macos_standard_download_link=macos_standard_link,
+            macos_bundle_download_link=macos_bundle_link,
             order_status_link=order_url,
-            macos_download_link=macos_link,
         )
         account_store.mark_desktop_purchase_email_result(session_id, sent=True)
         logger.info("Desktop purchase fulfilled for %s", delivery_email)

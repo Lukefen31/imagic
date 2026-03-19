@@ -15,7 +15,14 @@ from typing import Optional
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
-_DB_PATH = _DATA_DIR / "accounts.db"
+
+# Allow override via env var so Fly.io can point at a persistent volume.
+_db_override = os.environ.get("IMAGIC_DB_PATH", "").strip()
+if _db_override:
+    _DB_PATH = Path(_db_override)
+    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+else:
+    _DB_PATH = _DATA_DIR / "accounts.db"
 _PASSWORD_ITERATIONS = 200_000
 _DEFAULT_SESSION_DAYS = 30
 
@@ -759,6 +766,62 @@ class AccountStore:
             "email": row["email"],
             "license_key": row["license_key"],
             "device_id": row["device_id"],
+        }
+
+    def get_all_desktop_purchases(self) -> list[dict]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT p.stripe_session_id, p.delivery_email, p.created_at, p.email_sent_at,
+                           p.email_error, p.license_id,
+                           l.license_key,
+                           u.email AS purchaser_email
+                    FROM desktop_purchases p
+                    JOIN licenses l ON l.id = p.license_id
+                    JOIN users u ON u.id = p.user_id
+                    ORDER BY p.created_at DESC
+                    """
+                ).fetchall()
+            finally:
+                conn.close()
+        return [dict(row) for row in rows]
+
+    def get_sales_analytics(self) -> dict:
+        with self._lock:
+            conn = self._connect()
+            try:
+                total_sales = conn.execute(
+                    "SELECT COUNT(*) as count FROM desktop_purchases"
+                ).fetchone()["count"]
+                
+                # Simple analytics: sales per day for last 30 days
+                sales_by_day = conn.execute(
+                    """
+                    SELECT date(created_at) as day, COUNT(*) as count
+                    FROM desktop_purchases
+                    WHERE created_at > date('now', '-30 days')
+                    GROUP BY day
+                    ORDER BY day DESC
+                    """
+                ).fetchall()
+
+                # Variant distribution (from grants)
+                variant_stats = conn.execute(
+                    """
+                    SELECT variant, COUNT(*) as count
+                    FROM desktop_download_grants
+                    GROUP BY variant
+                    """
+                ).fetchall()
+            finally:
+                conn.close()
+        
+        return {
+            "total_sales": total_sales,
+            "sales_by_day": [dict(r) for r in sales_by_day],
+            "variant_stats": [dict(r) for r in variant_stats],
         }
 
 

@@ -1,5 +1,44 @@
 # Imagic — Dev Log
 
+## 2026-03-19 — Session: Admin CRM Dashboard
+
+**Branch:** `main`
+
+---
+
+### What was done this session
+
+#### 1. Admin CRM Dashboard (NEW)
+- Created a secure admin dashboard at `/admin` for managing key sales and analytics.
+- **Authentication:** Protected by `IMAGIC_ADMIN_API_KEY`. Uses a dedicated login page and session cookie (`imagic_admin_token`).
+- **Features:**
+  - **Key Sales Listing:** View all desktop purchases with customer email, license key, and fulfillment status.
+  - **Email Resend:** One-click option to resend fulfillment emails to customers.
+  - **Manual Key Issuance:** Ability to generate new desktop or web credit keys from the UI.
+  - **Analytics:** Basic stats including total sales, daily sales volume (30-day window), and download variant distribution.
+
+#### 2. Backend Enhancements
+- `account_store.py` — Added `get_all_desktop_purchases()` and `get_sales_analytics()` methods.
+- `main.py` (website) — Added new admin API endpoints:
+  - `GET /admin` — Renders login or dashboard.
+  - `POST /api/admin/login` — Authenticates with API key.
+  - `GET /api/admin/data` — Fetches sales and analytics.
+  - `POST /api/admin/resend-email` — Triggers email resend for a specific purchase.
+
+---
+
+### Files changed (5 files)
+
+| File | Change |
+|------|--------|
+| `website/api/account_store.py` | Added data retrieval methods for admin stats |
+| `website/api/main.py` | Added admin routes and API logic |
+| `website/templates/admin_login.html` | **NEW** — Admin login page |
+| `website/templates/admin.html` | **NEW** — Admin CRM dashboard |
+| `DEVLOG.md` | This entry |
+
+---
+
 ## 2026-03-18/19 — Session: Launch readiness, licensing, email, installer hosting
 
 **Branch:** `main`

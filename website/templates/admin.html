@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard — imagic</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .admin-layout {
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            min-height: 100vh;
+        }
+        .admin-sidebar {
+            background: #111;
+            color: #fff;
+            padding: 2rem 1rem;
+        }
+        .admin-sidebar h2 {
+            font-size: 1.25rem;
+            margin-bottom: 2rem;
+            color: #eee;
+        }
+        .admin-nav-item {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: #bbb;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+        }
+        .admin-nav-item:hover, .admin-nav-item.active {
+            background: #333;
+            color: #fff;
+        }
+        .admin-main {
+            padding: 2rem;
+            background: #f8f9fa;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .stat-card h3 {
+            font-size: 0.875rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+        .stat-card .value {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+        .table-container {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #fafafa;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        .status-pill {
+            display: inline-block;
+            padding: 0.25rem 0.625rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-sent { background: #e8f5e9; color: #2e7d32; }
+        .status-error { background: #ffebee; color: #c62828; }
+        .status-pending { background: #fff3e0; color: #ef6c00; }
+        
+        .btn-resend {
+            padding: 0.5rem 0.75rem;
+            background: #eee;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-resend:hover {
+            background: #e0e0e0;
+        }
+        .btn-resend:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-layout">
+        <div class="admin-sidebar">
+            <h2>imagic Admin</h2>
+            <nav>
+                <a class="admin-nav-item active" onclick="showSection('sales')">Key Sales</a>
+                <a class="admin-nav-item" onclick="showSection('analytics')">Analytics</a>
+                <a class="admin-nav-item" href="/">Exit Admin</a>
+            </nav>
+        </div>
+        <main class="admin-main">
+            <div id="salesSection">
+                <div class="section-header">
+                    <h1>Key Sales</h1>
+                    <div>
+                        <button class="btn btn-primary" onclick="showIssueModal()" style="background:#111; color:#fff; border:none; padding:0.5rem 1rem; border-radius:4px; cursor:pointer; font-weight:600; margin-right:0.5rem;">+ Issue New Key</button>
+                        <button class="btn btn-secondary" onclick="fetchData()">Refresh</button>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Sales</h3>
+                        <div id="totalSales" class="value">...</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Emails Sent</h3>
+                        <div id="emailsSent" class="value">...</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Email Errors</h3>
+                        <div id="emailErrors" class="value">...</div>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Email</th>
+                                <th>License Key</th>
+                                <th>Email Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesTableBody">
+                            <tr>
+                                <td colspan="5" style="text-align:center;">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="analyticsSection" style="display:none;">
+                <div class="section-header">
+                    <h1>Analytics</h1>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card" style="grid-column: span 2;">
+                        <h3>Daily Sales (Last 30 Days)</h3>
+                        <div id="dailySalesChart" style="padding-top:1rem;">
+                            <!-- Simple text list for now -->
+                            <ul id="dailySalesList" style="list-style:none; padding:0; font-family:monospace; font-size:0.875rem;"></ul>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Download Variant Mix</h3>
+                        <div id="variantMix" style="padding-top:1rem;">
+                            <ul id="variantStatsList" style="list-style:none; padding:0; font-size:0.875rem;"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for Issuing New Key -->
+    <div id="issueModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:2rem; border-radius:8px; max-width:400px; width:90%;">
+            <h2 style="margin-top:0;">Issue New Key</h2>
+            <p style="font-size:0.875rem; color:#666; margin-bottom:1.5rem;">Note: This generates a key in the database but does <strong>not</strong> automatically send an email.</p>
+            <div style="margin-bottom:1rem;">
+                <label style="display:block; margin-bottom:0.5rem; font-weight:600;">Product Type</label>
+                <select id="issueProductType" style="width:100%; padding:0.5rem; border:1px solid #ddd; border-radius:4px;">
+                    <option value="desktop">Desktop License</option>
+                    <option value="web_credit">Web Credits (500)</option>
+                </select>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+                <button class="btn" onclick="hideIssueModal()" style="padding:0.5rem 1rem; border:1px solid #ddd; background:#eee; border-radius:4px; cursor:pointer;">Cancel</button>
+                <button class="btn" onclick="submitIssueKey()" style="padding:0.5rem 1rem; background:#111; color:#fff; border:none; border-radius:4px; cursor:pointer;">Generate Key</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPurchases = [];
+
+        function esc(str) {
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        function showIssueModal() {
+            document.getElementById('issueModal').style.display = 'flex';
+        }
+
+        function hideIssueModal() {
+            document.getElementById('issueModal').style.display = 'none';
+        }
+
+        async function submitIssueKey() {
+            const productType = document.getElementById('issueProductType').value;
+
+            try {
+                const resp = await fetch('/api/admin/licenses/issue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product_type: productType })
+                });
+                
+                if (resp.ok) {
+                    const data = await resp.json();
+                    alert('Success! Generated key: ' + data.license.license_key);
+                    hideIssueModal();
+                    fetchData();
+                } else {
+                    const data = await resp.json();
+                    alert('Error: ' + (data.detail || 'Failed to issue key'));
+                }
+            } catch (err) {
+                alert('An error occurred.');
+            }
+        }
+
+        async function fetchData() {
+            try {
+                const resp = await fetch('/api/admin/data');
+                if (!resp.ok) {
+                    if (resp.status === 403) window.location.reload();
+                    return;
+                }
+                const data = await resp.json();
+                renderData(data);
+            } catch (err) {
+                console.error('Fetch error:', err);
+            }
+        }
+
+        function renderData(data) {
+            const { purchases, analytics } = data;
+            currentPurchases = purchases;
+
+            // Stats
+            document.getElementById('totalSales').textContent = analytics.total_sales;
+            const sentCount = purchases.filter(p => p.email_sent_at).length;
+            const errorCount = purchases.filter(p => p.email_error).length;
+            document.getElementById('emailsSent').textContent = sentCount;
+            document.getElementById('emailErrors').textContent = errorCount;
+
+            // Table
+            const tbody = document.getElementById('salesTableBody');
+            tbody.innerHTML = '';
+            
+            purchases.forEach(p => {
+                const tr = document.createElement('tr');
+                
+                let statusHtml = '';
+                if (p.email_sent_at) {
+                    statusHtml = `<span class="status-pill status-sent">Sent at ${esc(formatTime(p.email_sent_at))}</span>`;
+                } else if (p.email_error) {
+                    statusHtml = `<span class="status-pill status-error" title="${esc(p.email_error)}">Error: ${esc(p.email_error.substring(0,20))}...</span>`;
+                } else {
+                    statusHtml = `<span class="status-pill status-pending">Pending</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td>${esc(formatDate(p.created_at))}</td>
+                    <td>${esc(p.delivery_email)}</td>
+                    <td style="font-family:monospace; font-size:0.875rem;">${esc(p.license_key)}</td>
+                    <td>${statusHtml}</td>
+                    <td>
+                        <button class="btn-resend" onclick="resendEmail('${esc(p.stripe_session_id)}')">Resend Email</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Analytics
+            const dailyList = document.getElementById('dailySalesList');
+            dailyList.innerHTML = analytics.sales_by_day.map(d => `<li>${d.day}: ${d.count} sales</li>`).join('');
+
+            const variantList = document.getElementById('variantStatsList');
+            variantList.innerHTML = analytics.variant_stats.map(v => `<li><strong>${v.variant}:</strong> ${v.count} downloads</li>`).join('');
+        }
+
+        async function resendEmail(sessionId) {
+            if (!confirm('Resend fulfillment email to this customer?')) return;
+            
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+
+            try {
+                const resp = await fetch('/api/admin/resend-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+                
+                if (resp.ok) {
+                    alert('Email resent successfully.');
+                    fetchData();
+                } else {
+                    const data = await resp.json();
+                    alert('Failed to resend: ' + (data.detail || 'Unknown error'));
+                    btn.disabled = false;
+                    btn.textContent = 'Resend Email';
+                }
+            } catch (err) {
+                alert('An error occurred.');
+                btn.disabled = false;
+                btn.textContent = 'Resend Email';
+            }
+        }
+
+        function showSection(section) {
+            document.getElementById('salesSection').style.display = section === 'sales' ? 'block' : 'none';
+            document.getElementById('analyticsSection').style.display = section === 'analytics' ? 'block' : 'none';
+            
+            document.querySelectorAll('.admin-nav-item').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function formatDate(iso) {
+            const d = new Date(iso);
+            return d.toLocaleDateString();
+        }
+
+        function formatTime(iso) {
+            const d = new Date(iso);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        fetchData();
+    </script>
+</body>
+</html>

@@ -18,3 +18,7 @@ primary_region = 'lhr'
 [[vm]]
   size = 'shared-cpu-1x'
   memory = '1gb'
+
+[mounts]
+  source = 'imagic_data'
+  destination = '/data'

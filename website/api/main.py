@@ -22,7 +22,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .account_store import account_store
 from .blog_posts import get_published_posts, get_post_by_slug, get_related_posts
-from .desktop_delivery import resolve_download_target
+from .desktop_delivery import resolve_download_target, VALID_VARIANTS
 from .rate_limit import RateLimiter
 from .processing import (
     analyse_quality,
@@ -655,12 +655,95 @@ async def validate_desktop_license(request: Request):
     return {"ok": True, **info}
 
 
+def _is_admin(request: Request) -> bool:
+    admin_token = request.cookies.get("imagic_admin_token", "")
+    expected = os.environ.get("IMAGIC_ADMIN_API_KEY", "")
+    return bool(expected and admin_token == expected)
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    if not _is_admin(request):
+        return templates.TemplateResponse("admin_login.html", {"request": request})
+    return templates.TemplateResponse("admin.html", {"request": request})
+
+
+@app.post("/api/admin/login")
+async def admin_login(request: Request):
+    body = await request.json()
+    key = str(body.get("admin_key", "")).strip()
+    expected = os.environ.get("IMAGIC_ADMIN_API_KEY", "")
+    if not expected or key != expected:
+        raise HTTPException(403, "Invalid admin key.")
+    
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        "imagic_admin_token",
+        key,
+        httponly=True,
+        samesite="lax",
+        secure=COOKIE_SECURE,
+        max_age=60 * 60 * 24 * 7,
+    )
+    return response
+
+
+@app.get("/api/admin/data")
+async def admin_data(request: Request):
+    if not _is_admin(request):
+        raise HTTPException(403, "Admin access required.")
+    
+    purchases = account_store.get_all_desktop_purchases()
+    analytics = account_store.get_sales_analytics()
+    
+    return {
+        "purchases": purchases,
+        "analytics": analytics,
+    }
+
+
+@app.post("/api/admin/resend-email")
+async def admin_resend_email(request: Request):
+    if not _is_admin(request):
+        raise HTTPException(403, "Admin access required.")
+    
+    body = await request.json()
+    session_id = str(body.get("session_id", "")).strip()
+    if not session_id:
+        raise HTTPException(400, "session_id is required.")
+    
+    # Reuse fulfillment logic but force resend
+    from .stripe_integration import _handle_desktop_checkout_completed
+    from .account_store import account_store
+    
+    purchase = account_store.get_desktop_purchase(session_id)
+    if not purchase:
+        raise HTTPException(404, "Purchase not found.")
+    
+    # We clear the email_sent_at to allow _handle_desktop_checkout_completed to run
+    account_store.mark_desktop_purchase_email_result(session_id, sent=False, error_message="")
+    
+    # Mocking the session object for _handle_desktop_checkout_completed
+    # It only needs id and metadata or customer_details
+    mock_session = {
+        "id": session_id,
+        "metadata": {
+            "delivery_email": purchase["delivery_email"],
+            "purchase_type": "desktop"
+        }
+    }
+    
+    try:
+        _handle_desktop_checkout_completed(mock_session)
+        return {"ok": True}
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to resend email: {exc}")
+
+
 @app.post("/api/admin/licenses/issue")
 async def issue_license(request: Request):
-    admin_secret = request.headers.get("x-admin-key", "")
-    expected_secret = os.environ.get("IMAGIC_ADMIN_API_KEY", "")
-    if not expected_secret or admin_secret != expected_secret:
-        raise HTTPException(403, "Admin key required.")
+    if not _is_admin(request):
+        raise HTTPException(403, "Admin access required.")
     body = await request.json()
     product_type = str(body.get("product_type", "desktop")).strip()
     credits_total = int(body.get("credits_total", DEFAULT_CREDIT_PACK_SIZE))
@@ -764,6 +847,19 @@ async def desktop_download(token: str):
         raise HTTPException(404, "Download link not found.")
 
     target = resolve_download_target(str(grant["variant"]))
+    if target is None:
+        raise HTTPException(404, "This installer is not currently available.")
+    if target["kind"] == "redirect":
+        return RedirectResponse(url=target["url"], status_code=302)
+    return FileResponse(target["path"], filename=target["filename"])
+
+
+@app.get("/desktop/get/{variant}")
+async def desktop_public_download(variant: str):
+    """Public download — the app requires an activation key so free download is fine."""
+    if variant not in VALID_VARIANTS:
+        raise HTTPException(404, "Unknown variant.")
+    target = resolve_download_target(variant)
     if target is None:
         raise HTTPException(404, "This installer is not currently available.")
     if target["kind"] == "redirect":

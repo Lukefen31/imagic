@@ -97,16 +97,14 @@ function renderDesktopOrderStatus(data) {
         return;
     }
 
-    const bundleBlock = data.bundle_download_url
-        ? `<a class="btn btn-primary btn-lg" href="${data.bundle_download_url}"><i class="fa-brands fa-windows"></i> Download Windows + RawTherapee bundle (recommended)</a>`
-        : '';
+    const windowsBlock = data.bundle_download_url
+        ? `<a class="btn btn-primary btn-lg" href="${data.bundle_download_url}"><i class="fa-brands fa-windows"></i> Download for Windows</a>`
+        : data.download_url
+            ? `<a class="btn btn-primary btn-lg" href="${data.download_url}"><i class="fa-brands fa-windows"></i> Download for Windows</a>`
+            : '';
 
     const macosBlock = data.macos_download_url
-        ? `<a class="btn btn-primary btn-lg" href="${data.macos_download_url}"><i class="fa-brands fa-apple"></i> Download macOS installer</a>`
-        : '';
-
-    const macosBundleBlock = data.macos_bundle_download_url
-        ? `<a class="btn btn-secondary btn-lg" href="${data.macos_bundle_download_url}"><i class="fa-brands fa-apple"></i> Download macOS installer + RawTherapee bundle</a>`
+        ? `<a class="btn btn-secondary btn-lg" href="${data.macos_download_url}"><i class="fa-brands fa-apple"></i> Download for macOS</a>`
         : '';
 
     const emailLine = data.email_sent
@@ -119,10 +117,8 @@ function renderDesktopOrderStatus(data) {
             <div class="desktop-license-key">${data.license_key}</div>
             ${emailLine}
             <div class="desktop-download-actions">
-                ${bundleBlock}
-                <a class="btn btn-secondary btn-lg" href="${data.download_url}"><i class="fa-brands fa-windows"></i> Download Windows installer (standard)</a>
+                ${windowsBlock}
                 ${macosBlock}
-                ${macosBundleBlock}
             </div>
         </div>`;
 }

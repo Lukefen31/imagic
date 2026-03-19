@@ -149,9 +149,14 @@ async def blog_post(request: Request, slug: str):
     )
 
 
-@app.get("/docs", response_class=HTMLResponse)
-async def docs_page(request: Request):
+@app.get("/about", response_class=HTMLResponse)
+async def about_page(request: Request):
     return templates.TemplateResponse("docs.html", {"request": request})
+
+
+@app.get("/docs")
+async def docs_redirect():
+    return RedirectResponse(url="/about", status_code=301)
 
 
 @app.get("/changelog", response_class=HTMLResponse)
@@ -176,7 +181,7 @@ async def sitemap():
         "<url><loc>https://imagic.ink/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>",
         "<url><loc>https://imagic.ink/desktop</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>",
         "<url><loc>https://imagic.ink/blog</loc><changefreq>daily</changefreq><priority>0.8</priority></url>",
-        "<url><loc>https://imagic.ink/docs</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>",
+        "<url><loc>https://imagic.ink/about</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>",
         "<url><loc>https://imagic.ink/changelog</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>",
         "<url><loc>https://imagic.ink/community</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>",
         "<url><loc>https://imagic.ink/contact</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>",

@@ -71,7 +71,8 @@ if [[ -z "$DMG_ASSET" ]]; then
   exit 1
 fi
 
-hdiutil attach "$DMG_ASSET" -mountpoint "$RAWTHERAPEE_MOUNT" -nobrowse -quiet
+# The RawTherapee DMG contains a GPL license prompt — auto-accept it
+echo "Y" | PAGER=cat hdiutil attach "$DMG_ASSET" -mountpoint "$RAWTHERAPEE_MOUNT" -nobrowse
 trap 'hdiutil detach "$RAWTHERAPEE_MOUNT" -quiet >/dev/null 2>&1 || true' EXIT
 
 RAWTHERAPEE_APP="$(find "$RAWTHERAPEE_MOUNT" -maxdepth 1 -name 'RawTherapee*.app' | head -n 1)"
@@ -100,6 +101,9 @@ fi
 # is still recommended, but ad-hoc makes the app *launchable*.
 
 echo ""
+echo "Fixing file permissions for codesigning..."
+chmod -R u+rw "$APP_BUNDLE"
+
 echo "Stripping quarantine extended attributes..."
 xattr -cr "$APP_BUNDLE"
 
@@ -107,19 +111,19 @@ echo "Code-signing the app bundle (ad-hoc)..."
 
 # Sign embedded frameworks & dylibs first (inside-out signing order)
 find "$APP_BUNDLE" -type f \( -name "*.dylib" -o -name "*.so" \) -exec \
-  codesign --force --sign - --entitlements "$ENTITLEMENTS" --timestamp --options runtime {} \;
+  codesign --force --sign - --entitlements "$ENTITLEMENTS" {} \;
 
 # Sign any embedded .app bundles (e.g. RawTherapee.app)
 find "$APP_BUNDLE/Contents/Resources" -maxdepth 3 -name "*.app" -type d | while read -r embedded_app; do
   echo "  Signing embedded app: $(basename "$embedded_app")"
-  codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" --timestamp --options runtime "$embedded_app"
+  codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$embedded_app"
 done
 
 # Sign the main executable
-codesign --force --sign - --entitlements "$ENTITLEMENTS" --timestamp --options runtime "$APP_MACOS/imagic"
+codesign --force --sign - --entitlements "$ENTITLEMENTS" "$APP_MACOS/imagic"
 
 # Sign the top-level .app bundle
-codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" --timestamp --options runtime "$APP_BUNDLE"
+codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP_BUNDLE"
 
 echo "✔ Ad-hoc code signing complete"
 

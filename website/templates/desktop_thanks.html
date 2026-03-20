@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
 </head>
 <body data-desktop-session-id="{{ session_id }}" data-desktop-bundle-available="{{ 'true' if desktop_bundle_available else 'false' }}">
 <section class="desktop-thanks-shell">
@@ -27,5 +28,68 @@
 </section>
 
 <script src="/static/js/desktop.js"></script>
+
+<!-- macOS Install Tutorial Modal -->
+<div class="macos-tutorial-overlay" id="macos-tutorial-overlay">
+    <div class="macos-tutorial-modal">
+        <button class="macos-tutorial-close" onclick="closeMacTutorial()" aria-label="Close">&times;</button>
+        <div class="macos-tutorial-header">
+            <i class="fa-brands fa-apple"></i>
+            <h2>Installing imagic on macOS</h2>
+            <p class="macos-tutorial-subtitle">Your download has started. Follow these steps to install and open the app.</p>
+        </div>
+        <div class="macos-tutorial-steps">
+            <div class="macos-tutorial-step">
+                <div class="macos-tutorial-step-number">1</div>
+                <div class="macos-tutorial-step-content">
+                    <div class="macos-tutorial-illustration">
+                        <img src="/static/img/tutorial/mac-step-1-dmg.svg" alt="Double-click the DMG file and agree to the EULA" loading="lazy">
+                    </div>
+                    <h3>Open the DMG</h3>
+                    <p>Once the download finishes, double-click <strong>imagic-desktop.dmg</strong> in your Downloads folder. You'll see the EULA — click <strong>Agree</strong> to continue.</p>
+                </div>
+            </div>
+            <div class="macos-tutorial-step">
+                <div class="macos-tutorial-step-number">2</div>
+                <div class="macos-tutorial-step-content">
+                    <div class="macos-tutorial-illustration">
+                        <img src="/static/img/tutorial/mac-step-2-drag.svg" alt="Drag imagic to the Applications folder" loading="lazy">
+                    </div>
+                    <h3>Drag to Applications</h3>
+                    <p>In the window that opens, drag the <strong>imagic</strong> icon onto the <strong>Applications</strong> folder shortcut. This copies the app to your Mac.</p>
+                </div>
+            </div>
+            <div class="macos-tutorial-step">
+                <div class="macos-tutorial-step-number">3</div>
+                <div class="macos-tutorial-step-content">
+                    <div class="macos-tutorial-illustration">
+                        <img src="/static/img/tutorial/mac-step-3-open.svg" alt="Right-click the app and choose Open" loading="lazy">
+                    </div>
+                    <h3>First launch — right-click to open</h3>
+                    <p>Open <strong>Applications</strong> in Finder, find <strong>imagic</strong>, then <strong>right-click → Open</strong>. macOS may show a warning the first time because the app is from outside the App Store — click <strong>Open</strong> to confirm.</p>
+                    <div class="macos-tutorial-note">
+                        <i class="fa-solid fa-circle-info"></i>
+                        You only need to do this once. After the first launch, imagic opens normally with a double-click.
+                    </div>
+                </div>
+            </div>
+            <div class="macos-tutorial-step">
+                <div class="macos-tutorial-step-number">4</div>
+                <div class="macos-tutorial-step-content">
+                    <div class="macos-tutorial-illustration">
+                        <img src="/static/img/tutorial/mac-step-4-activate.svg" alt="Enter your product key to activate imagic" loading="lazy">
+                    </div>
+                    <h3>Activate with your product key</h3>
+                    <p>On first launch, enter the <strong>product key</strong> from your email to activate imagic. RawTherapee is already bundled inside — no extra setup needed.</p>
+                </div>
+            </div>
+        </div>
+        <div class="macos-tutorial-footer">
+            <p>Still seeing "app is damaged"? Open <strong>System Settings → Privacy & Security</strong>, scroll down and click <strong>Open Anyway</strong> next to the imagic message.</p>
+            <button class="btn btn-primary btn-lg" onclick="closeMacTutorial()">Got it</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 140" fill="none">
+  <!-- DMG file icon -->
+  <rect x="80" y="18" width="72" height="88" rx="8" fill="#252525" stroke="#444" stroke-width="1.5"/>
+  <path d="M80 26a8 8 0 0 1 8-8h40l24 24v58a8 8 0 0 1-8 8H88a8 8 0 0 1-8-8V26z" fill="#252525" stroke="#444" stroke-width="1.5"/>
+  <path d="M120 18v16a8 8 0 0 0 8 8h16" fill="none" stroke="#444" stroke-width="1.5"/>
+  <!-- Disk icon on the file -->
+  <circle cx="116" cy="68" r="16" fill="none" stroke="#ff9800" stroke-width="1.8" opacity="0.9"/>
+  <circle cx="116" cy="68" r="5" fill="#ff9800" opacity="0.7"/>
+  <!-- .dmg label -->
+  <text x="116" y="98" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="600" fill="#6b6b6b">.dmg</text>
+  <!-- Double-click cursor -->
+  <g transform="translate(155, 50)">
+    <!-- cursor arrow -->
+    <path d="M0 0l4 14 4-4 6 8 3-2-6-8h5z" fill="#f0f0f0" stroke="#0d0d0d" stroke-width="0.8"/>
+    <!-- click rings -->
+    <circle cx="2" cy="2" r="10" fill="none" stroke="#ff9800" stroke-width="1.2" opacity="0.5">
+      <animate attributeName="r" values="6;14;6" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.6;0;0.6" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="2" cy="2" r="6" fill="none" stroke="#ff9800" stroke-width="1" opacity="0.4">
+      <animate attributeName="r" values="4;10;4" dur="1.5s" repeatCount="indefinite" begin="0.2s"/>
+      <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" begin="0.2s"/>
+    </circle>
+  </g>
+  <!-- EULA agree hint -->
+  <rect x="182" y="80" width="78" height="28" rx="6" fill="#1a1a1a" stroke="#ff9800" stroke-width="1.2"/>
+  <text x="221" y="98" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#ff9800">Agree</text>
+  <!-- arrow from DMG to agree -->
+  <path d="M152 90h24" stroke="#444" stroke-width="1" stroke-dasharray="3 2" marker-end="url(#arrowGrey1)"/>
+  <defs>
+    <marker id="arrowGrey1" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0 0l5 3-5 3z" fill="#444"/>
+    </marker>
+  </defs>
+</svg>

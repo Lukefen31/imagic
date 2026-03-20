@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 140" fill="none">
+  <!-- App window frame -->
+  <rect x="24" y="10" width="232" height="120" rx="10" fill="#1a1a1a" stroke="#333" stroke-width="1.2"/>
+  <!-- Title bar -->
+  <rect x="24" y="10" width="232" height="22" rx="10" fill="#222"/>
+  <rect x="24" y="22" width="232" height="10" fill="#222"/>
+  <circle cx="40" cy="21" r="4" fill="#ff5f57"/>
+  <circle cx="53" cy="21" r="4" fill="#febc2e"/>
+  <circle cx="66" cy="21" r="4" fill="#28c840"/>
+  <text x="140" y="25" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#888">imagic — Activation</text>
+
+  <!-- Key icon -->
+  <g transform="translate(108, 42)">
+    <circle cx="12" cy="12" r="10" fill="none" stroke="#ff9800" stroke-width="1.8"/>
+    <circle cx="12" cy="12" r="3.5" fill="#ff9800" opacity="0.4"/>
+    <line x1="22" y1="12" x2="38" y2="12" stroke="#ff9800" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="34" y1="12" x2="34" y2="7" stroke="#ff9800" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="38" y1="12" x2="38" y2="7" stroke="#ff9800" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Input field -->
+  <rect x="56" y="72" width="168" height="30" rx="6" fill="#252525" stroke="#444" stroke-width="1"/>
+  <!-- Typed key text -->
+  <text x="68" y="92" font-family="'JetBrains Mono', monospace" font-size="11" fill="#ff9800" letter-spacing="1">
+    IMGK-XXXX-XXXX
+    <animate attributeName="opacity" values="1;1;0.4;1" dur="2s" repeatCount="indefinite"/>
+  </text>
+  <!-- Blinking cursor -->
+  <rect x="185" y="79" width="1.5" height="16" rx="0.5" fill="#ff9800">
+    <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- Activate button -->
+  <rect x="88" y="108" width="104" height="28" rx="6" fill="#ff9800"/>
+  <text x="140" y="126" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="700" fill="#000">Activate</text>
+
+  <!-- Checkmark success hint -->
+  <g transform="translate(198, 110)" opacity="0.5">
+    <circle cx="12" cy="12" r="11" fill="none" stroke="#4caf50" stroke-width="1.2"/>
+    <path d="M7 12l3.5 3.5L17 9" fill="none" stroke="#4caf50" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

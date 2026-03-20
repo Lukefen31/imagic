@@ -20,10 +20,14 @@ if IS_WINDOWS:
         icon_arg = str(win_icon)
 
 mac_icns = None
+mac_entitlements = None
 if IS_MACOS:
     icns_path = project_root / "packaging" / "macos" / "branding" / "imagic.icns"
     if icns_path.is_file():
         mac_icns = str(icns_path)
+    ent_path = project_root / "packaging" / "macos" / "entitlements.plist"
+    if ent_path.is_file():
+        mac_entitlements = str(ent_path)
 
 datas = [
     (str(project_root / "assets"), "assets"),
@@ -64,7 +68,7 @@ exe = EXE(
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
-    entitlements_file=None,
+    entitlements_file=mac_entitlements,
     icon=icon_arg,
 )
 

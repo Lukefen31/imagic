@@ -2,6 +2,30 @@ function formatDesktopPrice(symbol, value) {
     return `${symbol}${value}`;
 }
 
+/* ── macOS Install Tutorial Modal ─────────────────────────────── */
+
+function openMacTutorial() {
+    const overlay = document.getElementById('macos-tutorial-overlay');
+    if (overlay) {
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeMacTutorial() {
+    const overlay = document.getElementById('macos-tutorial-overlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+function handleMacDownload(event) {
+    // Let the download proceed via the default link behaviour,
+    // then show the install tutorial modal on top.
+    setTimeout(openMacTutorial, 300);
+}
+
 function applyDesktopPricing(code) {
     const flat = {
         USD: { symbol: '$', price: 10 },
@@ -104,7 +128,7 @@ function renderDesktopOrderStatus(data) {
             : '';
 
     const macosBlock = data.macos_download_url
-        ? `<a class="btn btn-secondary btn-lg" href="${data.macos_download_url}"><i class="fa-brands fa-apple"></i> Download for macOS</a>`
+        ? `<a class="btn btn-secondary btn-lg macos-download-btn" href="${data.macos_download_url}" onclick="handleMacDownload(event)"><i class="fa-brands fa-apple"></i> Download for macOS</a>`
         : '';
 
     const emailLine = data.email_sent
@@ -160,4 +184,17 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(() => {});
 
     pollDesktopOrderStatus();
+
+    // Close macOS tutorial on overlay click or Escape key
+    const tutorialOverlay = document.getElementById('macos-tutorial-overlay');
+    if (tutorialOverlay) {
+        tutorialOverlay.addEventListener('click', (e) => {
+            if (e.target === tutorialOverlay) closeMacTutorial();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && tutorialOverlay.classList.contains('active')) {
+                closeMacTutorial();
+            }
+        });
+    }
 });

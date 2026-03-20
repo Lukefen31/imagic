@@ -2435,3 +2435,200 @@ img {
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
     background-size: 256px 256px;
 }
+
+/* ============================================================
+   macOS Install Tutorial Modal
+   ============================================================ */
+.macos-tutorial-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    animation: macTutorialFadeIn 0.25s ease;
+}
+
+.macos-tutorial-overlay.active {
+    display: flex;
+}
+
+@keyframes macTutorialFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes macTutorialSlideUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.macos-tutorial-modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 2.5rem;
+    position: relative;
+    box-shadow: var(--shadow-lg), 0 0 60px rgba(255, 152, 0, 0.08);
+    animation: macTutorialSlideUp 0.35s ease;
+}
+
+.macos-tutorial-close {
+    position: absolute;
+    top: 1rem;
+    right: 1.25rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.75rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: color var(--transition);
+    padding: 0.25rem;
+}
+
+.macos-tutorial-close:hover {
+    color: var(--text-primary);
+}
+
+.macos-tutorial-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.macos-tutorial-header i {
+    font-size: 2.5rem;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+    display: block;
+}
+
+.macos-tutorial-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.macos-tutorial-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.macos-tutorial-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+}
+
+.macos-tutorial-step {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.macos-tutorial-step-number {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    background: var(--gradient-2);
+    color: #000;
+    font-weight: 800;
+    font-size: 1rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+}
+
+.macos-tutorial-illustration {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.macos-tutorial-illustration img {
+    width: 100%;
+    max-width: 280px;
+    height: auto;
+    display: block;
+}
+
+.macos-tutorial-step-content h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.macos-tutorial-step-content p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.macos-tutorial-note {
+    margin-top: 0.6rem;
+    padding: 0.6rem 0.85rem;
+    background: rgba(255, 152, 0, 0.08);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 0.82rem;
+    color: var(--accent-light);
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.macos-tutorial-note i {
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.macos-tutorial-footer {
+    text-align: center;
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+}
+
+.macos-tutorial-footer p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
+.macos-tutorial-footer .btn {
+    min-width: 160px;
+}
+
+@media (max-width: 640px) {
+    .macos-tutorial-modal {
+        padding: 1.5rem;
+        border-radius: var(--radius-md);
+    }
+
+    .macos-tutorial-header h2 {
+        font-size: 1.25rem;
+    }
+
+    .macos-tutorial-step-number {
+        width: 30px;
+        height: 30px;
+        font-size: 0.85rem;
+    }
+}

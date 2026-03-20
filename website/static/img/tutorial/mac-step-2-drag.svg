@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 140" fill="none">
+  <!-- DMG window background -->
+  <rect x="16" y="12" width="248" height="116" rx="10" fill="#1e1e1e" stroke="#444" stroke-width="1.2"/>
+  <!-- Title bar -->
+  <rect x="16" y="12" width="248" height="22" rx="10" fill="#2a2a2a"/>
+  <rect x="16" y="24" width="248" height="10" fill="#2a2a2a"/>
+  <circle cx="32" cy="23" r="4.5" fill="#ff5f57"/>
+  <circle cx="46" cy="23" r="4.5" fill="#febc2e"/>
+  <circle cx="60" cy="23" r="4.5" fill="#28c840"/>
+  <text x="140" y="27" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#888">imagic</text>
+
+  <!-- imagic app icon (left) -->
+  <g transform="translate(62, 54)">
+    <rect x="0" y="0" width="48" height="48" rx="11" fill="#252525" stroke="#ff9800" stroke-width="1.5"/>
+    <text x="24" y="26" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="800" fill="#ff9800">i</text>
+    <text x="24" y="38" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="7" fill="#ffa726">magic</text>
+  </g>
+  <text x="86" y="115" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#a0a0a0">imagic</text>
+
+  <!-- Drag arrow -->
+  <g>
+    <path d="M120 78 h40" stroke="#ff9800" stroke-width="2" stroke-linecap="round" stroke-dasharray="5 3">
+      <animate attributeName="stroke-dashoffset" values="16;0" dur="1s" repeatCount="indefinite"/>
+    </path>
+    <polygon points="164,78 156,73 156,83" fill="#ff9800">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="1s" repeatCount="indefinite"/>
+    </polygon>
+  </g>
+
+  <!-- Applications folder (right) -->
+  <g transform="translate(170, 52)">
+    <!-- folder back -->
+    <path d="M2 12h44a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4z" fill="#2a6dd4" opacity="0.25"/>
+    <!-- folder tab -->
+    <path d="M2 10h14l4 4H2z" fill="#2a6dd4" opacity="0.35"/>
+    <!-- folder front -->
+    <path d="M0 16h48a4 4 0 0 1 4 4v24a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V16z" fill="#2a6dd4" opacity="0.55"/>
+    <!-- "A" letter for Applications -->
+    <text x="24" y="38" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="700" fill="#fff" opacity="0.8">A</text>
+  </g>
+  <text x="194" y="115" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#a0a0a0">Applications</text>
+</svg>

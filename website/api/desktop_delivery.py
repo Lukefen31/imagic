@@ -54,6 +54,19 @@ _VARIANT_CONFIG = {
         "default_name": "imagic-desktop-plus-rawtherapee.dmg",
         "label": "macOS installer + RawTherapee bundle",
     },
+    # Clean public-facing aliases (both platforms now bundle RT by default)
+    "windows": {
+        "path_env": "IMAGIC_DESKTOP_BUNDLE_PATH",
+        "url_env": "IMAGIC_DESKTOP_BUNDLE_URL",
+        "default_name": "imagic-desktop-setup.exe",
+        "label": "Windows installer",
+    },
+    "macos": {
+        "path_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_PATH",
+        "url_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_URL",
+        "default_name": "imagic-desktop.dmg",
+        "label": "macOS installer",
+    },
 }
 
 VALID_VARIANTS = set(_VARIANT_CONFIG.keys())

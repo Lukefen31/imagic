@@ -5,10 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import ssl
 import uuid
 from pathlib import Path
 from typing import Any
 from urllib import error, request
+
+try:
+    import certifi
+    _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    # Fall back to the system default if certifi is unavailable
+    _SSL_CONTEXT = ssl.create_default_context()
 
 
 class LicenseClientError(RuntimeError):
@@ -50,7 +58,7 @@ class DesktopLicenseClient:
             method="POST",
         )
         try:
-            with request.urlopen(req, timeout=self._timeout_s) as response:
+            with request.urlopen(req, timeout=self._timeout_s, context=_SSL_CONTEXT) as response:
                 raw = response.read().decode("utf-8")
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
@@ -99,7 +107,7 @@ class DesktopLicenseClient:
                 f"{self._base_url}/api/desktop/latest-version",
                 method="GET",
             )
-            with request.urlopen(req, timeout=self._timeout_s) as response:
+            with request.urlopen(req, timeout=self._timeout_s, context=_SSL_CONTEXT) as response:
                 data = json.loads(response.read().decode("utf-8"))
             latest = data.get("latest_version", "")
             if latest and _version_tuple(latest) > _version_tuple(current_version):

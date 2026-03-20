@@ -29,9 +29,13 @@ if IS_MACOS:
     if ent_path.is_file():
         mac_entitlements = str(ent_path)
 
+import certifi as _certifi_mod
+_certifi_dir = str(Path(_certifi_mod.__file__).parent)
+
 datas = [
     (str(project_root / "assets"), "assets"),
     (str(project_root / "config"), "config"),
+    (_certifi_dir, "certifi"),
 ]
 
 hiddenimports = collect_submodules("imagic")

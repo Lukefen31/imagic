@@ -42,6 +42,8 @@ hiddenimports = collect_submodules("imagic")
 
 # Runtime hook that adds PyQt6/Qt6/bin to the DLL search path
 _qt_rthook = str(project_root / "packaging" / "windows" / "rthook_pyqt6.py")
+# Runtime hook that sets SSL_CERT_FILE for frozen macOS builds
+_ssl_rthook = str(project_root / "packaging" / "rthook_ssl_certs.py")
 
 a = Analysis(
     [str(entry_script)],
@@ -51,7 +53,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[_qt_rthook],
+    runtime_hooks=[_ssl_rthook, _qt_rthook],
     excludes=[],
     noarchive=False,
 )

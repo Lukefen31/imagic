@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
+  <defs>
+    <linearGradient id="panelGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a2a2e"/>
+      <stop offset="100%" stop-color="#1e1e22"/>
+    </linearGradient>
+  </defs>
+
+  <!-- System Settings window -->
+  <rect x="20" y="10" width="280" height="180" rx="12" fill="url(#panelGrad)" stroke="#555" stroke-width="1"/>
+  <!-- Title bar -->
+  <rect x="20" y="10" width="280" height="28" rx="12" fill="#3a3a3e"/>
+  <rect x="20" y="26" width="280" height="12" fill="#3a3a3e"/>
+  <!-- Traffic lights -->
+  <circle cx="38" cy="24" r="5" fill="#ff5f57"/>
+  <circle cx="54" cy="24" r="5" fill="#ffbd2e"/>
+  <circle cx="70" cy="24" r="5" fill="#28c840"/>
+  <!-- Title text -->
+  <text x="160" y="28" text-anchor="middle" fill="#ddd" font-size="11" font-family="system-ui, -apple-system, sans-serif" font-weight="600">Privacy &amp; Security</text>
+
+  <!-- Shield icon -->
+  <g transform="translate(50, 55)">
+    <path d="M12 0 L24 6 L24 14 C24 22 18 28 12 30 C6 28 0 22 0 14 L0 6 Z" fill="none" stroke="#ff9800" stroke-width="2"/>
+    <path d="M7 14 L11 18 L18 10" fill="none" stroke="#ff9800" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Blocked app message -->
+  <text x="90" y="68" fill="#ccc" font-size="10" font-family="system-ui, -apple-system, sans-serif">"imagic" was blocked from</text>
+  <text x="90" y="81" fill="#ccc" font-size="10" font-family="system-ui, -apple-system, sans-serif">opening because it is not from</text>
+  <text x="90" y="94" fill="#ccc" font-size="10" font-family="system-ui, -apple-system, sans-serif">an identified developer.</text>
+
+  <!-- "Open Anyway" button -->
+  <rect x="90" y="105" width="110" height="30" rx="7" fill="#ff9800"/>
+  <text x="145" y="124" text-anchor="middle" fill="#1a1a1e" font-size="12" font-family="system-ui, -apple-system, sans-serif" font-weight="700">Open Anyway</text>
+
+  <!-- Animated pointer arrow -->
+  <g transform="translate(175, 118)">
+    <path d="M0 0 L12 5 L4 6 L7 14 L3 15 L0 7 L-3 12 Z" fill="white" stroke="#333" stroke-width="0.5">
+      <animateTransform attributeName="transform" type="translate" values="0,0; 3,2; 0,0" dur="1.5s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- Sidebar hint: gear icon + path breadcrumb -->
+  <g transform="translate(32, 150)">
+    <circle cx="8" cy="8" r="7" fill="none" stroke="#888" stroke-width="1.2"/>
+    <circle cx="8" cy="8" r="2.5" fill="#888"/>
+    <!-- gear teeth -->
+    <line x1="8" y1="0" x2="8" y2="2" stroke="#888" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="8" y1="14" x2="8" y2="16" stroke="#888" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="1" y1="8" x2="3" y2="8" stroke="#888" stroke-width="1.2" stroke-linecap="round"/>
+    <line x1="13" y1="8" x2="15" y2="8" stroke="#888" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+  <text x="55" y="161" fill="#999" font-size="9" font-family="system-ui, -apple-system, sans-serif">System Settings → Privacy &amp; Security</text>
+</svg>

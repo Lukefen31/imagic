@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import platform
 import ssl
 import uuid
@@ -15,8 +16,12 @@ try:
     import certifi
     _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
-    # Fall back to the system default if certifi is unavailable
-    _SSL_CONTEXT = ssl.create_default_context()
+    # Fall back to SSL_CERT_FILE env var (set by our runtime hook) or system default
+    _cert_file = os.environ.get("SSL_CERT_FILE")
+    if _cert_file and os.path.isfile(_cert_file):
+        _SSL_CONTEXT = ssl.create_default_context(cafile=_cert_file)
+    else:
+        _SSL_CONTEXT = ssl.create_default_context()
 
 
 class LicenseClientError(RuntimeError):

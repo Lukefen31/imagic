@@ -272,6 +272,64 @@ class PreviewEngine:
         if grade_name != "natural" and grade_intensity > 0:
             img = apply_color_grade(img, grade, grade_intensity)
 
+        # ==============================================================
+        # Expert mode adjustments
+        # ==============================================================
+
+        # -- Tone Curve (per-channel or luminance) --
+        img = _apply_tone_curves(img, params)
+
+        # -- Soft Light / Glow --
+        soft_light = params.get("soft_light", 0) / 100.0
+        if soft_light > 0:
+            # Screen blend: result = 1 - (1-a)(1-b), mixed by strength
+            screen = 1.0 - (1.0 - img) * (1.0 - img)
+            img = img * (1.0 - soft_light) + screen * soft_light
+
+        # -- Micro Sharpening --
+        micro_strength = params.get("micro_sharp_strength", 0) / 100.0
+        if micro_strength > 0:
+            try:
+                from scipy.ndimage import gaussian_filter
+                micro_contrast = params.get("micro_sharp_contrast", 20) / 100.0
+                # Small-radius sharpening for fine detail
+                blurred = gaussian_filter(img, sigma=[0.5, 0.5, 0])
+                detail = img - blurred
+                # Only boost detail above a contrast threshold
+                detail_mag = np.abs(detail)
+                mask = np.clip(detail_mag / max(micro_contrast * 0.3, 0.01), 0, 1)
+                img = img + detail * micro_strength * 1.5 * mask
+            except ImportError:
+                pass
+
+        # -- Defringe (simple chromatic aberration reduction) --
+        defringe_radius = params.get("defringe_radius", 20)
+        defringe_threshold = params.get("defringe_threshold", 13)
+        if defringe_radius != 20 or defringe_threshold != 13:
+            try:
+                from scipy.ndimage import gaussian_filter
+                radius = defringe_radius / 10.0  # 0.5-5.0
+                lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
+                for ch in range(3):
+                    diff = img[:, :, ch] - lum
+                    fringe_mask = np.abs(diff) > (defringe_threshold / 100.0)
+                    if np.any(fringe_mask):
+                        smoothed = gaussian_filter(img[:, :, ch], sigma=radius)
+                        img[:, :, ch] = np.where(fringe_mask, smoothed, img[:, :, ch])
+            except ImportError:
+                pass
+
+        # -- Perspective Correction --
+        persp_h = params.get("perspective_h", 0)
+        persp_v = params.get("perspective_v", 0)
+        if persp_h != 0 or persp_v != 0:
+            img = _apply_perspective(img, persp_h, persp_v)
+
+        # -- Distortion Correction --
+        distortion = params.get("distortion", 0)
+        if distortion != 0:
+            img = _apply_distortion(img, distortion / 100.0)
+
         # -- Final clip and convert --
         return np.clip(img * 255, 0, 255).astype(np.uint8)
 
@@ -435,3 +493,179 @@ def apply_color_grade(img: np.ndarray, grade: dict, intensity: float) -> np.ndar
         graded = img * (1.0 - intensity) + graded * intensity
 
     return graded
+
+
+# ======================================================================
+# Expert mode helpers
+# ======================================================================
+
+def _apply_tone_curves(img: np.ndarray, params: dict) -> np.ndarray:
+    """Apply user-drawn tone curves (luminance and/or per-channel).
+
+    Curve data is stored as ``tone_curve_luminance``, ``tone_curve_red``,
+    ``tone_curve_green``, ``tone_curve_blue`` — each a list of (x, y)
+    control points in [0, 1].
+    """
+    has_curve = any(f"tone_curve_{ch}" in params for ch in ("luminance", "red", "green", "blue"))
+    if not has_curve:
+        return img
+
+    def _build_lut(points, size=256):
+        """Monotone cubic interpolation from control points to LUT."""
+        if len(points) < 2:
+            return None
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        # Check if it's just the identity line
+        if len(points) == 2 and abs(xs[0]) < 0.001 and abs(ys[0]) < 0.001 and abs(xs[1] - 1) < 0.001 and abs(ys[1] - 1) < 0.001:
+            return None
+        n = len(xs)
+        if n == 2:
+            # Linear interpolation
+            lut = np.linspace(ys[0], ys[1], size).astype(np.float32)
+            return np.clip(lut, 0, 1)
+
+        # Hermite spline interpolation
+        deltas = [(ys[i + 1] - ys[i]) / max(xs[i + 1] - xs[i], 1e-6) for i in range(n - 1)]
+        ms = [0.0] * n
+        ms[0] = deltas[0]
+        ms[-1] = deltas[-1]
+        for i in range(1, n - 1):
+            if deltas[i - 1] * deltas[i] <= 0:
+                ms[i] = 0
+            else:
+                ms[i] = (deltas[i - 1] + deltas[i]) / 2
+        for i in range(n - 1):
+            if abs(deltas[i]) < 1e-10:
+                ms[i] = 0
+                ms[i + 1] = 0
+            else:
+                alpha = ms[i] / deltas[i]
+                beta = ms[i + 1] / deltas[i]
+                s = alpha * alpha + beta * beta
+                if s > 9:
+                    tau = 3.0 / (s ** 0.5)
+                    ms[i] = tau * alpha * deltas[i]
+                    ms[i + 1] = tau * beta * deltas[i]
+
+        lut = np.zeros(size, dtype=np.float32)
+        for j in range(size):
+            x = j / (size - 1)
+            seg = 0
+            for i in range(n - 1):
+                if x >= xs[i]:
+                    seg = i
+            if seg >= n - 1:
+                seg = n - 2
+            h = xs[seg + 1] - xs[seg]
+            if h < 1e-10:
+                lut[j] = ys[seg]
+                continue
+            t = (x - xs[seg]) / h
+            h00 = 2 * t ** 3 - 3 * t ** 2 + 1
+            h10 = t ** 3 - 2 * t ** 2 + t
+            h01 = -2 * t ** 3 + 3 * t ** 2
+            h11 = t ** 3 - t ** 2
+            lut[j] = h00 * ys[seg] + h10 * h * ms[seg] + h01 * ys[seg + 1] + h11 * h * ms[seg + 1]
+        return np.clip(lut, 0, 1)
+
+    # Luminance curve
+    lum_pts = params.get("tone_curve_luminance")
+    if lum_pts and len(lum_pts) >= 2:
+        lut = _build_lut(lum_pts)
+        if lut is not None:
+            lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
+            lum_clipped = np.clip(lum, 0, 1)
+            indices = (lum_clipped * 255).astype(np.int32)
+            indices = np.clip(indices, 0, 255)
+            lum_new = lut[indices]
+            ratio = lum_new / (lum + 1e-7)
+            img = img * ratio[:, :, np.newaxis]
+            img = np.clip(img, 0, 1)
+
+    # Per-channel curves
+    for ch_idx, ch_name in enumerate(("red", "green", "blue")):
+        pts = params.get(f"tone_curve_{ch_name}")
+        if pts and len(pts) >= 2:
+            lut = _build_lut(pts)
+            if lut is not None:
+                ch = np.clip(img[:, :, ch_idx], 0, 1)
+                indices = (ch * 255).astype(np.int32)
+                indices = np.clip(indices, 0, 255)
+                img[:, :, ch_idx] = lut[indices]
+
+    return img
+
+
+def _apply_perspective(img: np.ndarray, h_angle: float, v_angle: float) -> np.ndarray:
+    """Apply perspective correction using affine approximation.
+
+    h_angle and v_angle are in degrees (-45 to 45).
+    """
+    if abs(h_angle) < 0.5 and abs(v_angle) < 0.5:
+        return img
+
+    try:
+        import cv2
+        rows, cols = img.shape[:2]
+        # Convert angles to perspective transform
+        h_rad = math.radians(h_angle * 0.5)
+        v_rad = math.radians(v_angle * 0.5)
+
+        # Source corners
+        src = np.float32([
+            [0, 0], [cols, 0],
+            [cols, rows], [0, rows],
+        ])
+
+        # Destination with perspective shift
+        h_shift = math.tan(h_rad) * rows * 0.3
+        v_shift = math.tan(v_rad) * cols * 0.3
+
+        dst = np.float32([
+            [0 + h_shift, 0 + v_shift],
+            [cols - h_shift, 0 - v_shift],
+            [cols + h_shift, rows + v_shift],
+            [0 - h_shift, rows - v_shift],
+        ])
+
+        M = cv2.getPerspectiveTransform(src, dst)
+        result = cv2.warpPerspective(
+            img, M, (cols, rows),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REFLECT_101,
+        )
+        return result
+    except ImportError:
+        return img
+
+
+def _apply_distortion(img: np.ndarray, amount: float) -> np.ndarray:
+    """Apply barrel/pincushion distortion correction.
+
+    amount > 0 = barrel correction (counteracts pincushion)
+    amount < 0 = pincushion correction (counteracts barrel)
+    """
+    if abs(amount) < 0.005:
+        return img
+
+    try:
+        import cv2
+        rows, cols = img.shape[:2]
+        # Camera matrix (centered)
+        fx = fy = max(rows, cols)
+        cx, cy = cols / 2.0, rows / 2.0
+        camera_matrix = np.array([
+            [fx, 0, cx],
+            [0, fy, cy],
+            [0, 0, 1],
+        ], dtype=np.float64)
+
+        # Distortion coefficients: k1 controls barrel/pincushion
+        k1 = -amount * 0.5
+        dist_coeffs = np.array([k1, 0, 0, 0, 0], dtype=np.float64)
+
+        result = cv2.undistort(img, camera_matrix, dist_coeffs)
+        return result
+    except ImportError:
+        return img

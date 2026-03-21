@@ -42,6 +42,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -103,6 +104,7 @@ from imagic.services.preview_engine import (
 )
 from imagic.services.editor_style_presets import get_editor_style_overrides
 from imagic.views.widgets.ai_loading_modal import AILoadingModal
+from imagic.views.widgets.tone_curve import ToneCurveWidget
 
 
 
@@ -1419,6 +1421,20 @@ class PhotoEditorWidget(QWidget):
         reset_btn.clicked.connect(self._reset_all)
         layout.addWidget(reset_btn)
 
+        # Expert mode toggle
+        self._expert_btn = QPushButton("🔧 Expert")
+        self._expert_btn.setCheckable(True)
+        self._expert_btn.setStyleSheet(
+            f"QPushButton {{ background: #222; color: {_TEXT_DIM}; "
+            f"border: 1px solid #444; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
+            f"QPushButton:hover {{ background: #2a2a2a; color: {_TEXT}; border-color: #555; }}"
+            f"QPushButton:checked {{ background: #7c4dff; color: #fff; font-weight: bold; border-color: #7c4dff; }}"
+        )
+        self._expert_btn.setToolTip("Toggle expert editing panels (advanced RawTherapee controls)")
+        self._expert_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._expert_btn.toggled.connect(self._toggle_expert_mode)
+        layout.addWidget(self._expert_btn)
+
         layout.addSpacing(20)
 
         # Save All Edits (persist to DB without exporting)
@@ -1663,6 +1679,228 @@ class PhotoEditorWidget(QWidget):
         sec.add_widget(ai_bw_btn)
 
         self._panels_layout.addWidget(sec)
+
+        # ==============================================================
+        # EXPERT MODE PANELS (hidden by default)
+        # ==============================================================
+        self._expert_sections: list[QWidget] = []
+
+        # ═══════════ TONE CURVE ═══════════
+        sec = _CollapsibleSection("TONE CURVE")
+        self._tone_curve_widget = ToneCurveWidget()
+        self._tone_curve_widget.curve_changed.connect(self._schedule_preview)
+        self._tone_curve_widget.curve_changed.connect(self._commit_undo_state)
+        sec.add_widget(self._tone_curve_widget)
+
+        curve_info = QLabel("Click to add • Drag to move • Right-click to remove • Double-click to reset")
+        curve_info.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 9px;")
+        curve_info.setWordWrap(True)
+        sec.add_widget(curve_info)
+
+        # Channel selector for tone curve
+        ch_row = QHBoxLayout()
+        ch_lbl = QLabel("Channel:")
+        ch_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 10px;")
+        ch_row.addWidget(ch_lbl)
+        self._curve_channel = QComboBox()
+        self._curve_channel.addItems(["Luminance", "Red", "Green", "Blue"])
+        self._curve_channel.setFixedHeight(24)
+        self._curve_channel.setStyleSheet(
+            f"QComboBox {{ background: #222; color: {_TEXT}; border: 1px solid #444; "
+            f"border-radius: 4px; padding: 2px 8px; font-size: 10px; }}"
+            f"QComboBox::drop-down {{ border: none; }}"
+            f"QComboBox QAbstractItemView {{ background: #222; color: {_TEXT}; "
+            f"selection-background-color: {_ACCENT}; }}"
+        )
+        self._curve_channel.currentIndexChanged.connect(self._on_curve_channel_changed)
+        ch_row.addWidget(self._curve_channel)
+        ch_row.addStretch()
+        sec.add_layout(ch_row)
+
+        sec.setVisible(False)
+        self._expert_sections.append(sec)
+        self._panels_layout.addWidget(sec)
+
+        # Store per-channel curves: {channel_name: [(x,y), ...]}
+        self._curve_data = {
+            "Luminance": [(0.0, 0.0), (1.0, 1.0)],
+            "Red": [(0.0, 0.0), (1.0, 1.0)],
+            "Green": [(0.0, 0.0), (1.0, 1.0)],
+            "Blue": [(0.0, 0.0), (1.0, 1.0)],
+        }
+        self._current_curve_channel = "Luminance"
+
+        # ═══════════ ADVANCED TONE ═══════════
+        sec = _CollapsibleSection("ADVANCED TONE")
+        sec._toggle()  # start collapsed
+        adv_tone_sliders = [
+            ("hl_compression", "Highlight Compression", 0, 500, 80),
+            ("shadow_compression", "Shadow Compression", 0, 100, 60),
+            ("lc_radius", "Local Contrast Radius", 20, 200, 80),
+            ("lc_darkness", "LC Darkness", 0, 100, 50),
+            ("lc_lightness", "LC Lightness", 0, 100, 50),
+            ("soft_light", "Soft Light / Glow", 0, 100, 0),
+        ]
+        for key, label, lo, hi, default in adv_tone_sliders:
+            s = _SliderRow(label, lo, hi, default)
+            s.value_changed.connect(self._schedule_preview)
+            s.released.connect(self._commit_undo_state)
+            sec.add_widget(s)
+            self._sliders[key] = s
+
+        # Highlight recovery method
+        hr_row = QHBoxLayout()
+        hr_lbl = QLabel("HL Recovery:")
+        hr_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 10px;")
+        hr_row.addWidget(hr_lbl)
+        self._hl_recovery_combo = QComboBox()
+        self._hl_recovery_combo.addItems(["Blend", "Luminance", "CIELab"])
+        self._hl_recovery_combo.setFixedHeight(24)
+        self._hl_recovery_combo.setStyleSheet(
+            f"QComboBox {{ background: #222; color: {_TEXT}; border: 1px solid #444; "
+            f"border-radius: 4px; padding: 2px 8px; font-size: 10px; }}"
+            f"QComboBox::drop-down {{ border: none; }}"
+            f"QComboBox QAbstractItemView {{ background: #222; color: {_TEXT}; "
+            f"selection-background-color: {_ACCENT}; }}"
+        )
+        hr_row.addWidget(self._hl_recovery_combo)
+        hr_row.addStretch()
+        sec.add_layout(hr_row)
+
+        sec.setVisible(False)
+        self._expert_sections.append(sec)
+        self._panels_layout.addWidget(sec)
+
+        # ═══════════ ADVANCED DETAIL ═══════════
+        sec = _CollapsibleSection("ADVANCED DETAIL")
+        sec._toggle()  # start collapsed
+        adv_detail_sliders = [
+            ("micro_sharp_strength", "Micro Sharpen", 0, 100, 0),
+            ("micro_sharp_contrast", "Micro Contrast", 0, 100, 20),
+            ("sharp_threshold", "Sharpen Threshold", 0, 100, 20),
+            ("halo_control", "Halo Control", 0, 100, 85),
+            ("defringe_radius", "Defringe Radius", 5, 50, 20),
+            ("defringe_threshold", "Defringe Threshold", 0, 50, 13),
+        ]
+        for key, label, lo, hi, default in adv_detail_sliders:
+            s = _SliderRow(label, lo, hi, default)
+            s.value_changed.connect(self._schedule_preview)
+            s.released.connect(self._commit_undo_state)
+            sec.add_widget(s)
+            self._sliders[key] = s
+
+        sec.setVisible(False)
+        self._expert_sections.append(sec)
+        self._panels_layout.addWidget(sec)
+
+        # ═══════════ LENS & GEOMETRY ═══════════
+        sec = _CollapsibleSection("LENS & GEOMETRY")
+        sec._toggle()  # start collapsed
+
+        # Auto lens profile checkbox
+        self._auto_lens_cb = QCheckBox("Auto Lens Profile")
+        self._auto_lens_cb.setChecked(True)
+        self._auto_lens_cb.setStyleSheet(
+            f"QCheckBox {{ color: {_TEXT}; font-size: 11px; spacing: 6px; }}"
+            f"QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid #555; "
+            f"border-radius: 3px; background: #222; }}"
+            f"QCheckBox::indicator:checked {{ background: {_ACCENT}; border-color: {_ACCENT}; }}"
+        )
+        sec.add_widget(self._auto_lens_cb)
+
+        lens_geo_sliders = [
+            ("distortion", "Distortion", -100, 100, 0),
+            ("perspective_h", "Perspective Horiz", -45, 45, 0),
+            ("perspective_v", "Perspective Vert", -45, 45, 0),
+        ]
+        for key, label, lo, hi, default in lens_geo_sliders:
+            s = _SliderRow(label, lo, hi, default)
+            s.value_changed.connect(self._schedule_preview)
+            s.released.connect(self._commit_undo_state)
+            sec.add_widget(s)
+            self._sliders[key] = s
+
+        sec.setVisible(False)
+        self._expert_sections.append(sec)
+        self._panels_layout.addWidget(sec)
+
+        # ═══════════ RAW ENGINE ═══════════
+        sec = _CollapsibleSection("RAW ENGINE")
+        sec._toggle()  # start collapsed
+
+        export_note = QLabel("These settings affect final export only (not preview)")
+        export_note.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 9px; font-style: italic;")
+        export_note.setWordWrap(True)
+        sec.add_widget(export_note)
+
+        combo_style = (
+            f"QComboBox {{ background: #222; color: {_TEXT}; border: 1px solid #444; "
+            f"border-radius: 4px; padding: 4px 8px; font-size: 10px; }}"
+            f"QComboBox::drop-down {{ border: none; }}"
+            f"QComboBox QAbstractItemView {{ background: #222; color: {_TEXT}; "
+            f"selection-background-color: {_ACCENT}; }}"
+        )
+
+        # Demosaic method
+        dm_row = QHBoxLayout()
+        dm_lbl = QLabel("Demosaic:")
+        dm_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 10px;")
+        dm_row.addWidget(dm_lbl)
+        self._demosaic_combo = QComboBox()
+        self._demosaic_combo.addItems(["amaze", "rcd", "igv", "lmmse", "dcb", "vng4"])
+        self._demosaic_combo.setFixedHeight(26)
+        self._demosaic_combo.setStyleSheet(combo_style)
+        dm_row.addWidget(self._demosaic_combo)
+        dm_row.addStretch()
+        sec.add_layout(dm_row)
+
+        # Working profile
+        wp_row = QHBoxLayout()
+        wp_lbl = QLabel("Working:")
+        wp_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 10px;")
+        wp_row.addWidget(wp_lbl)
+        self._working_profile_combo = QComboBox()
+        self._working_profile_combo.addItems(["ProPhoto", "sRGB", "Adobe RGB", "WideGamut", "BestRGB", "Rec2020"])
+        self._working_profile_combo.setFixedHeight(26)
+        self._working_profile_combo.setStyleSheet(combo_style)
+        wp_row.addWidget(self._working_profile_combo)
+        wp_row.addStretch()
+        sec.add_layout(wp_row)
+
+        # Output profile
+        op_row = QHBoxLayout()
+        op_lbl = QLabel("Output:")
+        op_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 10px;")
+        op_row.addWidget(op_lbl)
+        self._output_profile_combo = QComboBox()
+        self._output_profile_combo.addItems(["RTv4_sRGB", "RTv4_AdobeRGB", "RTv4_ProPhoto", "RTv4_Rec2020", "RTv4_Large"])
+        self._output_profile_combo.setFixedHeight(26)
+        self._output_profile_combo.setStyleSheet(combo_style)
+        op_row.addWidget(self._output_profile_combo)
+        op_row.addStretch()
+        sec.add_layout(op_row)
+
+        sec.setVisible(False)
+        self._expert_sections.append(sec)
+        self._panels_layout.addWidget(sec)
+
+    # ------------------------------------------------------------------
+    # Expert mode toggle
+    # ------------------------------------------------------------------
+
+    def _toggle_expert_mode(self, enabled: bool) -> None:
+        """Show or hide expert editing panels."""
+        for sec in self._expert_sections:
+            sec.setVisible(enabled)
+
+    def _on_curve_channel_changed(self, index: int) -> None:
+        """Switch between luminance/R/G/B curve channels."""
+        # Save current channel's points
+        self._curve_data[self._current_curve_channel] = list(self._tone_curve_widget.get_points())
+        # Load new channel
+        channel = self._curve_channel.currentText()
+        self._current_curve_channel = channel
+        self._tone_curve_widget.set_points(self._curve_data[channel])
 
     # ------------------------------------------------------------------
     # Photo loading
@@ -1942,6 +2180,39 @@ class PhotoEditorWidget(QWidget):
         self._grade_intensity.set_value(int(intensity))
         self._highlight_selected_grade(grade)
 
+        # Expert mode: restore tone curves
+        for ch in ("Luminance", "Red", "Green", "Blue"):
+            key = f"tone_curve_{ch.lower()}"
+            if key in overrides:
+                pts = overrides[key]
+                if isinstance(pts, list) and len(pts) >= 2:
+                    self._curve_data[ch] = [(p[0], p[1]) for p in pts]
+                else:
+                    self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
+            else:
+                self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
+        self._tone_curve_widget.set_points(self._curve_data[self._current_curve_channel])
+
+        # Expert combos
+        if "hl_recovery_method" in overrides:
+            idx = self._hl_recovery_combo.findText(overrides["hl_recovery_method"])
+            if idx >= 0:
+                self._hl_recovery_combo.setCurrentIndex(idx)
+        if "demosaic_method" in overrides:
+            idx = self._demosaic_combo.findText(overrides["demosaic_method"])
+            if idx >= 0:
+                self._demosaic_combo.setCurrentIndex(idx)
+        if "working_profile" in overrides:
+            idx = self._working_profile_combo.findText(overrides["working_profile"])
+            if idx >= 0:
+                self._working_profile_combo.setCurrentIndex(idx)
+        if "output_profile" in overrides:
+            idx = self._output_profile_combo.findText(overrides["output_profile"])
+            if idx >= 0:
+                self._output_profile_combo.setCurrentIndex(idx)
+        if "auto_lens_profile" in overrides:
+            self._auto_lens_cb.setChecked(bool(overrides["auto_lens_profile"]))
+
     # ------------------------------------------------------------------
     # Preview
     # ------------------------------------------------------------------
@@ -1953,6 +2224,24 @@ class PhotoEditorWidget(QWidget):
             params[key] = slider.value()
         params["color_grade"] = self._grade_combo.currentText()
         params["color_grade_intensity"] = self._grade_intensity.value()
+
+        # Expert mode: tone curve data
+        if self._expert_btn.isChecked():
+            # Save current channel first
+            self._curve_data[self._current_curve_channel] = list(
+                self._tone_curve_widget.get_points()
+            )
+            for ch, pts in self._curve_data.items():
+                if len(pts) > 2 or (len(pts) == 2 and (pts[0] != (0.0, 0.0) or pts[1] != (1.0, 1.0))):
+                    params[f"tone_curve_{ch.lower()}"] = pts
+
+            # Expert combos
+            params["hl_recovery_method"] = self._hl_recovery_combo.currentText()
+            params["demosaic_method"] = self._demosaic_combo.currentText()
+            params["working_profile"] = self._working_profile_combo.currentText()
+            params["output_profile"] = self._output_profile_combo.currentText()
+            params["auto_lens_profile"] = self._auto_lens_cb.isChecked()
+
         return params
 
     def _schedule_preview(self) -> None:
@@ -2014,6 +2303,15 @@ class PhotoEditorWidget(QWidget):
         intensity = params.get("color_grade_intensity", 100)
         self._grade_intensity.set_value(int(intensity))
         self._highlight_selected_grade(grade)
+
+        # Restore expert tone curves
+        for ch in ("Luminance", "Red", "Green", "Blue"):
+            key = f"tone_curve_{ch.lower()}"
+            if key in params:
+                self._curve_data[ch] = [(p[0], p[1]) for p in params[key]]
+            else:
+                self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
+        self._tone_curve_widget.set_points(self._curve_data[self._current_curve_channel])
 
     def _update_preview(self) -> None:
         """Apply current adjustments to the RAW data and display."""
@@ -2178,6 +2476,16 @@ class PhotoEditorWidget(QWidget):
         self._canvas.clear_crop()
         if self._crop_btn.isChecked():
             self._crop_btn.setChecked(False)
+        # Reset expert tone curves
+        for ch in self._curve_data:
+            self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
+        self._tone_curve_widget.reset()
+        # Reset expert combos
+        self._hl_recovery_combo.setCurrentIndex(0)
+        self._demosaic_combo.setCurrentIndex(0)
+        self._working_profile_combo.setCurrentIndex(0)
+        self._output_profile_combo.setCurrentIndex(0)
+        self._auto_lens_cb.setChecked(True)
         self._schedule_preview()
         self._commit_undo_state()
 

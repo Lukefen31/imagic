@@ -870,6 +870,115 @@ def generate_pp3(
         soft_light = max(0, int(soft_light * (1.0 - dampen_factor * 0.6)))
 
     # ------------------------------------------------------------------
+    # Expert mode overrides
+    # ------------------------------------------------------------------
+    if manual_overrides:
+        # Soft light slider
+        ov_soft = manual_overrides.get("soft_light", 0)
+        if ov_soft:
+            soft_light = max(0, min(100, soft_light + ov_soft))
+
+        # Highlight compression
+        ov_hl_comp = manual_overrides.get("hl_compression")
+        if ov_hl_comp is not None and ov_hl_comp != 80:
+            hl_comp = max(0, min(500, ov_hl_comp))
+
+        # Shadow compression
+        ov_sh_comp = manual_overrides.get("shadow_compression")
+        if ov_sh_comp is not None and ov_sh_comp != 60:
+            shadow_comp = max(0, min(100, ov_sh_comp))
+
+        # Local contrast fine-tuning
+        ov_lc_radius = manual_overrides.get("lc_radius")
+        if ov_lc_radius is not None and ov_lc_radius != 80:
+            lc_radius = max(20, min(200, ov_lc_radius))
+        else:
+            lc_radius = 80
+
+        ov_lc_dark = manual_overrides.get("lc_darkness")
+        if ov_lc_dark is not None and ov_lc_dark != 50:
+            lc_darkness = round(ov_lc_dark / 50.0, 2)  # 0-100 → 0.0-2.0
+        else:
+            lc_darkness = 1
+
+        ov_lc_light = manual_overrides.get("lc_lightness")
+        if ov_lc_light is not None and ov_lc_light != 50:
+            lc_lightness = round(ov_lc_light / 50.0, 2)
+        else:
+            lc_lightness = 1
+
+        # Micro sharpening
+        ov_micro_str = manual_overrides.get("micro_sharp_strength", 0)
+        if ov_micro_str > 0:
+            micro_enabled = True
+            micro_strength = max(0, min(100, micro_strength + ov_micro_str))
+        ov_micro_con = manual_overrides.get("micro_sharp_contrast")
+        if ov_micro_con is not None and ov_micro_con != 20:
+            micro_contrast = max(0, min(100, ov_micro_con))
+
+        # Sharpen threshold
+        ov_sharp_thresh = manual_overrides.get("sharp_threshold")
+        if ov_sharp_thresh is not None and ov_sharp_thresh != 20:
+            sharp_threshold = f"{ov_sharp_thresh};{min(ov_sharp_thresh * 4, 400)};2000;1200;"
+        else:
+            sharp_threshold = None
+
+        # Halo control
+        ov_halo = manual_overrides.get("halo_control")
+        if ov_halo is not None and ov_halo != 85:
+            halo_amount = max(0, min(100, ov_halo))
+        else:
+            halo_amount = 85
+
+        # Defringe
+        ov_defr_radius = manual_overrides.get("defringe_radius")
+        ov_defr_thresh = manual_overrides.get("defringe_threshold")
+        if ov_defr_radius is not None and ov_defr_radius != 20:
+            defringe_radius = round(ov_defr_radius / 10.0, 1)
+        else:
+            defringe_radius = 2
+        if ov_defr_thresh is not None and ov_defr_thresh != 13:
+            defringe_threshold = ov_defr_thresh
+        else:
+            defringe_threshold = 13
+
+        # Highlight recovery method
+        ov_hl_method = manual_overrides.get("hl_recovery_method", "Blend")
+
+        # Distortion correction
+        ov_distortion = manual_overrides.get("distortion", 0)
+
+        # Perspective
+        ov_persp_h = manual_overrides.get("perspective_h", 0)
+        ov_persp_v = manual_overrides.get("perspective_v", 0)
+
+        # Auto lens profile
+        ov_auto_lens = manual_overrides.get("auto_lens_profile", True)
+
+        # Demosaic method
+        ov_demosaic = manual_overrides.get("demosaic_method", "amaze")
+
+        # Color management
+        ov_working = manual_overrides.get("working_profile", "ProPhoto")
+        ov_output = manual_overrides.get("output_profile", "RTv4_sRGB")
+    else:
+        lc_radius = 80
+        lc_darkness = 1
+        lc_lightness = 1
+        sharp_threshold = None
+        halo_amount = 85
+        defringe_radius = 2
+        defringe_threshold = 13
+        ov_hl_method = "Blend"
+        ov_distortion = 0
+        ov_persp_h = 0
+        ov_persp_v = 0
+        ov_auto_lens = True
+        ov_demosaic = "amaze"
+        ov_working = "ProPhoto"
+        ov_output = "RTv4_sRGB"
+
+    # ------------------------------------------------------------------
     # White balance override
     # ------------------------------------------------------------------
     wb_setting = "Camera"
@@ -891,9 +1000,61 @@ def generate_pp3(
         wb_green = round(1.0 + ov_tint_final * 0.005, 3)
 
     # ------------------------------------------------------------------
-    # Tone curve (artistic)
+    # Tone curve (artistic or user-drawn)
     # ------------------------------------------------------------------
     tone_curve = color_grade.tone_curve or "0;"
+
+    # Expert mode: user-drawn tone curves override artistic
+    user_tone_curve = None
+    user_curve2 = None
+    _has_rgb_curves = False
+    rgb_curve_sections = ""
+    if manual_overrides:
+        lum_pts = manual_overrides.get("tone_curve_luminance")
+        if lum_pts and len(lum_pts) >= 2:
+            # Check it's not just the default identity line
+            is_default = (len(lum_pts) == 2
+                          and abs(lum_pts[0][0]) < 0.01 and abs(lum_pts[0][1]) < 0.01
+                          and abs(lum_pts[1][0] - 1) < 0.01 and abs(lum_pts[1][1] - 1) < 0.01)
+            if not is_default:
+                # RT curve format: type;x1;y1;x2;y2;...
+                # type 1 = spline, 3 = parametric (we use 1)
+                pts_str = ";".join(f"{p[0]:.3f};{p[1]:.3f}" for p in lum_pts)
+                user_tone_curve = f"1;{pts_str};"
+
+        # Per-channel curves go into Curve2 (RT supports dual curves)
+        red_pts = manual_overrides.get("tone_curve_red")
+        green_pts = manual_overrides.get("tone_curve_green")
+        blue_pts = manual_overrides.get("tone_curve_blue")
+        # RT doesn't have separate R/G/B curves in the main Exposure section,
+        # but we can use the RGB Curves section
+        _has_rgb_curves = False
+        rgb_curve_sections = ""
+        for ch_name, ch_pts in [("Red", red_pts), ("Green", green_pts), ("Blue", blue_pts)]:
+            if ch_pts and len(ch_pts) >= 2:
+                is_def = (len(ch_pts) == 2
+                          and abs(ch_pts[0][0]) < 0.01 and abs(ch_pts[0][1]) < 0.01
+                          and abs(ch_pts[1][0] - 1) < 0.01 and abs(ch_pts[1][1] - 1) < 0.01)
+                if not is_def:
+                    _has_rgb_curves = True
+
+        if _has_rgb_curves:
+            def _fmt_curve(pts):
+                if not pts or len(pts) < 2:
+                    return "0;"
+                pts_str = ";".join(f"{p[0]:.3f};{p[1]:.3f}" for p in pts)
+                return f"1;{pts_str};"
+
+            rgb_curve_sections = f"""
+[RGB Curves]
+Enabled=true
+LumaMode=false
+rCurve={_fmt_curve(red_pts)}
+gCurve={_fmt_curve(green_pts)}
+bCurve={_fmt_curve(blue_pts)}"""
+
+    if user_tone_curve:
+        tone_curve = user_tone_curve
 
     # ------------------------------------------------------------------
     # Crop (if auto-crop data present)
@@ -1033,14 +1194,14 @@ Curve2=0;
 
 [HLRecovery]
 Enabled=true
-Method=Blend
+Method={ov_hl_method}
 
 [Local Contrast]
 Enabled=true
-Radius=80
+Radius={lc_radius}
 Amount={lc_amount:.2f}
-Darkness=1
-Lightness=1
+Darkness={lc_darkness}
+Lightness={lc_lightness}
 
 [Sharpening]
 Enabled=true
@@ -1048,10 +1209,10 @@ Contrast={sharp_contrast}
 Method=usm
 Radius={sharp_radius:.1f}
 Amount={sharp_amount}
-Threshold=20;80;2000;1200;
+Threshold={sharp_threshold if sharp_threshold else '20;80;2000;1200;'}
 OnlyEdges=false
 HalocontrolEnabled=true
-HalocontrolAmount=85
+HalocontrolAmount={halo_amount}
 
 [SharpenMicro]
 Enabled={'true' if micro_enabled else 'false'}
@@ -1077,8 +1238,8 @@ Equal=1
 
 [Defringing]
 Enabled=true
-Radius=2
-Threshold=13
+Radius={defringe_radius}
+Threshold={defringe_threshold}
 
 [Noise Reduction]
 Enabled=true
@@ -1105,8 +1266,8 @@ ToneCurve=false
 ApplyLookTable=true
 ApplyBaselineExposureOffset=true
 ApplyHueSatMap=true
-WorkingProfile=ProPhoto
-OutputProfile=RTv4_sRGB
+WorkingProfile={ov_working}
+OutputProfile={ov_output}
 OutputProfileIntent=Perceptual
 OutputBPC=true
 
@@ -1115,19 +1276,27 @@ Enabled=true
 Strength={soft_light}
 
 [LensProfile]
-LcMode=lfauto
-UseDistortion=true
-UseVignette=true
-UseCA=true
+LcMode={'lfauto' if ov_auto_lens else 'lfoff'}
+UseDistortion={'true' if ov_auto_lens else 'false'}
+UseVignette={'true' if ov_auto_lens else 'false'}
+UseCA={'true' if ov_auto_lens else 'false'}
 {crop_section}
 {grain_section}
 {color_toning_section}
 {hsv_section}
 {vignette_section}
 {bw_section}
+{rgb_curve_sections if manual_overrides and _has_rgb_curves else ''}
 
 [Demosaicing]
-Method=amaze
+Method={ov_demosaic}
+
+[Distortion]
+Amount={round(ov_distortion * 0.005, 4) if ov_distortion else 0}
+
+[Perspective]
+Horizontal={ov_persp_h if ov_persp_h else 0}
+Vertical={ov_persp_v if ov_persp_v else 0}
 
 [MetaData]
 Mode=0

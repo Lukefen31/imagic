@@ -454,7 +454,7 @@ def run_gui(args: argparse.Namespace) -> int:
         db = DatabaseManager.get()
         session = db.get_session()
         try:
-            photos = session.query(Photo).order_by(Photo.created_at.desc()).limit(500).all()
+            photos = session.query(Photo).order_by(Photo.created_at.desc()).all()
             data = [
                 {
                     "id": p.id,
@@ -524,7 +524,6 @@ def run_gui(args: argparse.Namespace) -> int:
                 session.query(Photo)
                 .filter(Photo.thumbnail_path.isnot(None))
                 .order_by(Photo.created_at.desc())
-                .limit(200)
                 .all()
             )
             records = [
@@ -560,7 +559,6 @@ def run_gui(args: argparse.Namespace) -> int:
                     s2.query(Photo)
                     .filter(Photo.status != PhotoStatus.TRASH.value)
                     .order_by(Photo.created_at.desc())
-                    .limit(500)
                     .all()
                 )
                 for photo in targets:
@@ -610,7 +608,6 @@ def run_gui(args: argparse.Namespace) -> int:
                 session.query(Photo)
                 .filter(Photo.quality_score.isnot(None))
                 .order_by(Photo.quality_score.asc())
-                .limit(600)
                 .all()
             )
             data = [
@@ -789,7 +786,6 @@ def run_gui(args: argparse.Namespace) -> int:
                 .filter(Photo.status == PhotoStatus.EXPORTED.value)
                 .filter(Photo.export_path.isnot(None))
                 .order_by(Photo.created_at.desc())
-                .limit(500)
                 .all()
             )
             data = [
@@ -846,7 +842,6 @@ def run_gui(args: argparse.Namespace) -> int:
                     .filter(Photo.status == PhotoStatus.EXPORTED.value)
                     .filter(Photo.export_path.isnot(None))
                     .order_by(Photo.created_at.desc())
-                    .limit(500)
                     .all()
                 )
             else:
@@ -854,7 +849,6 @@ def run_gui(args: argparse.Namespace) -> int:
                     session.query(Photo)
                     .filter(Photo.thumbnail_path.isnot(None))
                     .order_by(Photo.created_at.desc())
-                    .limit(500)
                     .all()
                 )
             photo_list = [
@@ -906,7 +900,6 @@ def run_gui(args: argparse.Namespace) -> int:
                 ]))
                 .filter(Photo.thumbnail_path.isnot(None))
                 .order_by(Photo.created_at.desc())
-                .limit(500)
                 .all()
             )
             if not photos:
@@ -916,7 +909,6 @@ def run_gui(args: argparse.Namespace) -> int:
                     .filter(Photo.thumbnail_path.isnot(None))
                     .filter(Photo.status.notin_([PhotoStatus.TRASH.value]))
                     .order_by(Photo.created_at.desc())
-                    .limit(500)
                     .all()
                 )
             photo_list = [

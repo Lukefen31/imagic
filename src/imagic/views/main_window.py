@@ -42,6 +42,7 @@ from imagic.utils.runtime_paths import resolve_resource
 from imagic.views.review_grid import ReviewGridView
 from imagic.views.settings_view import SettingsView
 from imagic.views.widgets.status_bar import StatusBarWidget
+from imagic.views.widgets.ai_loading_modal import AILoadingModal
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,7 @@ class MainWindow(QMainWindow):
     generate_thumbnails_requested = pyqtSignal()
     choose_style_requested = pyqtSignal()
     culling_preview_requested = pyqtSignal()
+    settings_requested = pyqtSignal()
     settings_changed = pyqtSignal(dict)
     refresh_requested = pyqtSignal()
     clear_library_requested = pyqtSignal()
@@ -222,6 +224,10 @@ class MainWindow(QMainWindow):
 
         root.addWidget(right_col, stretch=1)
         self.setCentralWidget(central)
+
+        # ── Full-window loading overlay (hidden by default) ──
+        self._loading_overlay = AILoadingModal(parent=central)
+        self._loading_overlay.hide()
 
         self.processing_view = ProcessingView()
 
@@ -691,7 +697,7 @@ class MainWindow(QMainWindow):
 
         settings_action = QAction("&Settings…", self)
         settings_action.setShortcut(QKeySequence("Ctrl+,"))
-        settings_action.triggered.connect(self._show_settings)
+        settings_action.triggered.connect(self.settings_requested.emit)
         file_menu.addAction(settings_action)
         file_menu.addSeparator()
 
@@ -794,3 +800,21 @@ class MainWindow(QMainWindow):
 
     def show_info(self, title: str, message: str) -> None:
         QMessageBox.information(self, title, message)
+
+    # ==================================================================
+    # Loading overlay control
+    # ==================================================================
+
+    def show_loading(self, title: str = "AI Processing…",
+                     subtitle: str = "", total: int = 0) -> None:
+        """Show the full-window loading overlay and block interaction."""
+        self._loading_overlay.show_message(title, subtitle, total)
+
+    def update_loading(self, current: int, total: int = 0,
+                       subtitle: str = "") -> None:
+        """Update the loading overlay progress."""
+        self._loading_overlay.set_progress(current, total, subtitle)
+
+    def hide_loading(self) -> None:
+        """Hide the loading overlay and restore interaction."""
+        self._loading_overlay.hide_modal()

@@ -84,11 +84,18 @@ class DatabaseManager:
                 ("cull_reasons", "TEXT"),
                 ("color_grade", "VARCHAR(64)"),
                 ("auto_crop_data", "TEXT"),
+                ("perceptual_score", "FLOAT"),
+                ("ai_caption", "TEXT"),
             ]
             for col_name, col_type in migrations:
                 if col_name not in existing:
                     cursor.execute(f"ALTER TABLE photos ADD COLUMN {col_name} {col_type};")
                     logger.info("Migration: added column photos.%s", col_name)
+
+            # Ensure indexes exist for common lookup columns.
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS ix_photos_file_name ON photos (file_name);"
+            )
 
             conn.commit()
             conn.close()

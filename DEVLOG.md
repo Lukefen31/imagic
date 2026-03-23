@@ -1,5 +1,92 @@
 # Imagic — Dev Log
 
+## 2026-03-23 — v0.2.0: Performance, AI pipeline, and UX polish
+
+**Branch:** `main`
+
+---
+
+### What was done this session
+
+#### 1. AI Analysis Pipeline
+- Integrated **pyiqa PerceptualScorer** (MUSIQ model) for image quality scoring.
+- Integrated **Florence-2 ImageDescriptionAnalyzer** for AI-generated captions.
+- Blended scoring: 70% perceptual + 30% penalty-based quality score.
+- Added `perceptual_score` and `ai_caption` columns to the database with automatic migration.
+- Fixed model reload-per-photo bug — models now load once and are reused.
+- Added `AILoadingModal` overlay shown during AI analysis.
+- Added `rank_burst_group()` for burst-group ranking.
+
+#### 2. Auto-Trash Rules
+- Photos with **"severe blur"** or **"significant blur"** penalties are now hard-rejected (auto-trashed).
+- Photos with **"extremely dark"** or **"very dark"** penalties are now hard-rejected.
+- Duplicate sort now uses quality score instead of timestamp.
+
+#### 3. Edit Page Performance Optimizations
+- **Edit proxy**: preview rendering now uses a 1800px proxy (`_raw_rgb_preview`) instead of the full 2500×1650 buffer — significant speedup for slider adjustments.
+- **Shared luminance**: single luminance computation reused across highlights, shadows, whites, blacks, and clarity — eliminates redundant work.
+- **OpenCV blurs**: replaced all `scipy.ndimage.gaussian_filter` / `uniform_filter` calls with `cv2.GaussianBlur` / `cv2.blur` — ~3–5× faster.
+- **Faster demosaic**: switched preview decoding from AHD to DHT — faster with negligible quality difference at preview size.
+- **Zero-copy QImage**: eliminated `.tobytes()` copy; `QImage` now references the NumPy buffer directly via `qimg._numpy_ref`.
+- Navigation cache increased from 3→5 entries with adjacent-photo prefetching.
+- Half-size raw decode for navigation previews.
+
+#### 4. Culling Gallery UX
+- Shortcut hint bar now shows: **K** Keep · **L** Trash · **H** Review · **← →** Navigate · **Esc** Close.
+- Added **"⏳ Decoding RAW…"** loading overlay displayed during raw decode, hidden on completion or cache hit.
+
+#### 5. Settings Dialog Fix
+- Replaced broken monkey-patch approach with a proper `settings_requested = pyqtSignal()` on `MainWindow`.
+- Menu action emits signal; `main.py` connects to handler. Settings dialog now opens reliably.
+
+#### 6. Export Counter & Refresh
+- Status bar now shows exported count alongside keep/trash/review (e.g., "Keep: 12 (5 exported)").
+- Library automatically refreshes after export completes.
+- Export progress overlay with 300ms polling timer.
+
+#### 7. Version Bump & Windows Build
+- Version bumped from 0.1.0 → **0.2.0** across `pyproject.toml`, `__init__.py`, `imagic.spec`, and `imagic-installer.iss`.
+- Windows installer rebuilt with PyInstaller 6.19.0 + Inno Setup 6.
+
+---
+
+### Files changed (24 files)
+
+| File | Change |
+|------|--------|
+| `pyproject.toml` | Version → 0.2.0 |
+| `src/imagic/__init__.py` | Version → 0.2.0 |
+| `src/imagic/ai/base_analyzer.py` | Base analyzer updates for pipeline |
+| `src/imagic/ai/image_describer.py` | **NEW** — Florence-2 image description analyzer |
+| `src/imagic/ai/perceptual_scorer.py` | **NEW** — pyiqa MUSIQ perceptual scorer |
+| `src/imagic/ai/duplicate_detector.py` | Quality-based duplicate sort |
+| `src/imagic/ai/quality_scorer.py` | Rewritten quality scorer with burst ranking |
+| `src/imagic/controllers/ai_controller.py` | 70/30 blended scoring, hard-reject rules for blur & dark |
+| `src/imagic/controllers/app_controller.py` | AI loading modal integration |
+| `src/imagic/controllers/processing_controller.py` | Thread-safe export progress tracking |
+| `src/imagic/main.py` | Settings signal handler, export poll timer, library refresh |
+| `src/imagic/models/database.py` | Added `perceptual_score`, `ai_caption` columns + migration |
+| `src/imagic/models/photo.py` | New model fields |
+| `src/imagic/services/preview_engine.py` | OpenCV blurs, shared luminance, cv2 helpers |
+| `src/imagic/services/feedback_worker.py` | **NEW** — Background feedback worker |
+| `src/imagic/views/culling_preview.py` | Shortcut hints, RAW decode loading overlay |
+| `src/imagic/views/export_gallery.py` | Export progress overlay updates |
+| `src/imagic/views/main_window.py` | `settings_requested` signal, menu wiring |
+| `src/imagic/views/photo_editor.py` | Edit proxy, zero-copy QImage, DHT demosaic, prefetch |
+| `src/imagic/views/widgets/image_viewer.py` | Viewer updates |
+| `src/imagic/views/widgets/status_bar.py` | Exported count display |
+| `src/imagic/views/style_chooser.py` | Style chooser updates |
+| `packaging/windows/imagic-installer.iss` | Version → 0.2.0 |
+| `packaging/windows/imagic.spec` | Version → 0.2.0 |
+
+---
+
+### macOS rebuild required
+
+The macOS DMG must be rebuilt from this commit to pick up all v0.2.0 changes. Run `packaging/macos/build-desktop.sh` from the MacBook.
+
+---
+
 ## 2026-03-19 — Session: Admin CRM Dashboard
 
 **Branch:** `main`

@@ -78,6 +78,10 @@ class Photo(Base):
     # Cull reasons (JSON text — list of per-metric verdicts)
     cull_reasons: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # AI perception
+    perceptual_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ai_caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Per-photo edit settings
     color_grade: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     auto_crop_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -111,6 +115,7 @@ class Photo(Base):
         Index("ix_photos_quality_score", "quality_score"),
         Index("ix_photos_directory", "directory"),
         Index("ix_photos_perceptual_hash", "perceptual_hash"),
+        Index("ix_photos_file_name", "file_name"),
     )
 
     # ------------------------------------------------------------------

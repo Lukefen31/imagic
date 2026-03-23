@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import List, Optional
 
 from imagic.ai.base_analyzer import BaseAnalyzer
 from imagic.ai.duplicate_detector import DuplicateDetector
+from imagic.ai.image_describer import ImageDescriptionAnalyzer
+from imagic.ai.perceptual_scorer import PerceptualScorer
 from imagic.ai.quality_scorer import QualityScorer
 from imagic.models.database import DatabaseManager
 from imagic.models.enums import PhotoStatus
@@ -45,6 +48,8 @@ class AIController:
         task_queue: TaskQueue,
         quality_scorer: Optional[BaseAnalyzer] = None,
         duplicate_detector: Optional[DuplicateDetector] = None,
+        perceptual_scorer: Optional[PerceptualScorer] = None,
+        image_describer: Optional[ImageDescriptionAnalyzer] = None,
         keep_threshold: float = 0.50,
         trash_threshold: float = 0.35,
         duplicate_hash_threshold: int = 10,
@@ -54,8 +59,37 @@ class AIController:
         self._dup_detector = duplicate_detector or DuplicateDetector(
             threshold=duplicate_hash_threshold,
         )
+        self._perceptual = perceptual_scorer or PerceptualScorer()
+        self._describer = image_describer or ImageDescriptionAnalyzer()
         self._keep = keep_threshold
         self._trash = trash_threshold
+
+        # Thread-safe progress state (polled by UI timer).
+        self._progress_lock = threading.Lock()
+        self._progress_current = 0
+        self._progress_total = 0
+        self._progress_file = ""
+        self._progress_phase = ""  # "thumbnails", "models", "scoring", "done"
+
+    def get_progress(self) -> dict:
+        """Return a snapshot of the current analysis progress (thread-safe)."""
+        with self._progress_lock:
+            return {
+                "current": self._progress_current,
+                "total": self._progress_total,
+                "file": self._progress_file,
+                "phase": self._progress_phase,
+            }
+
+    def _set_progress(self, current: int = 0, total: int = 0,
+                      file: str = "", phase: str = "") -> None:
+        with self._progress_lock:
+            self._progress_current = current
+            self._progress_total = total
+            if file:
+                self._progress_file = file
+            if phase:
+                self._progress_phase = phase
 
     # ------------------------------------------------------------------
     # Public API
@@ -109,6 +143,7 @@ class AIController:
                 return stats
 
             logger.info("Analysing %d pending photos…", len(photos))
+            self._set_progress(0, len(photos), phase="thumbnails")
 
             # Ensure thumbnails exist before scoring — avoids Pillow
             # failing on RAW files and reduces processing time.
@@ -131,13 +166,28 @@ class AIController:
                 photo.status = PhotoStatus.ANALYZING.value
             session.commit()
 
-            for photo in photos:
+            # Pre-load all models once before the per-photo loop.
+            self._set_progress(phase="models")
+            self._scorer.ensure_model()
+            try:
+                self._perceptual.ensure_model()
+            except Exception:
+                logger.warning("PerceptualScorer model load failed — skipping perceptual scoring.")
+            try:
+                self._describer.ensure_model()
+            except Exception:
+                logger.warning("ImageDescriptionAnalyzer model load failed — skipping descriptions.")
+
+            self._set_progress(0, len(photos), phase="scoring")
+            for idx, photo in enumerate(photos):
                 # Prefer thumbnail for speed; fall back to raw.
                 image_path = (
                     Path(photo.thumbnail_path)
                     if photo.thumbnail_path and Path(photo.thumbnail_path).is_file()
                     else Path(photo.file_path)
                 )
+
+                self._set_progress(idx, len(photos), file=photo.file_name)
 
                 result = self._scorer.analyse(image_path)
 
@@ -149,6 +199,28 @@ class AIController:
                     cull_reasons = result.labels.get("cull_reasons")
                     if cull_reasons:
                         photo.cull_reasons = json.dumps(cull_reasons)
+
+                    # --- Perceptual quality (pyiqa) ---
+                    try:
+                        perc = self._perceptual.analyse(image_path)
+                        if perc.ok and perc.score is not None:
+                            photo.perceptual_score = perc.score
+                            # Blend: 70 % hand-tuned + 30 % perceptual.
+                            photo.quality_score = round(
+                                0.70 * result.score + 0.30 * perc.score, 4,
+                            )
+                    except Exception:
+                        logger.debug("Perceptual scoring skipped for %s", photo.file_name)
+
+                    # --- Image description (Florence-2) ---
+                    try:
+                        desc = self._describer.analyse(image_path)
+                        if desc.ok and desc.labels:
+                            caption = desc.labels.get("detailed_caption") or desc.labels.get("caption")
+                            if caption:
+                                photo.ai_caption = caption
+                    except Exception:
+                        logger.debug("Image description skipped for %s", photo.file_name)
 
                     # Read EXIF metadata from RAW file (or thumbnail fallback).
                     try:
@@ -242,7 +314,23 @@ class AIController:
                             effective_keep, effective_trash, strictness, adj.get("sample_count", 0),
                         )
 
-                    if result.score >= effective_keep:
+                    # Hard-reject images with critical quality defects
+                    # regardless of score or learned threshold shifts.
+                    _force_trash = False
+                    cull_reasons = result.labels.get("cull_reasons") or []
+                    for entry in cull_reasons:
+                        verdict = (entry.get("verdict") or "").lower()
+                        if "severe blur" in verdict or "significant blur" in verdict:
+                            _force_trash = True
+                            break
+                        if "extremely dark" in verdict or "very dark" in verdict:
+                            _force_trash = True
+                            break
+
+                    if _force_trash:
+                        photo.status = PhotoStatus.TRASH.value
+                        stats["trash"] += 1
+                    elif result.score >= effective_keep:
                         photo.status = PhotoStatus.KEEP.value
                         stats["keep"] += 1
                     elif result.score <= effective_trash:
@@ -256,6 +344,7 @@ class AIController:
                     logger.warning("Analysis error for %s: %s", photo.file_name, result.error)
 
             session.commit()
+            self._set_progress(len(photos), len(photos), phase="done")
             logger.info("AI analysis complete: %s", stats)
         except Exception:
             session.rollback()
@@ -293,8 +382,21 @@ class AIController:
             session.commit()
 
             groups = self._dup_detector.group_duplicates(hash_map, time_map=time_map)
-            logger.info("Duplicate scan: %d groups found.", len(groups))
-            return {"groups": groups, "total_duplicates": sum(len(g) for g in groups)}
+
+            # Rank each group by quality so the best shot is first.
+            score_map: dict[str, float] = {}
+            for photo in photos:
+                if photo.quality_score is not None:
+                    score_map[photo.file_path] = photo.quality_score
+            ranked_groups = [
+                DuplicateDetector.rank_burst_group(g, score_map) for g in groups
+            ]
+
+            logger.info("Duplicate scan: %d groups found.", len(ranked_groups))
+            return {
+                "groups": ranked_groups,
+                "total_duplicates": sum(len(g) for g in ranked_groups),
+            }
         except Exception:
             session.rollback()
             logger.exception("Duplicate scan failed.")

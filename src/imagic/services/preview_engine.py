@@ -18,6 +18,42 @@ import numpy as np
 
 
 # ======================================================================
+# Fast blur helpers — prefer OpenCV (SIMD-optimised), fall back to scipy
+# ======================================================================
+
+def _cv2_blur(arr2d: np.ndarray, ksize: int) -> np.ndarray:
+    """Box blur a 2-D float32 array (for clarity)."""
+    try:
+        import cv2
+        return cv2.blur(arr2d, (ksize, ksize)).astype(np.float32)
+    except ImportError:
+        from scipy.ndimage import uniform_filter
+        return uniform_filter(arr2d, size=ksize)
+
+
+def _cv2_gaussian(img: np.ndarray, sigma: float) -> np.ndarray:
+    """Gaussian blur a 3-channel float32 image per-channel."""
+    try:
+        import cv2
+        ksize = max(3, int(sigma * 6) | 1)  # ensure odd
+        return cv2.GaussianBlur(img, (ksize, ksize), sigma).astype(np.float32)
+    except ImportError:
+        from scipy.ndimage import gaussian_filter
+        return gaussian_filter(img, sigma=[sigma, sigma, 0])
+
+
+def _cv2_gaussian_2d(arr2d: np.ndarray, sigma: float) -> np.ndarray:
+    """Gaussian blur a single 2-D float32 channel."""
+    try:
+        import cv2
+        ksize = max(3, int(sigma * 6) | 1)
+        return cv2.GaussianBlur(arr2d, (ksize, ksize), sigma).astype(np.float32)
+    except ImportError:
+        from scipy.ndimage import gaussian_filter
+        return gaussian_filter(arr2d, sigma=sigma)
+
+
+# ======================================================================
 # Colour-grade look-up table
 # ======================================================================
 
@@ -142,56 +178,42 @@ class PreviewEngine:
             mid = np.mean(img)
             img = (img - mid) * (1.0 + contrast) + mid
 
-        # -- Highlights --
+        # -- Shared luminance for tonal adjustments --
+        # Compute once and reuse for highlights/shadows/whites/blacks/clarity
         highlights = params.get("highlights", 0) / 100.0
-        if highlights != 0:
-            lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
-            mask = np.clip((lum - 0.5) * 2.0, 0, 1)  # bright areas
-            adjustment = -highlights * 0.5 * mask
-            img = img + adjustment[:, :, np.newaxis]
-
-        # -- Shadows --
         shadows = params.get("shadows", 0) / 100.0
-        if shadows != 0:
-            lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
-            mask = np.clip(1.0 - lum * 2.0, 0, 1)  # dark areas
-            adjustment = shadows * 0.5 * mask
-            img = img + adjustment[:, :, np.newaxis]
-
-        # -- Whites --
         whites = params.get("whites", 0) / 200.0
-        if whites != 0:
-            lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
-            mask = np.clip((lum - 0.7) * 3.33, 0, 1)
-            img = img + whites * mask[:, :, np.newaxis]
-
-        # -- Blacks --
         blacks = params.get("blacks", 0) / 200.0
-        if blacks != 0:
-            lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
-            mask = np.clip(1.0 - lum * 3.33, 0, 1)
-            img = img + blacks * mask[:, :, np.newaxis]
-
-        # -- Clarity (local contrast via unsharp mask on luminance) --
         clarity = params.get("clarity", 0) / 100.0
-        if clarity != 0:
-            try:
-                from scipy.ndimage import uniform_filter
-                lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
-                k = max(3, int(min(lum.shape) * 0.03))
-                if k % 2 == 0:
-                    k += 1
-                blurred = uniform_filter(lum, size=k)
-                detail = lum - blurred
-                adjustment = detail * clarity * 0.8
-                img = img + adjustment[:, :, np.newaxis]
-            except ImportError:
-                pass
+
+        need_lum = highlights != 0 or shadows != 0 or whites != 0 or blacks != 0 or clarity != 0
+        if need_lum:
+            lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
+
+            if highlights != 0:
+                mask = np.clip((lum - 0.5) * 2.0, 0, 1)
+                img += (-highlights * 0.5 * mask)[:, :, np.newaxis]
+
+            if shadows != 0:
+                mask = np.clip(1.0 - lum * 2.0, 0, 1)
+                img += (shadows * 0.5 * mask)[:, :, np.newaxis]
+
+            if whites != 0:
+                mask = np.clip((lum - 0.7) * 3.33, 0, 1)
+                img += (whites * mask)[:, :, np.newaxis]
+
+            if blacks != 0:
+                mask = np.clip(1.0 - lum * 3.33, 0, 1)
+                img += (blacks * mask)[:, :, np.newaxis]
+
+            if clarity != 0:
+                k = max(3, int(min(lum.shape) * 0.03)) | 1  # ensure odd
+                blurred = _cv2_blur(lum, k)
+                img += ((lum - blurred) * clarity * 0.8)[:, :, np.newaxis]
 
         # -- Dehaze --
         dehaze = params.get("dehaze", 0) / 100.0
         if dehaze != 0:
-            # Simple dark channel prior approximation
             dark = np.min(img, axis=2)
             atmo = np.percentile(dark, 99.9)
             t = 1.0 - dehaze * 0.6 * (dark / max(atmo, 0.01))
@@ -220,28 +242,17 @@ class PreviewEngine:
         # -- Split Toning --
         _apply_split_toning(img, params)
 
-        # -- Sharpening (unsharp mask) --
+        # -- Sharpening (unsharp mask, OpenCV fast path) --
         sharp_amount = params.get("sharp_amount", 0) / 100.0
         if sharp_amount > 0:
-            try:
-                from scipy.ndimage import gaussian_filter
-                radius = params.get("sharp_radius", 50) / 50.0  # 0.02..4.0
-                radius = max(0.3, radius)
-                blurred = gaussian_filter(img, sigma=[radius, radius, 0])
-                detail = img - blurred
-                img = img + detail * sharp_amount * 2.0
-            except ImportError:
-                pass
+            radius = max(0.3, params.get("sharp_radius", 50) / 50.0)
+            blurred = _cv2_gaussian(img, radius)
+            img = img + (img - blurred) * sharp_amount * 2.0
 
-        # -- Noise Reduction (simple gaussian blur) --
+        # -- Noise Reduction (OpenCV gaussian blur) --
         nr_lum = params.get("nr_luminance", 0) / 100.0
         if nr_lum > 0:
-            try:
-                from scipy.ndimage import gaussian_filter
-                sigma = nr_lum * 2.0
-                img = gaussian_filter(img, sigma=[sigma, sigma, 0])
-            except ImportError:
-                pass
+            img = _cv2_gaussian(img, nr_lum * 2.0)
 
         # -- Vignette --
         vig_amount = params.get("vignette_amount", 0)
@@ -282,42 +293,31 @@ class PreviewEngine:
         # -- Soft Light / Glow --
         soft_light = params.get("soft_light", 0) / 100.0
         if soft_light > 0:
-            # Screen blend: result = 1 - (1-a)(1-b), mixed by strength
             screen = 1.0 - (1.0 - img) * (1.0 - img)
             img = img * (1.0 - soft_light) + screen * soft_light
 
         # -- Micro Sharpening --
         micro_strength = params.get("micro_sharp_strength", 0) / 100.0
         if micro_strength > 0:
-            try:
-                from scipy.ndimage import gaussian_filter
-                micro_contrast = params.get("micro_sharp_contrast", 20) / 100.0
-                # Small-radius sharpening for fine detail
-                blurred = gaussian_filter(img, sigma=[0.5, 0.5, 0])
-                detail = img - blurred
-                # Only boost detail above a contrast threshold
-                detail_mag = np.abs(detail)
-                mask = np.clip(detail_mag / max(micro_contrast * 0.3, 0.01), 0, 1)
-                img = img + detail * micro_strength * 1.5 * mask
-            except ImportError:
-                pass
+            micro_contrast = params.get("micro_sharp_contrast", 20) / 100.0
+            blurred = _cv2_gaussian(img, 0.5)
+            detail = img - blurred
+            detail_mag = np.abs(detail)
+            mask = np.clip(detail_mag / max(micro_contrast * 0.3, 0.01), 0, 1)
+            img = img + detail * micro_strength * 1.5 * mask
 
         # -- Defringe (simple chromatic aberration reduction) --
         defringe_radius = params.get("defringe_radius", 20)
         defringe_threshold = params.get("defringe_threshold", 13)
         if defringe_radius != 20 or defringe_threshold != 13:
-            try:
-                from scipy.ndimage import gaussian_filter
-                radius = defringe_radius / 10.0  # 0.5-5.0
-                lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
-                for ch in range(3):
-                    diff = img[:, :, ch] - lum
-                    fringe_mask = np.abs(diff) > (defringe_threshold / 100.0)
-                    if np.any(fringe_mask):
-                        smoothed = gaussian_filter(img[:, :, ch], sigma=radius)
-                        img[:, :, ch] = np.where(fringe_mask, smoothed, img[:, :, ch])
-            except ImportError:
-                pass
+            radius = defringe_radius / 10.0
+            lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
+            for ch in range(3):
+                diff = img[:, :, ch] - lum
+                fringe_mask = np.abs(diff) > (defringe_threshold / 100.0)
+                if np.any(fringe_mask):
+                    smoothed = _cv2_gaussian_2d(img[:, :, ch], radius)
+                    img[:, :, ch] = np.where(fringe_mask, smoothed, img[:, :, ch])
 
         # -- Perspective Correction --
         persp_h = params.get("perspective_h", 0)

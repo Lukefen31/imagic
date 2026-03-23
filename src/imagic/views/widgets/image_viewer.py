@@ -269,6 +269,7 @@ class ImageViewerDialog(QDialog):
         self._photos = photo_list
         self._index = current_index
         self._raw_cache: Dict[int, QPixmap] = {}
+        self._RAW_CACHE_LIMIT = 5  # Max decoded RAW images in memory
         self._decode_worker: Optional[_RawDecodeWorker] = None
         self._sidebar_visible = False
 
@@ -458,6 +459,12 @@ class ImageViewerDialog(QDialog):
     def _on_raw_decoded(self, index: int, pix: QPixmap) -> None:
         """Slot: background decode finished — cache and display."""
         self._raw_cache[index] = pix
+        # Evict oldest entries to keep memory bounded
+        if len(self._raw_cache) > self._RAW_CACHE_LIMIT:
+            to_remove = sorted(self._raw_cache.keys())
+            for k in to_remove[: len(self._raw_cache) - self._RAW_CACHE_LIMIT]:
+                if k != self._index:
+                    del self._raw_cache[k]
         if index == self._index:
             self._set_scaled_pixmap(self._before_label, pix=pix)
 

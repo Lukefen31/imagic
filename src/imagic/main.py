@@ -172,9 +172,9 @@ def run_headless(args: argparse.Namespace) -> int:
     lib_ctrl = LibraryController(task_queue=app.task_queue)
     ai_ctrl = AIController(
         task_queue=app.task_queue,
-        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.8)),
-        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.3)),
-        duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=10)),
+        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.50)),
+        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.35)),
+        duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=5)),
     )
     proc_ctrl = ProcessingController(
         task_queue=app.task_queue,
@@ -244,9 +244,9 @@ def run_gui(args: argparse.Namespace) -> int:
     )
     ai_ctrl = AIController(
         task_queue=app.task_queue,
-        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.8)),
-        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.3)),
-        duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=10)),
+        keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.50)),
+        trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.35)),
+        duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=5)),
     )
     proc_ctrl = ProcessingController(
         task_queue=app.task_queue,
@@ -257,6 +257,71 @@ def run_gui(args: argparse.Namespace) -> int:
     window = MainWindow()
 
     # ------------------------------------------------------------------
+    # Analysis progress overlay
+    # ------------------------------------------------------------------
+    _analysis_poll_timer: Optional[QTimer] = None  # type: ignore[assignment]
+    _analysis_task = None
+
+    def _start_analysis_with_overlay() -> None:
+        """Show the loading overlay and start polling AI progress."""
+        nonlocal _analysis_poll_timer, _analysis_task
+        _analysis_task = ai_ctrl.analyse_pending()
+        window.show_loading("Analysing photos…", "Preparing…")
+        window.status_bar.set_status("AI analysis started…")
+        window.set_sidebar_status("Analysing…")
+        window.set_step_status(1, "AI analysis in progress…")
+        if _analysis_poll_timer is None:
+            _analysis_poll_timer = QTimer()
+            _analysis_poll_timer.setInterval(250)
+            _analysis_poll_timer.timeout.connect(_poll_analysis_progress)
+        _analysis_poll_timer.start()
+
+    def _poll_analysis_progress() -> None:
+        """Check AI controller progress and update the overlay."""
+        nonlocal _analysis_poll_timer, _analysis_task
+        prog = ai_ctrl.get_progress()
+
+        phase = prog["phase"]
+        current = prog["current"]
+        total = prog["total"]
+        fname = prog["file"]
+
+        if phase == "thumbnails":
+            window.update_loading(0, total, "Generating thumbnails…")
+            window.set_sidebar_status("Generating thumbnails…")
+        elif phase == "models":
+            window.update_loading(0, total, "Loading AI models…")
+            window.set_sidebar_status("Loading AI models…")
+        elif phase == "scoring":
+            subtitle = f"Scoring {fname}" if fname else "Scoring…"
+            window.update_loading(current, total, subtitle)
+            window.set_sidebar_status(f"Analysing {current}/{total}…")
+            window.set_progress(current, total)
+            window.status_bar.set_progress(current, total)
+        elif phase == "done":
+            _analysis_poll_timer.stop()
+            window.hide_loading()
+            window.set_sidebar_status("Analysis complete")
+            window.set_progress(0, 0)
+            window.status_bar.set_progress(0, 0)
+            window.status_bar.set_status("AI analysis complete.")
+            window.set_step_status(1, "Done")
+            _analysis_task = None
+            _refresh_library()
+            return
+
+        # Also check if the task finished (fallback for edge cases)
+        if _analysis_task and _analysis_task.future and _analysis_task.future.done():
+            _analysis_poll_timer.stop()
+            window.hide_loading()
+            window.set_sidebar_status("Analysis complete")
+            window.set_progress(0, 0)
+            window.status_bar.set_progress(0, 0)
+            window.status_bar.set_status("AI analysis complete.")
+            _analysis_task = None
+            _refresh_library()
+
+    # ------------------------------------------------------------------
     # Wire signals → controllers
     # ------------------------------------------------------------------
     def _on_import(directory: str, recursive: bool) -> None:
@@ -265,10 +330,8 @@ def run_gui(args: argparse.Namespace) -> int:
         window.set_sidebar_status(f"Scanning…")
 
     def _on_analyse() -> None:
-        ai_ctrl.analyse_pending()
-        window.status_bar.set_status("AI analysis started…")
-        window.set_sidebar_status("Analysing…")
-        window.set_step_status(1, "AI analysis in progress…")
+        _start_analysis_with_overlay()
+
     def _on_reanalyse_all() -> None:
         """Reset all photos to PENDING and re-run AI analysis."""
         db = DatabaseManager.get()
@@ -293,13 +356,48 @@ def run_gui(args: argparse.Namespace) -> int:
         finally:
             session.close()
 
-        ai_ctrl.analyse_pending()
-        window.status_bar.set_status(
-            f"Re-analysing {count} photos with updated scorer\u2026"
-        )
+        _start_analysis_with_overlay()
+
+    _export_poll_timer: Optional[QTimer] = None  # type: ignore[assignment]
+
     def _on_export() -> None:
+        nonlocal _export_poll_timer
         proc_ctrl.export_all_kept()
+        window.show_loading("Exporting Photos…", "Preparing batch…")
         window.status_bar.set_status("Batch export started…")
+
+        if _export_poll_timer is None:
+            _export_poll_timer = QTimer()
+            _export_poll_timer.setInterval(300)
+            _export_poll_timer.timeout.connect(_poll_export_progress)
+        _export_poll_timer.start()
+
+    def _poll_export_progress() -> None:
+        nonlocal _export_poll_timer
+        prog = proc_ctrl.get_export_progress()
+        phase = prog.get("phase", "idle")
+        current = prog.get("current", 0)
+        total = prog.get("total", 0)
+        fname = prog.get("current_file", "")
+
+        if phase == "exporting" and total > 0:
+            window.update_loading(current, total, f"Exporting {fname}")
+            window.status_bar.set_status(
+                f"Exporting {current}/{total}  —  {fname}"
+            )
+        elif phase == "done":
+            if _export_poll_timer:
+                _export_poll_timer.stop()
+            window.hide_loading()
+            window.status_bar.set_status(
+                f"Export complete — {total} photos processed."
+            )
+            _refresh_library()  # update counters (keep → exported)
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                window, "Export Complete",
+                f"Exported {total} photos successfully.",
+            )
 
     _dup_poll_timer: Optional[QTimer] = None  # type: ignore[assignment]
     _dup_task = None
@@ -386,12 +484,13 @@ def run_gui(args: argparse.Namespace) -> int:
                         "status": photo.status,
                     })
                 if len(photos_in_group) >= 2:
-                    # Sort photos within group by timestamp
-                    photos_in_group.sort(key=lambda p: p["exif_date_taken"] or "")
+                    # Sort photos within group by quality score (best first)
+                    photos_in_group.sort(key=lambda p: p["quality_score"] or 0.0, reverse=True)
                     enriched_groups.append(photos_in_group)
-            # Sort groups by earliest timestamp
+            # Sort groups by best quality score (highest first)
             enriched_groups.sort(
-                key=lambda g: min((p["exif_date_taken"] for p in g if p["exif_date_taken"]), default="")
+                key=lambda g: g[0]["quality_score"] if g else 0.0,
+                reverse=True,
             )
         finally:
             session.close()
@@ -632,16 +731,14 @@ def run_gui(args: argparse.Namespace) -> int:
             )
             return
 
-        keep_t = float(app.settings.get_nested("ai", "keep_threshold", default=0.55))
-        trash_t = float(app.settings.get_nested("ai", "trash_threshold", default=0.40))
+        keep_t = float(app.settings.get_nested("ai", "keep_threshold", default=0.50))
+        trash_t = float(app.settings.get_nested("ai", "trash_threshold", default=0.35))
         dialog = CullingPreviewDialog(data, keep_t, trash_t, window)
         dialog.status_changed.connect(_on_culling_status_changed)
         dialog.exec()
 
     def _on_culling_status_changed(file_name: str, new_status: str) -> None:
-        """Persist a manual cull-status override and record feedback."""
-        from imagic.ai.feedback_learner import get_learner
-
+        """Persist a manual cull-status override and record feedback asynchronously."""
         db = DatabaseManager.get()
         session = db.get_session()
         try:
@@ -652,7 +749,7 @@ def run_gui(args: argparse.Namespace) -> int:
                 session.commit()
                 logger.info("Manual cull override: %s → %s", file_name, new_status)
 
-                # Record feedback for the learner
+                # Record feedback for the learner in background thread (non-blocking)
                 metric_scores = {}
                 if photo.cull_reasons:
                     try:
@@ -665,15 +762,17 @@ def run_gui(args: argparse.Namespace) -> int:
                     except (json.JSONDecodeError, TypeError):
                         pass
 
-                learner = get_learner()
-                learner.record_cull_feedback(
+                from imagic.services.feedback_worker import get_feedback_pool
+
+                pool = get_feedback_pool()
+                pool.record_feedback_async(
                     file_name=file_name,
                     auto_decision=old_status,
                     user_decision=new_status,
                     quality_score=photo.quality_score or 0.0,
                     metric_scores=metric_scores,
                     iso=photo.exif_iso,
-                    mean_brightness=128.0,
+                    thumbnail_path=photo.thumbnail_path,
                 )
         except Exception:
             session.rollback()
@@ -682,9 +781,7 @@ def run_gui(args: argparse.Namespace) -> int:
             session.close()
 
     def _on_review_status_changed(photo_id: int, new_status: str) -> None:
-        """Persist a keep/trash decision from the review grid."""
-        from imagic.ai.feedback_learner import get_learner
-
+        """Persist a keep/trash decision from the review grid asynchronously."""
         db = DatabaseManager.get()
         session = db.get_session()
         try:
@@ -695,6 +792,7 @@ def run_gui(args: argparse.Namespace) -> int:
                 session.commit()
                 logger.info("Review override: photo %d → %s", photo_id, new_status)
 
+                # Record feedback for the learner in background thread (non-blocking)
                 metric_scores = {}
                 if photo.cull_reasons:
                     try:
@@ -707,15 +805,17 @@ def run_gui(args: argparse.Namespace) -> int:
                     except (json.JSONDecodeError, TypeError):
                         pass
 
-                learner = get_learner()
-                learner.record_cull_feedback(
+                from imagic.services.feedback_worker import get_feedback_pool
+
+                pool = get_feedback_pool()
+                pool.record_feedback_async(
                     file_name=photo.file_name,
                     auto_decision=old_status,
                     user_decision=new_status,
                     quality_score=photo.quality_score or 0.0,
                     metric_scores=metric_scores,
                     iso=photo.exif_iso,
-                    mean_brightness=128.0,
+                    thumbnail_path=photo.thumbnail_path,
                 )
         except Exception:
             session.rollback()
@@ -952,11 +1052,22 @@ def run_gui(args: argparse.Namespace) -> int:
                 window.photo_editor.on_export_finished(False)
                 return
 
+            # Compute actual mean brightness from thumbnail if available.
+            _brightness = 128.0
+            if photo_obj.thumbnail_path:
+                try:
+                    from PIL import Image as _PILImage, ImageStat as _PILStat
+                    _tb = _PILImage.open(photo_obj.thumbnail_path).convert("L")
+                    _brightness = _PILStat.Stat(_tb).mean[0]
+                    _tb.close()
+                except Exception:
+                    pass
+
             learner.record_edit_feedback(
                 file_name=photo_obj.file_name,
                 overrides=overrides,
                 iso=photo_obj.exif_iso,
-                mean_brightness=128.0,
+                mean_brightness=_brightness,
                 color_grade=overrides.get("color_grade", photo_obj.color_grade or "natural"),
             )
 
@@ -1070,13 +1181,11 @@ def run_gui(args: argparse.Namespace) -> int:
     window.open_export_folder_requested.connect(_on_open_export_folder)
     window.reanalyse_all_requested.connect(_on_reanalyse_all)
 
-    # Override settings dialog to inject current config.
-    original_show_settings = window._show_settings
-
-    def _settings_with_data() -> None:
+    # Connect settings dialog to inject current config.
+    def _open_settings() -> None:
         window.show_settings_dialog(app.settings.data)
 
-    window._show_settings = _settings_with_data  # type: ignore[assignment]
+    window.settings_requested.connect(_open_settings)
 
     window.show()
     _refresh_library()   # initial load

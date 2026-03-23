@@ -170,5 +170,14 @@ class AppController:
         """Gracefully shut down all subsystems."""
         logger.info("Shutting down…")
         self.task_queue.shutdown(wait=True)
+        
+        # Shutdown feedback worker pool (if it was created)
+        try:
+            from imagic.services.feedback_worker import _pool
+            if _pool is not None:
+                _pool.shutdown()
+        except Exception:
+            logger.exception("Error shutting down feedback worker pool")
+        
         self.db.close()
         logger.info("=== Imagic stopped ===")

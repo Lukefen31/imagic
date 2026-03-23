@@ -50,8 +50,6 @@ class BaseAnalyzer(ABC):
     * ``unload_model()`` — called on shutdown to free GPU / RAM.
     """
 
-    _model_loaded: bool = False
-
     @property
     @abstractmethod
     def name(self) -> str:
@@ -60,7 +58,7 @@ class BaseAnalyzer(ABC):
 
     def ensure_model(self) -> None:
         """Load the model if it has not been loaded yet."""
-        if not self._model_loaded:
+        if not getattr(self, "_model_loaded", False):
             logger.info("Loading model for %s…", self.name)
             self.load_model()
             self._model_loaded = True

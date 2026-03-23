@@ -243,7 +243,8 @@ class ExportGalleryView(QWidget):
         if self._loader and self._loader.isRunning():
             self._loader.stop()
             self._loader.quit()
-            self._loader.wait(2000)
+            if not self._loader.wait(200):
+                self._loader.terminate()
             self._loader = None
         for tile in self._tiles:
             self._grid_layout.removeWidget(tile)

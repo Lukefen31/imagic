@@ -47,11 +47,16 @@ class StatusBarWidget(QStatusBar):
             counts: Mapping of status → count (from ``AppController.get_pipeline_summary``).
         """
         keep = counts.get("keep", 0)
+        exported = counts.get("exported", 0)
         trash = counts.get("trash", 0)
         review = counts.get("culled", 0)
         parts = []
-        if keep:
+        if keep and exported:
+            parts.append(f"Keep: {keep} ({exported} exported)")
+        elif keep:
             parts.append(f"Keep: {keep}")
+        elif exported:
+            parts.append(f"Exported: {exported}")
         if trash:
             parts.append(f"Trash: {trash}")
         if review:

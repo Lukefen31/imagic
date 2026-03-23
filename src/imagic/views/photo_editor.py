@@ -227,7 +227,8 @@ class _RawDecodeWorker(QThread):
                     no_auto_bright=True,
                     output_bps=8,
                     half_size=self._half_size,
-                    demosaic_algorithm=rawpy.DemosaicAlgorithm.AHD,
+                    # DHT is faster than AHD with near-identical quality for preview
+                    demosaic_algorithm=rawpy.DemosaicAlgorithm.DHT if self._half_size else rawpy.DemosaicAlgorithm.AHD,
                     output_color=rawpy.ColorSpace.sRGB,
                 )
             self.decoded.emit(self._index, rgb)
@@ -1101,6 +1102,8 @@ class PhotoEditorWidget(QWidget):
         self._show_before = False
         self._decode_worker: Optional[_RawDecodeWorker] = None
         self._rgb_cache: Dict[int, np.ndarray] = {}
+        self._RGB_CACHE_LIMIT = 5  # Max decoded RAW arrays in memory
+        self._prefetch_worker: Optional[_RawDecodeWorker] = None
 
         self._crop_rect: Optional[QRect] = None
 
@@ -1960,10 +1963,10 @@ class PhotoEditorWidget(QWidget):
                 if not pix.isNull():
                     self._set_preview_pixmap(pix)
 
-            # Start full-resolution decode
+            # Start half-resolution decode (fast preview — full res not needed for editing)
             file_path = p.get("file_path", "")
             if file_path and Path(file_path).is_file():
-                self._decode_worker = _RawDecodeWorker(index, file_path, half_size=False, parent=self)
+                self._decode_worker = _RawDecodeWorker(index, file_path, half_size=True, parent=self)
                 self._decode_worker.decoded.connect(self._on_raw_decoded)
                 self._decode_worker.start()
 
@@ -1988,6 +1991,12 @@ class PhotoEditorWidget(QWidget):
     def _on_raw_decoded(self, index: int, rgb: np.ndarray) -> None:
         """RAW decode complete — cache and show preview."""
         self._rgb_cache[index] = rgb
+        # Evict oldest entries to keep memory bounded
+        if len(self._rgb_cache) > self._RGB_CACHE_LIMIT:
+            to_remove = sorted(self._rgb_cache.keys())
+            for k in to_remove[: len(self._rgb_cache) - self._RGB_CACHE_LIMIT]:
+                if k != self._index:
+                    del self._rgb_cache[k]
         if index == self._index:
             self._raw_rgb = rgb
             self._raw_rgb_preview = self._make_preview_proxy(rgb)
@@ -1998,6 +2007,31 @@ class PhotoEditorWidget(QWidget):
                 self._ai_modal.hide_modal()
             self._rebuild_grade_thumbnails()
             self._update_preview()
+            # Prefetch adjacent photos in the background
+            self._prefetch_adjacent(index)
+
+    def _prefetch_adjacent(self, current: int) -> None:
+        """Start background decode of the next (and previous) photo if not cached."""
+        for candidate in (current + 1, current - 1):
+            if 0 <= candidate < len(self._photos) and candidate not in self._rgb_cache:
+                p = self._photos[candidate]
+                fpath = p.get("file_path", "")
+                if fpath and Path(fpath).is_file():
+                    self._prefetch_worker = _RawDecodeWorker(
+                        candidate, fpath, half_size=True, parent=self,
+                    )
+                    self._prefetch_worker.decoded.connect(self._on_prefetch_decoded)
+                    self._prefetch_worker.start()
+                    return  # Only prefetch one at a time
+
+    def _on_prefetch_decoded(self, index: int, rgb: np.ndarray) -> None:
+        """Prefetched RAW decode complete — just cache it."""
+        self._rgb_cache[index] = rgb
+        if len(self._rgb_cache) > self._RGB_CACHE_LIMIT:
+            to_remove = sorted(self._rgb_cache.keys())
+            for k in to_remove[: len(self._rgb_cache) - self._RGB_CACHE_LIMIT]:
+                if k != self._index:
+                    del self._rgb_cache[k]
 
     # ------------------------------------------------------------------
     # Color grade thumbnail grid
@@ -2318,7 +2352,9 @@ class PhotoEditorWidget(QWidget):
         if self._raw_rgb is None:
             return
 
-        source = self._raw_rgb
+        # Use the smaller preview proxy for editing — same visual quality
+        # on screen but ~3-4x fewer pixels to process.
+        source = self._raw_rgb_preview if self._raw_rgb_preview is not None else self._raw_rgb
 
         if self._show_before:
             result = source
@@ -2329,13 +2365,16 @@ class PhotoEditorWidget(QWidget):
         # Update histogram
         self._histogram.update_histogram(result)
 
-        # Convert to QPixmap
+        # Convert to QPixmap — use contiguous buffer directly to avoid a copy
+        result = np.ascontiguousarray(result)
         h, w = result.shape[:2]
         bytes_per_line = 3 * w
         qimg = QImage(
-            result.data.tobytes(), w, h, bytes_per_line,
+            result.data, w, h, bytes_per_line,
             QImage.Format.Format_RGB888,
         )
+        # Must keep a reference to the array so the buffer stays alive
+        qimg._numpy_ref = result  # prevent GC
         pix = QPixmap.fromImage(qimg)
         self._preview_pix = pix
         self._set_preview_pixmap(pix)

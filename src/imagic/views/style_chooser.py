@@ -293,7 +293,8 @@ class _EditStyleTab(QWidget):
     def stop(self) -> None:
         if self._worker.isRunning():
             self._worker.quit()
-            self._worker.wait(2000)
+            if not self._worker.wait(200):
+                self._worker.terminate()
 
 
 # ======================================================================
@@ -429,7 +430,8 @@ class _ColourGradeTab(QWidget):
     def stop(self) -> None:
         if self._worker.isRunning():
             self._worker.quit()
-            self._worker.wait(2000)
+            if not self._worker.wait(200):
+                self._worker.terminate()
 
 
 # ======================================================================

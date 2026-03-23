@@ -7,8 +7,9 @@ via the ``TaskQueue``, and tracks progress.
 from __future__ import annotations
 
 import logging
+import threading
 import time
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from imagic.models.database import DatabaseManager
 from imagic.models.enums import PhotoStatus
@@ -37,6 +38,33 @@ class ProcessingController:
         self._queue = task_queue
         self._export = export_service
         self._on_exported = on_photo_exported
+
+        # Thread-safe export progress state
+        self._progress_lock = threading.Lock()
+        self._progress: Dict[str, object] = {
+            "current": 0,
+            "total": 0,
+            "phase": "idle",
+            "current_file": "",
+        }
+
+    # ------------------------------------------------------------------
+    # Progress tracking (thread-safe)
+    # ------------------------------------------------------------------
+    def get_export_progress(self) -> Dict[str, object]:
+        """Return a snapshot of export progress (safe to call from any thread)."""
+        with self._progress_lock:
+            return dict(self._progress)
+
+    def _set_export_progress(
+        self, current: int, total: int, phase: str = "exporting",
+        current_file: str = "",
+    ) -> None:
+        with self._progress_lock:
+            self._progress["current"] = current
+            self._progress["total"] = total
+            self._progress["phase"] = phase
+            self._progress["current_file"] = current_file
 
     def export_all_kept(self) -> TaskItem:
         """Queue export tasks for every photo with status ``KEEP``.
@@ -68,11 +96,7 @@ class ProcessingController:
     # Workers
     # ------------------------------------------------------------------
     def _export_batch(self) -> dict:
-        """Export all KEEP and EXPORTED photos (runs in worker thread).
-
-        Including EXPORTED allows re-export when the output folder is
-        cleared or when the user wants to regenerate with new settings.
-        """
+        """Export all KEEP and EXPORTED photos (runs in worker thread)."""
         db = DatabaseManager.get()
         session = db.get_session()
         try:
@@ -87,6 +111,8 @@ class ProcessingController:
                 .all()
             )
             ids = [p.id for p in photos]
+            # Build a quick name lookup for progress reporting
+            self._export_name_map = {p.id: p.file_name for p in photos}
         finally:
             session.close()
 
@@ -94,9 +120,14 @@ class ProcessingController:
 
     def _export_ids(self, photo_ids: List[int]) -> dict:
         """Export a list of photos by ID."""
+        total = len(photo_ids)
         results = {"exported": 0, "failed": 0, "errors": []}
+        self._set_export_progress(0, total, "exporting")
 
-        for pid in photo_ids:
+        for i, pid in enumerate(photo_ids):
+            fname = getattr(self, "_export_name_map", {}).get(pid, f"photo {pid}")
+            self._set_export_progress(i, total, "exporting", fname)
+
             # Yield CPU between exports so the editor stays responsive
             time.sleep(0.05)
             try:
@@ -125,4 +156,5 @@ class ProcessingController:
             results["exported"],
             results["failed"],
         )
+        self._set_export_progress(total, total, "done")
         return results

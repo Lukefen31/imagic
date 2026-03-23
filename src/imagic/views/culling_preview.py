@@ -227,6 +227,7 @@ class _CullingGalleryDialog(QDialog):
         self._trash = trash_threshold
         self._decode_worker: Optional[_RawDecodeWorker] = None
         self._full_pix_cache: Dict[int, QPixmap] = {}  # index → decoded pixmap
+        self._CACHE_LIMIT = 5  # Max decoded RAW images to keep in memory
 
         # --- Main layout (stacked with overlays) ---
         outer = QVBoxLayout(self)
@@ -305,10 +306,27 @@ class _CullingGalleryDialog(QDialog):
         btn_row.addWidget(self._review_btn)
         status_layout.addLayout(btn_row)
 
-        nav_hint = QLabel("← → Navigate  |  Esc Close")
+        nav_hint = QLabel(
+            "<span style='color:#888'>K</span> Keep  · "
+            "<span style='color:#888'>L</span> Trash  · "
+            "<span style='color:#888'>H</span> Review  · "
+            "<span style='color:#888'>← →</span> Navigate  · "
+            "<span style='color:#888'>Esc</span> Close"
+        )
         nav_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        nav_hint.setStyleSheet("color: #666; font-size: 10px; letter-spacing: 0.5px;")
+        nav_hint.setStyleSheet("color: #666; font-size: 10px; letter-spacing: 0.3px;")
         status_layout.addWidget(nav_hint)
+
+        # --- Loading overlay (centered) ---
+        self._loading_overlay = QLabel(self._container)
+        self._loading_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._loading_overlay.setStyleSheet(
+            "background: rgba(0,0,0,160); color: #ccc; font-size: 13px; "
+            "border-radius: 8px; padding: 12px 20px;"
+        )
+        self._loading_overlay.setText("⏳ Decoding RAW…")
+        self._loading_overlay.setFixedSize(180, 44)
+        self._loading_overlay.hide()
 
         # Load first image
         self._load_current()
@@ -351,6 +369,11 @@ class _CullingGalleryDialog(QDialog):
         sh = self._status_overlay.sizeHint().height()
         self._status_overlay.setGeometry(16, ch - sh - 16, max(sw, 200), sh)
 
+        # Loading: centered
+        lw, lh = 180, 44
+        self._loading_overlay.setGeometry((cw - lw) // 2, (ch - lh) // 2, lw, lh)
+        self._loading_overlay.raise_()
+
     def _display_pixmap(self, pix: QPixmap) -> None:
         """Scale and display a pixmap in the image label."""
         avail = self._container.size()
@@ -379,6 +402,7 @@ class _CullingGalleryDialog(QDialog):
         cached = self._full_pix_cache.get(self._index)
         if cached and not cached.isNull():
             self._display_pixmap(cached)
+            self._loading_overlay.hide()
         else:
             # Show thumbnail as quick placeholder.
             thumb = photo.get("thumbnail_path", "")
@@ -397,7 +421,10 @@ class _CullingGalleryDialog(QDialog):
             # Start background RAW decode.
             raw_path = photo.get("file_path", "")
             if raw_path and Path(raw_path).is_file():
+                self._loading_overlay.show()
                 self._start_decode(self._index, raw_path)
+            else:
+                self._loading_overlay.hide()
 
         # Metrics overlay
         self._metrics_overlay.setText(
@@ -412,17 +439,28 @@ class _CullingGalleryDialog(QDialog):
 
     def _start_decode(self, index: int, file_path: str) -> None:
         """Kick off a background RAW decode for the given index."""
-        # Cancel any in-flight decode.
-        if self._decode_worker and self._decode_worker.isRunning():
-            self._decode_worker.quit()
-            self._decode_worker.wait(500)
+        # Disconnect previous worker so stale results go only to cache.
+        if self._decode_worker is not None:
+            try:
+                self._decode_worker.decoded.disconnect(self._on_raw_decoded)
+            except (TypeError, RuntimeError):
+                pass
+            # Let old thread finish on its own — no blocking wait.
         self._decode_worker = _RawDecodeWorker(index, file_path, self)
         self._decode_worker.decoded.connect(self._on_raw_decoded)
         self._decode_worker.start()
 
     def _on_raw_decoded(self, index: int, pix: QPixmap) -> None:
         """Slot called when background RAW decode finishes."""
+        if index == self._index:
+            self._loading_overlay.hide()
         self._full_pix_cache[index] = pix
+        # Evict oldest entries to keep memory bounded
+        if len(self._full_pix_cache) > self._CACHE_LIMIT:
+            to_remove = sorted(self._full_pix_cache.keys())
+            for k in to_remove[: len(self._full_pix_cache) - self._CACHE_LIMIT]:
+                if k != self._index:
+                    del self._full_pix_cache[k]
         if index == self._index:
             self._display_pixmap(pix)
 
@@ -465,7 +503,8 @@ class _CullingGalleryDialog(QDialog):
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self._decode_worker and self._decode_worker.isRunning():
             self._decode_worker.quit()
-            self._decode_worker.wait(1000)
+            if not self._decode_worker.wait(100):
+                self._decode_worker.terminate()
         super().closeEvent(event)
 
 
@@ -498,6 +537,7 @@ class CullingPreviewDialog(QDialog):
         self._keep = keep_threshold
         self._trash = trash_threshold
         self._filtered_indices: List[int] = list(range(len(photos)))
+        self._thumb_cache: Dict[int, QPixmap] = {}  # src_idx → scaled pixmap
 
         layout = QVBoxLayout(self)
 
@@ -629,9 +669,11 @@ class CullingPreviewDialog(QDialog):
     # Table population
     # ------------------------------------------------------------------
     def _populate_table(self) -> None:
+        self._table.setUpdatesEnabled(False)
         self._table.setRowCount(len(self._filtered_indices))
         for vis_row, src_idx in enumerate(self._filtered_indices):
             self._fill_row(vis_row, src_idx)
+        self._table.setUpdatesEnabled(True)
 
     def _fill_row(self, vis_row: int, src_idx: int) -> None:
         photo = self._photos[src_idx]
@@ -645,26 +687,18 @@ class CullingPreviewDialog(QDialog):
 
         self._table.setRowHeight(vis_row, _THUMB_SIZE + 8)
 
-        # Col 0: Thumbnail placeholder
+        # Col 0: Thumbnail (from cache — background loader populates it)
         thumb_item = QTableWidgetItem()
         thumb_item.setBackground(bg)
         thumb_item.setData(Qt.ItemDataRole.UserRole, src_idx)
         self._table.setItem(vis_row, 0, thumb_item)
 
-        # Try to set thumbnail immediately if already loaded
-        path = photo.get("thumbnail_path", "")
-        if path and Path(path).is_file():
-            pix = QPixmap(str(path))
-            if not pix.isNull():
-                pix = pix.scaled(
-                    QSize(_THUMB_SIZE, _THUMB_SIZE),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                lbl = QLabel()
-                lbl.setPixmap(pix)
-                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                self._table.setCellWidget(vis_row, 0, lbl)
+        cached_pix = self._thumb_cache.get(src_idx)
+        if cached_pix and not cached_pix.isNull():
+            lbl = QLabel()
+            lbl.setPixmap(cached_pix)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._table.setCellWidget(vis_row, 0, lbl)
 
         # Col 1: Filename
         name_item = QTableWidgetItem(photo.get("file_name", "?"))
@@ -742,13 +776,30 @@ class CullingPreviewDialog(QDialog):
         photo["status"] = new_status
         self.status_changed.emit(photo.get("file_name", ""), new_status)
 
-        # Refresh the visible row
+        # Refresh only the affected row
+        self._set_row_status_ui_only(src_idx)
+
+    def _set_row_status_ui_only(self, src_idx: int) -> None:
+        """Update only the UI for a single row after a status change."""
         current_filter = self._filter_combo.currentText()
         if current_filter != "All":
-            # Re-filter in case the photo no longer belongs
-            self._apply_filter(current_filter)
+            photo = self._photos[src_idx]
+            decision = _decision_for(photo, self._keep, self._trash)
+            if decision != current_filter:
+                # Photo no longer matches filter — just remove its row
+                try:
+                    vis_row = self._filtered_indices.index(src_idx)
+                    self._filtered_indices.remove(src_idx)
+                    self._table.removeRow(vis_row)
+                except ValueError:
+                    pass
+            else:
+                # Still matches — update in place
+                for vis_row, idx in enumerate(self._filtered_indices):
+                    if idx == src_idx:
+                        self._fill_row(vis_row, src_idx)
+                        break
         else:
-            # Just refresh the row in place
             for vis_row, idx in enumerate(self._filtered_indices):
                 if idx == src_idx:
                     self._fill_row(vis_row, src_idx)
@@ -781,22 +832,17 @@ class CullingPreviewDialog(QDialog):
 
         self.status_changed.emit(file_name, new_status)
 
-        # Refresh only the affected row (or re-filter if a filter is active)
-        current_filter = self._filter_combo.currentText()
-        if current_filter != "All":
-            self._apply_filter(current_filter)
-        elif src_idx is not None:
-            for vis_row, idx in enumerate(self._filtered_indices):
-                if idx == src_idx:
-                    self._fill_row(vis_row, src_idx)
-                    break
-        self._update_summary()
+        if src_idx is not None:
+            self._set_row_status_ui_only(src_idx)
+        else:
+            self._update_summary()
 
     # ------------------------------------------------------------------
     # Thumbnails
     # ------------------------------------------------------------------
     def _on_thumb_loaded(self, src_idx: int, pixmap: QPixmap) -> None:
-        """Set the thumbnail for the matching visible row."""
+        """Cache the thumbnail and set it for the matching visible row."""
+        self._thumb_cache[src_idx] = pixmap
         for vis_row, idx in enumerate(self._filtered_indices):
             if idx == src_idx:
                 label = QLabel()
@@ -808,5 +854,6 @@ class CullingPreviewDialog(QDialog):
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self._loader.isRunning():
             self._loader.quit()
-            self._loader.wait(2000)
+            if not self._loader.wait(200):
+                self._loader.terminate()
         super().closeEvent(event)

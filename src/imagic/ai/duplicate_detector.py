@@ -44,9 +44,9 @@ class DuplicateDetector(BaseAnalyzer):
     def __init__(
         self,
         hash_size: int = 8,
-        threshold: int = 10,
-        burst_window: float = 3.0,
-        burst_hash_limit: int = 34,
+        threshold: int = 8,
+        burst_window: float = 2.0,
+        burst_hash_limit: int = 18,
     ) -> None:
         self._hash_size = hash_size
         self._threshold = threshold
@@ -241,3 +241,20 @@ class DuplicateDetector(BaseAnalyzer):
             groups[find(path)].append(path)
 
         return [g for g in groups.values() if len(g) > 1]
+
+    @staticmethod
+    def rank_burst_group(
+        group: List[str],
+        score_map: Dict[str, float],
+    ) -> List[str]:
+        """Sort a duplicate/burst group by quality score, best first.
+
+        Args:
+            group: File paths belonging to the same duplicate cluster.
+            score_map: Mapping of ``file_path → quality_score``.  Paths
+                absent from the map are treated as score 0 (worst).
+
+        Returns:
+            The same paths ordered from highest to lowest quality score.
+        """
+        return sorted(group, key=lambda p: score_map.get(p, 0.0), reverse=True)

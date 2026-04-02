@@ -5,5 +5,5 @@ A robust desktop application that orchestrates CLI-based RAW photo processing,
 AI-powered culling, and batch editing workflows.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __app_name__ = "Imagic"

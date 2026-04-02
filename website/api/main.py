@@ -100,7 +100,7 @@ GOOGLE_OAUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
 
 @app.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/favicon.ico")
@@ -123,7 +123,7 @@ async def blog_index(request: Request, cat: str = ""):
         posts = [p for p in posts if p["category"] == cat]
     for post in posts:
         post["date_display"] = _format_date(post["date"])
-    return templates.TemplateResponse("blog_index.html", {"request": request, "posts": posts})
+    return templates.TemplateResponse(request, "blog_index.html", {"posts": posts})
 
 
 @app.get("/blog/{slug}", response_class=HTMLResponse)
@@ -138,9 +138,9 @@ async def blog_post(request: Request, slug: str):
     next_post = all_posts[idx + 1] if idx is not None and idx < len(all_posts) - 1 else None
     related = get_related_posts(slug, limit=3)
     return templates.TemplateResponse(
+        request,
         "blog_post.html",
         {
-            "request": request,
             "post": post,
             "prev_post": prev_post,
             "next_post": next_post,
@@ -151,7 +151,7 @@ async def blog_post(request: Request, slug: str):
 
 @app.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
-    return templates.TemplateResponse("docs.html", {"request": request})
+    return templates.TemplateResponse(request, "docs.html")
 
 
 @app.get("/docs")
@@ -161,17 +161,17 @@ async def docs_redirect():
 
 @app.get("/changelog", response_class=HTMLResponse)
 async def changelog_page(request: Request):
-    return templates.TemplateResponse("changelog.html", {"request": request})
+    return templates.TemplateResponse(request, "changelog.html")
 
 
 @app.get("/community", response_class=HTMLResponse)
 async def community_page(request: Request):
-    return templates.TemplateResponse("community.html", {"request": request})
+    return templates.TemplateResponse(request, "community.html")
 
 
 @app.get("/contact", response_class=HTMLResponse)
 async def contact_page(request: Request):
-    return templates.TemplateResponse("contact.html", {"request": request})
+    return templates.TemplateResponse(request, "contact.html")
 
 
 @app.get("/sitemap.xml")
@@ -208,9 +208,9 @@ async def robots():
 async def desktop_download_page(request: Request):
     user = _current_user(request)
     return templates.TemplateResponse(
+        request,
         "desktop.html",
         {
-            "request": request,
             "prefill_email": user["email"] if user else "",
             "desktop_checkout_enabled": desktop_is_configured(),
             "desktop_bundle_available": resolve_download_target("rawtherapee") is not None,
@@ -221,9 +221,9 @@ async def desktop_download_page(request: Request):
 @app.get("/desktop/thanks", response_class=HTMLResponse)
 async def desktop_thanks_page(request: Request, session_id: str = ""):
     return templates.TemplateResponse(
+        request,
         "desktop_thanks.html",
         {
-            "request": request,
             "session_id": session_id.strip(),
             "desktop_bundle_available": resolve_download_target("rawtherapee") is not None,
         },
@@ -664,8 +664,8 @@ def _is_admin(request: Request) -> bool:
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     if not _is_admin(request):
-        return templates.TemplateResponse("admin_login.html", {"request": request})
-    return templates.TemplateResponse("admin.html", {"request": request})
+        return templates.TemplateResponse(request, "admin_login.html")
+    return templates.TemplateResponse(request, "admin.html")
 
 
 @app.post("/api/admin/login")

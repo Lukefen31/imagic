@@ -55,6 +55,10 @@ DEFAULTS: dict = {
         "trash_threshold": 0.35,
         "duplicate_hash_threshold": 5,
         "models_directory": str(_APP_DIR / "models"),
+        # Heavy optional models — disabled by default for speed.
+        # Enable these if you want perceptual IQA (pyiqa) or AI captions (Florence-2).
+        "enable_perceptual_scorer": False,
+        "enable_image_describer": False,
     },
     "ui": {
         "theme": "dark",

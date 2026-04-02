@@ -52,19 +52,25 @@ class Settings:
 
         Args:
             config_path: Path to a YAML file with user overrides.  If ``None``
-                or the file does not exist, pure defaults are used.
+                the default path (``~/.imagic/config.yaml``) is tried before
+                falling back to built-in defaults.
         """
-        self.config_path: Optional[Path] = config_path
+        # If no explicit path given, try the standard user config location so
+        # that saved values (e.g. activation_token) are restored on next launch.
+        _default_path = Path(DEFAULTS["app"]["data_dir"]) / "config.yaml"
+        resolved = config_path or (_default_path if _default_path.is_file() else None)
+
+        self.config_path: Optional[Path] = resolved or _default_path
         self.data: dict = copy.deepcopy(DEFAULTS)
 
-        if config_path and config_path.is_file():
+        if resolved and resolved.is_file():
             try:
-                with config_path.open("r", encoding="utf-8") as fh:
+                with resolved.open("r", encoding="utf-8") as fh:
                     user_cfg = yaml.safe_load(fh) or {}
                 self.data = _deep_merge(DEFAULTS, user_cfg)
-                logger.info("User config loaded from %s", config_path)
+                logger.info("User config loaded from %s", resolved)
             except Exception:
-                logger.exception("Failed to load config from %s — using defaults", config_path)
+                logger.exception("Failed to load config from %s — using defaults", resolved)
         else:
             logger.info("No user config found; using defaults.")
 

@@ -203,6 +203,29 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
 
+        # ── Update banner (hidden until an update is detected) ──────
+        self._update_banner = QWidget()
+        self._update_banner.setStyleSheet(
+            "background: #b45309; border-bottom: 1px solid #92400e;"
+        )
+        _banner_layout = QHBoxLayout(self._update_banner)
+        _banner_layout.setContentsMargins(16, 6, 16, 6)
+        self._update_banner_label = QLabel()
+        self._update_banner_label.setStyleSheet(
+            "color: #fff; font-size: 12px; font-weight: bold; background: transparent;"
+        )
+        _banner_layout.addWidget(self._update_banner_label, stretch=1)
+        self._update_banner_btn = QPushButton("Download Update")
+        self._update_banner_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._update_banner_btn.setStyleSheet(
+            "QPushButton { background: #fff; color: #92400e; font-weight: bold; "
+            "border: none; border-radius: 4px; padding: 4px 12px; font-size: 12px; } "
+            "QPushButton:hover { background: #fef3c7; }"
+        )
+        _banner_layout.addWidget(self._update_banner_btn)
+        self._update_banner.hide()
+        right_layout.addWidget(self._update_banner)
+
         self._stack = QStackedWidget()
         self._stack.setStyleSheet(f"background: {_BG};")
 
@@ -797,6 +820,23 @@ class MainWindow(QMainWindow):
 
     def show_error(self, title: str, message: str) -> None:
         QMessageBox.critical(self, title, message)
+
+    def show_update_banner(self, latest_version: str, download_url: str) -> None:
+        """Show a persistent banner at the top of the window prompting the user to update."""
+        self._update_banner_label.setText(
+            f"\u2b06\ufe0f  Update available: v{latest_version} is ready to download."
+        )
+        try:
+            self._update_banner_btn.clicked.disconnect()
+        except TypeError:
+            pass
+        if download_url:
+            from PyQt6.QtGui import QDesktopServices
+            from PyQt6.QtCore import QUrl
+            self._update_banner_btn.clicked.connect(
+                lambda: QDesktopServices.openUrl(QUrl(download_url))
+            )
+        self._update_banner.show()
 
     def show_info(self, title: str, message: str) -> None:
         QMessageBox.information(self, title, message)

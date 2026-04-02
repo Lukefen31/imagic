@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Optional
 
@@ -53,6 +55,7 @@ class AIController:
         keep_threshold: float = 0.50,
         trash_threshold: float = 0.35,
         duplicate_hash_threshold: int = 10,
+        max_thumbnail_workers: int = 0,
     ) -> None:
         self._queue = task_queue
         self._scorer = quality_scorer or QualityScorer()
@@ -63,6 +66,10 @@ class AIController:
         self._describer = image_describer or ImageDescriptionAnalyzer()
         self._keep = keep_threshold
         self._trash = trash_threshold
+        # Workers for parallel thumbnail generation (0 = auto from CPU count).
+        self._thumbnail_workers = max_thumbnail_workers or min(
+            8, (os.cpu_count() or 2)
+        )
 
         # Thread-safe progress state (polled by UI timer).
         self._progress_lock = threading.Lock()
@@ -147,20 +154,34 @@ class AIController:
 
             # Ensure thumbnails exist before scoring — avoids Pillow
             # failing on RAW files and reduces processing time.
+            # Run in parallel to hide I/O and subprocess latency.
             thumb_dir = Path.home() / ".imagic" / "thumbnails"
             thumb_dir.mkdir(parents=True, exist_ok=True)
-            thumbs_generated = 0
-            for photo in photos:
-                if not photo.thumbnail_path or not Path(photo.thumbnail_path).is_file():
+
+            photos_needing_thumbs = [
+                p for p in photos
+                if not p.thumbnail_path or not Path(p.thumbnail_path).is_file()
+            ]
+
+            if photos_needing_thumbs:
+                def _make_thumb(photo):
                     raw = Path(photo.file_path)
                     thumb_path = thumb_dir / f"{raw.stem}_thumb.jpg"
                     result = generate_thumbnail(raw, thumb_path)
-                    if result:
-                        photo.thumbnail_path = str(result)
-                        thumbs_generated += 1
-            if thumbs_generated:
-                session.commit()
-                logger.info("Auto-generated %d thumbnails before analysis.", thumbs_generated)
+                    return photo, str(result) if result else None
+
+                thumbs_generated = 0
+                with ThreadPoolExecutor(max_workers=self._thumbnail_workers) as executor:
+                    futures = {executor.submit(_make_thumb, p): p for p in photos_needing_thumbs}
+                    for future in as_completed(futures):
+                        photo, thumb_str = future.result()
+                        if thumb_str:
+                            photo.thumbnail_path = thumb_str
+                            thumbs_generated += 1
+
+                if thumbs_generated:
+                    session.commit()
+                    logger.info("Auto-generated %d thumbnails before analysis.", thumbs_generated)
 
             for photo in photos:
                 photo.status = PhotoStatus.ANALYZING.value

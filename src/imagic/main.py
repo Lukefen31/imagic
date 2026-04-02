@@ -169,12 +169,21 @@ def run_headless(args: argparse.Namespace) -> int:
         return 1
     app.resume_pending_work()
 
+    from imagic.ai.perceptual_scorer import PerceptualScorer
+    from imagic.ai.image_describer import ImageDescriptionAnalyzer
+
     lib_ctrl = LibraryController(task_queue=app.task_queue)
     ai_ctrl = AIController(
         task_queue=app.task_queue,
         keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.50)),
         trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.35)),
         duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=5)),
+        perceptual_scorer=PerceptualScorer(
+            enabled=bool(app.settings.get_nested("ai", "enable_perceptual_scorer", default=False))
+        ),
+        image_describer=ImageDescriptionAnalyzer(
+            enabled=bool(app.settings.get_nested("ai", "enable_image_describer", default=False))
+        ),
     )
     proc_ctrl = ProcessingController(
         task_queue=app.task_queue,
@@ -242,11 +251,20 @@ def run_gui(args: argparse.Namespace) -> int:
         task_queue=app.task_queue,
         thumbnail_dir=Path(app.settings.get_nested("processing", "thumbnail_directory", default="thumbnails")),
     )
+    from imagic.ai.perceptual_scorer import PerceptualScorer
+    from imagic.ai.image_describer import ImageDescriptionAnalyzer
+
     ai_ctrl = AIController(
         task_queue=app.task_queue,
         keep_threshold=float(app.settings.get_nested("ai", "keep_threshold", default=0.50)),
         trash_threshold=float(app.settings.get_nested("ai", "trash_threshold", default=0.35)),
         duplicate_hash_threshold=int(app.settings.get_nested("ai", "duplicate_hash_threshold", default=5)),
+        perceptual_scorer=PerceptualScorer(
+            enabled=bool(app.settings.get_nested("ai", "enable_perceptual_scorer", default=False))
+        ),
+        image_describer=ImageDescriptionAnalyzer(
+            enabled=bool(app.settings.get_nested("ai", "enable_image_describer", default=False))
+        ),
     )
     proc_ctrl = ProcessingController(
         task_queue=app.task_queue,
@@ -1197,13 +1215,10 @@ def run_gui(args: argparse.Namespace) -> int:
     def _show_update_banner():
         update_info = getattr(app, "_pending_update", None)
         if update_info:
-            from imagic import __version__
             latest = update_info.get("latest_version", "")
             url = update_info.get("download_url", "")
-            window.status_bar.set_status(
-                f"Update available: v{latest} (you have v{__version__})"
-                f'{" — visit " + url + " to download" if url else ""}'
-            )
+            if latest:
+                window.show_update_banner(latest, url)
 
     QTimer.singleShot(2000, _show_update_banner)
 

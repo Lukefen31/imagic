@@ -32,6 +32,7 @@ DEFAULTS: dict = {
         "raw_extensions": [
             ".cr2", ".cr3", ".nef", ".arw", ".raf",
             ".orf", ".rw2", ".dng", ".pef",
+            ".tif", ".tiff",
         ],
     },
     "processing": {

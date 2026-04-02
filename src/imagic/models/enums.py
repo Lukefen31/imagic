@@ -58,8 +58,9 @@ class SupportedFormat(str, Enum):
         RW2: Panasonic RAW.
         DNG: Adobe Digital Negative.
         PEF: Pentax RAW.
+        TIF: TIFF image (.tif).
+        TIFF: TIFF image (.tiff).
         JPEG: JPEG output.
-        TIFF: TIFF output.
         PNG: PNG output.
     """
 
@@ -72,8 +73,9 @@ class SupportedFormat(str, Enum):
     RW2 = ".rw2"
     DNG = ".dng"
     PEF = ".pef"
-    JPEG = ".jpg"
+    TIF = ".tif"
     TIFF = ".tiff"
+    JPEG = ".jpg"
     PNG = ".png"
 
     @classmethod
@@ -82,13 +84,13 @@ class SupportedFormat(str, Enum):
         return {
             cls.CR2.value, cls.CR3.value, cls.NEF.value, cls.ARW.value,
             cls.RAF.value, cls.ORF.value, cls.RW2.value, cls.DNG.value,
-            cls.PEF.value,
+            cls.PEF.value, cls.TIF.value, cls.TIFF.value,
         }
 
     @classmethod
     def output_extensions(cls) -> set[str]:
         """Return the set of recognised output file extensions (lowercase)."""
-        return {cls.JPEG.value, cls.TIFF.value, cls.PNG.value}
+        return {cls.JPEG.value, cls.TIFF.value, cls.TIF.value, cls.PNG.value}
 
     @classmethod
     def all_extensions(cls) -> set[str]:

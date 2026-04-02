@@ -19,6 +19,8 @@ scanner:
     - .rw2
     - .dng
     - .pef
+    - .tif
+    - .tiff
 
 processing:
   max_workers: 4

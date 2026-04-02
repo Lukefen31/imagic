@@ -8,6 +8,23 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+
+# Auto-detect RawTherapee payload if not supplied.
+if (-not $RawTherapeePayloadDir) {
+    $defaultPayload = Join-Path $RepoRoot 'build\vendor\rawtherapee\windows-x64\extracted\{app}'
+    if (Test-Path $defaultPayload) {
+        $RawTherapeePayloadDir = $defaultPayload
+        Write-Host "Auto-detected RawTherapee payload at: $RawTherapeePayloadDir"
+    } else {
+        throw 'RawTherapee payload directory is required. Supply -RawTherapeePayloadDir or place it at build\vendor\rawtherapee\windows-x64\extracted\{app}.'
+    }
+}
+
+$resolvedPayload = (Resolve-Path $RawTherapeePayloadDir).Path
+$payloadCli = Get-ChildItem -Path $resolvedPayload -Filter 'rawtherapee-cli.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $payloadCli) {
+    throw 'The provided RawTherapee payload directory does not contain rawtherapee-cli.exe.'
+}
 $SpecPath = Join-Path $PSScriptRoot 'imagic.spec'
 $InstallerScript = Join-Path $PSScriptRoot 'imagic-installer.iss'
 $BrandingScript = Join-Path $PSScriptRoot 'generate_branding_assets.py'
@@ -53,9 +70,15 @@ function Invoke-ExternalCommand {
         [string]$FailureMessage
     )
 
-    & $FilePath @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$FailureMessage (exit code $LASTEXITCODE)."
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $FilePath @Arguments 2>&1 | ForEach-Object { "$_" } | Write-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "$FailureMessage (exit code $LASTEXITCODE)."
+        }
+    } finally {
+        $ErrorActionPreference = $prev
     }
 }
 
@@ -84,22 +107,8 @@ if (-not (Test-Path (Join-Path $sourceDist 'imagic.exe'))) {
     throw 'PyInstaller build failed: imagic.exe was not produced.'
 }
 
-Write-Host 'Compiling standard installer...'
-Invoke-ExternalCommand -FilePath $iscc -Arguments @($InstallerScript, "/DMyAppVersion=$Version", "/DSourceDist=$sourceDist", "/DInstallerOutputDir=$OutputDir", '/DIncludeRawTherapee=0') -FailureMessage 'Standard installer compilation failed'
-
-if ($RawTherapeePayloadDir) {
-    $resolvedPayload = (Resolve-Path $RawTherapeePayloadDir).Path
-    $payloadCli = Get-ChildItem -Path $resolvedPayload -Filter 'rawtherapee-cli.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $payloadCli) {
-        throw 'The provided RawTherapee payload directory does not contain rawtherapee-cli.exe.'
-    }
-
-    Write-Host 'Compiling recommended installer with bundled RawTherapee payload...'
-    Invoke-ExternalCommand -FilePath $iscc -Arguments @($InstallerScript, "/DMyAppVersion=$Version", "/DSourceDist=$sourceDist", "/DInstallerOutputDir=$OutputDir", '/DIncludeRawTherapee=1', "/DRawTherapeePayloadDir=$resolvedPayload") -FailureMessage 'Bundled RawTherapee installer compilation failed'
-}
-else {
-    Write-Host 'No RawTherapee payload directory was supplied. Only the standard installer was built.'
-}
+Write-Host 'Compiling installer (with bundled RawTherapee)...'
+Invoke-ExternalCommand -FilePath $iscc -Arguments @($InstallerScript, "/DMyAppVersion=$Version", "/DSourceDist=$sourceDist", "/DInstallerOutputDir=$OutputDir", "/DRawTherapeePayloadDir=$resolvedPayload") -FailureMessage 'Installer compilation failed'
 
 Write-Host ''
 Write-Host 'Windows packaging complete.'

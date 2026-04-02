@@ -121,11 +121,9 @@ function renderDesktopOrderStatus(data) {
         return;
     }
 
-    const windowsBlock = data.bundle_download_url
-        ? `<a class="btn btn-primary btn-lg" href="${data.bundle_download_url}"><i class="fa-brands fa-windows"></i> Download for Windows</a>`
-        : data.download_url
-            ? `<a class="btn btn-primary btn-lg" href="${data.download_url}"><i class="fa-brands fa-windows"></i> Download for Windows</a>`
-            : '';
+    const windowsBlock = data.download_url
+        ? `<a class="btn btn-primary btn-lg" href="${data.download_url}"><i class="fa-brands fa-windows"></i> Download for Windows</a>`
+        : '';
 
     const macosBlock = data.macos_download_url
         ? `<a class="btn btn-secondary btn-lg macos-download-btn" href="${data.macos_download_url}" onclick="handleMacDownload(event)"><i class="fa-brands fa-apple"></i> Download for macOS</a>`

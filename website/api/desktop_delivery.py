@@ -30,6 +30,19 @@ SMTP_USE_SSL = os.environ.get("IMAGIC_SMTP_USE_SSL", "false").lower() in {
 }
 
 _VARIANT_CONFIG = {
+    "windows": {
+        "path_env": "IMAGIC_DESKTOP_INSTALLER_PATH",
+        "url_env": "IMAGIC_DESKTOP_INSTALLER_URL",
+        "default_name": "imagic-desktop-setup.exe",
+        "label": "Windows installer",
+    },
+    "macos": {
+        "path_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_PATH",
+        "url_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_URL",
+        "default_name": "imagic-desktop.dmg",
+        "label": "macOS installer",
+    },
+    # Legacy aliases kept so existing download tokens still resolve.
     "standard": {
         "path_env": "IMAGIC_DESKTOP_INSTALLER_PATH",
         "url_env": "IMAGIC_DESKTOP_INSTALLER_URL",
@@ -37,10 +50,10 @@ _VARIANT_CONFIG = {
         "label": "Windows installer",
     },
     "rawtherapee": {
-        "path_env": "IMAGIC_DESKTOP_BUNDLE_PATH",
-        "url_env": "IMAGIC_DESKTOP_BUNDLE_URL",
-        "default_name": "imagic-desktop-plus-rawtherapee-setup.exe",
-        "label": "Windows installer + RawTherapee bundle",
+        "path_env": "IMAGIC_DESKTOP_INSTALLER_PATH",
+        "url_env": "IMAGIC_DESKTOP_INSTALLER_URL",
+        "default_name": "imagic-desktop-setup.exe",
+        "label": "Windows installer",
     },
     "standard_macos": {
         "path_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_PATH",
@@ -49,19 +62,6 @@ _VARIANT_CONFIG = {
         "label": "macOS installer",
     },
     "rawtherapee_macos": {
-        "path_env": "IMAGIC_DESKTOP_MACOS_BUNDLE_PATH",
-        "url_env": "IMAGIC_DESKTOP_MACOS_BUNDLE_URL",
-        "default_name": "imagic-desktop-plus-rawtherapee.dmg",
-        "label": "macOS installer + RawTherapee bundle",
-    },
-    # Clean public-facing aliases (both platforms now bundle RT by default)
-    "windows": {
-        "path_env": "IMAGIC_DESKTOP_BUNDLE_PATH",
-        "url_env": "IMAGIC_DESKTOP_BUNDLE_URL",
-        "default_name": "imagic-desktop-setup.exe",
-        "label": "Windows installer",
-    },
-    "macos": {
         "path_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_PATH",
         "url_env": "IMAGIC_DESKTOP_MACOS_INSTALLER_URL",
         "default_name": "imagic-desktop.dmg",

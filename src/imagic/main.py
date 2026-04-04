@@ -721,10 +721,14 @@ def run_gui(args: argparse.Namespace) -> int:
         db = DatabaseManager.get()
         session = db.get_session()
         try:
+            from sqlalchemy import asc, func
             photos = (
                 session.query(Photo)
                 .filter(Photo.quality_score.isnot(None))
-                .order_by(Photo.quality_score.asc())
+                .order_by(
+                    asc(func.coalesce(Photo.exif_date_taken, '9999-12-31')),
+                    Photo.file_name.asc(),
+                )
                 .all()
             )
             data = [
@@ -1057,9 +1061,41 @@ def run_gui(args: argparse.Namespace) -> int:
     def _on_export_double_click(photo_id: int, export_path: str, thumb_path: str) -> None:
         _open_photo_editor(photo_id, source="exports")
 
+    def _apply_export_options(overrides: dict) -> tuple[dict, str | None, int | None]:
+        """Extract ``_export_format`` / ``_export_quality`` from *overrides*.
+
+        Returns ``(clean_overrides, format_or_none, quality_or_none)`` so
+        the caller can temporarily reconfigure the export service.
+        """
+        fmt = overrides.pop("_export_format", None)
+        quality = overrides.pop("_export_quality", None)
+        return overrides, fmt, quality
+
+    def _with_export_options(fmt: str | None, quality: int | None):
+        """Context-manager-like helper: swap export service settings and restore."""
+        from imagic.models.enums import ExportFormat
+        old_fmt = app.export_service._export_format
+        old_q = app.export_service._jpeg_quality
+        old_native_q = app.export_service._native._jpeg_quality
+
+        if fmt:
+            app.export_service._export_format = ExportFormat(fmt)
+        if quality is not None:
+            app.export_service._jpeg_quality = quality
+            app.export_service._native._jpeg_quality = quality
+        return old_fmt, old_q, old_native_q
+
+    def _restore_export_options(old_fmt, old_q, old_native_q):
+        app.export_service._export_format = old_fmt
+        app.export_service._jpeg_quality = old_q
+        app.export_service._native._jpeg_quality = old_native_q
+
     def _handle_editor_apply(pid: int, overrides: dict) -> None:
         """Persist overrides from the embedded editor, re-export, and record feedback."""
         from imagic.ai.feedback_learner import get_learner
+
+        overrides, fmt, quality = _apply_export_options(overrides)
+        saved = _with_export_options(fmt, quality)
 
         learner = get_learner()
         db2 = DatabaseManager.get()
@@ -1068,6 +1104,7 @@ def run_gui(args: argparse.Namespace) -> int:
             photo_obj = s2.get(Photo, pid)
             if photo_obj is None:
                 window.photo_editor.on_export_finished(False)
+                _restore_export_options(*saved)
                 return
 
             # Compute actual mean brightness from thumbnail if available.
@@ -1104,6 +1141,8 @@ def run_gui(args: argparse.Namespace) -> int:
 
         result = app.export_service.export_photo(pid)
 
+        _restore_export_options(*saved)
+
         s3 = db2.get_session()
         try:
             refreshed = s3.get(Photo, pid)
@@ -1112,6 +1151,54 @@ def run_gui(args: argparse.Namespace) -> int:
             s3.close()
 
         window.photo_editor.on_export_finished(result.success, new_path)
+        _refresh_exports()
+
+    def _handle_batch_export_all(batch: list, fmt: str, quality: int) -> None:
+        """Export every photo in the editor batch with chosen format/quality."""
+        saved = _with_export_options(fmt, quality)
+        db_b = DatabaseManager.get()
+        exported = 0
+        failed = 0
+
+        for pid, overrides in batch:
+            overrides.pop("_export_format", None)
+            overrides.pop("_export_quality", None)
+
+            s_b = db_b.get_session()
+            try:
+                photo_obj = s_b.get(Photo, pid)
+                if photo_obj is None:
+                    failed += 1
+                    continue
+                photo_obj.manual_overrides = json.dumps(overrides)
+                if overrides.get("color_grade"):
+                    photo_obj.color_grade = overrides["color_grade"]
+
+                old_export = Path(photo_obj.export_path) if photo_obj.export_path else None
+                if old_export and old_export.is_file():
+                    old_export.unlink()
+
+                photo_obj.status = PhotoStatus.KEEP.value
+                s_b.commit()
+            except Exception:
+                s_b.rollback()
+                failed += 1
+                continue
+            finally:
+                s_b.close()
+
+            result = app.export_service.export_photo(pid)
+            if result.success:
+                exported += 1
+            else:
+                failed += 1
+
+        _restore_export_options(*saved)
+        window.photo_editor.on_export_finished(
+            exported > 0,
+            f"Exported {exported} photo{'s' if exported != 1 else ''}"
+            + (f", {failed} failed" if failed else ""),
+        )
         _refresh_exports()
 
     window.import_requested.connect(_on_import)
@@ -1153,6 +1240,7 @@ def run_gui(args: argparse.Namespace) -> int:
     window.edit_step_entered.connect(_on_edit_step_entered)
     window.edit_photo_requested.connect(_on_library_double_click)
     window.photo_editor.edit_applied.connect(_handle_editor_apply)
+    window.photo_editor.batch_export_all.connect(_handle_batch_export_all)
 
     def _handle_photo_trash(photo_id: int) -> None:
         """Mark a photo as trashed in the database."""

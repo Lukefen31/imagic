@@ -1101,6 +1101,7 @@ class PhotoEditorWidget(QWidget):
     """
 
     edit_applied = pyqtSignal(int, dict)  # photo_id, overrides
+    batch_export_all = pyqtSignal(list, str, int)  # [(pid, overrides), ...], format, quality
     edits_saved = pyqtSignal(list)  # list of (photo_id, overrides_dict)
     photo_trashed = pyqtSignal(int)  # photo_id
     closed = pyqtSignal()
@@ -2582,7 +2583,18 @@ class PhotoEditorWidget(QWidget):
         self.setFocus()
 
     def _on_apply(self) -> None:
-        """Emit the current overrides for export."""
+        """Show export options dialog, then emit export signal(s)."""
+        from imagic.views.export_dialog import ExportOptionsDialog
+
+        dlg = ExportOptionsDialog(batch_size=len(self._photos), parent=self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        fmt = dlg.chosen_format()
+        quality = dlg.chosen_quality()
+        export_all = dlg.export_all()
+
+        # Always save the current photo's edits first
         params = self._gather_params()
         photo = self._photos[self._index]
         photo_id = photo.get("id", 0)
@@ -2597,9 +2609,36 @@ class PhotoEditorWidget(QWidget):
         # Store locally so navigation remembers the edit
         photo["manual_overrides"] = json.dumps(params)
 
+        # Attach export options to overrides for single-photo export
+        params["_export_format"] = fmt
+        params["_export_quality"] = quality
+
         self._apply_btn.setEnabled(False)
-        self._apply_btn.setText("Exporting…")
-        self.edit_applied.emit(photo_id, params)
+
+        if export_all:
+            # Collect all photos' current overrides
+            batch = []
+            for i, p in enumerate(self._photos):
+                pid = p.get("id", 0)
+                if i == self._index:
+                    batch.append((pid, params))
+                else:
+                    raw = p.get("manual_overrides")
+                    if raw:
+                        try:
+                            ov = json.loads(raw) if isinstance(raw, str) else raw
+                        except (json.JSONDecodeError, TypeError):
+                            ov = {}
+                    else:
+                        ov = {}
+                    ov["_export_format"] = fmt
+                    ov["_export_quality"] = quality
+                    batch.append((pid, ov))
+            self._apply_btn.setText(f"Exporting {len(batch)} photos…")
+            self.batch_export_all.emit(batch, fmt, quality)
+        else:
+            self._apply_btn.setText("Exporting…")
+            self.edit_applied.emit(photo_id, params)
 
     def on_export_finished(self, success: bool, new_export_path: str = "") -> None:
         """Called by host after re-export completes."""

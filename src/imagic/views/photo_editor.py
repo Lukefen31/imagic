@@ -782,6 +782,7 @@ class _PreviewCanvas(QWidget):
         self._crop_rect: Optional[QRect] = None  # in image coordinates
         self._crop_dragging = False
         self._crop_start: Optional[QPoint] = None
+        self._crop_forced_ratio: float = 0  # 0 = free crop
 
     def set_pixmap(self, pix: QPixmap) -> None:
         self._pixmap = pix
@@ -808,6 +809,15 @@ class _PreviewCanvas(QWidget):
     def clear_crop(self) -> None:
         self._crop_rect = None
         self.update()
+
+    def set_crop_rect(self, rect: QRect) -> None:
+        """Set the crop rect from outside (e.g. restoring saved crop or AI suggestion)."""
+        self._crop_rect = rect
+        self.update()
+
+    def set_crop_aspect_ratio(self, ratio: float) -> None:
+        """Set the forced aspect ratio for crop dragging. 0 = free."""
+        self._crop_forced_ratio = ratio
 
     def _image_rect(self) -> QRect:
         """Calculate where the image is drawn on the widget."""
@@ -903,6 +913,17 @@ class _PreviewCanvas(QWidget):
         if self._crop_dragging and self._crop_start is not None:
             current = self._widget_to_image(event.pos())
             self._crop_rect = QRect(self._crop_start, current).normalized()
+            # Enforce aspect ratio if set
+            if self._crop_forced_ratio > 0 and self._crop_rect.height() > 0:
+                target_r = self._crop_forced_ratio
+                cw, ch = self._crop_rect.width(), self._crop_rect.height()
+                current_r = cw / ch if ch > 0 else 1.0
+                if current_r > target_r:
+                    new_w = int(ch * target_r)
+                    self._crop_rect.setWidth(new_w)
+                else:
+                    new_h = int(cw / target_r)
+                    self._crop_rect.setHeight(new_h)
             # Clamp to image bounds
             if self._pixmap:
                 img_rect = QRect(0, 0, self._pixmap.width(), self._pixmap.height())
@@ -1106,6 +1127,9 @@ class PhotoEditorWidget(QWidget):
         self._prefetch_worker: Optional[_RawDecodeWorker] = None
 
         self._crop_rect: Optional[QRect] = None
+
+        # Crop aspect ratio setting
+        self._crop_aspect_ratio: str = "Free"
 
         # Undo / Redo stacks
         self._undo_stack: List[dict] = []
@@ -1377,6 +1401,47 @@ class PhotoEditorWidget(QWidget):
         self._apply_crop_btn.clicked.connect(self._apply_crop)
         self._apply_crop_btn.setVisible(False)
         layout.addWidget(self._apply_crop_btn)
+
+        # AI Suggest Crop button (hidden until crop mode enabled)
+        self._ai_crop_btn = QPushButton("🤖 AI Crop")
+        self._ai_crop_btn.setStyleSheet(
+            f"QPushButton {{ background: #1e3a5f; color: #7dd3fc; font-weight: bold; "
+            f"border: 1px solid #2563eb; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
+            f"QPushButton:hover {{ background: #1e40af; }}"
+        )
+        self._ai_crop_btn.setToolTip("Let AI suggest the best crop for this photo")
+        self._ai_crop_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._ai_crop_btn.clicked.connect(self._ai_suggest_crop)
+        self._ai_crop_btn.setVisible(False)
+        layout.addWidget(self._ai_crop_btn)
+
+        # Aspect ratio combo (hidden until crop mode enabled)
+        self._crop_ratio_combo = QComboBox()
+        self._crop_ratio_combo.addItems([
+            "Free", "Original", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"
+        ])
+        self._crop_ratio_combo.setStyleSheet(
+            f"QComboBox {{ background: #222; color: {_TEXT}; "
+            f"border: 1px solid #444; border-radius: 6px; padding: 4px 10px; font-size: 11px; }}"
+        )
+        self._crop_ratio_combo.setToolTip("Lock crop to a specific aspect ratio")
+        self._crop_ratio_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._crop_ratio_combo.setVisible(False)
+        self._crop_ratio_combo.currentTextChanged.connect(self._on_crop_ratio_changed)
+        layout.addWidget(self._crop_ratio_combo)
+
+        # Clear Crop button (hidden until crop mode enabled)
+        self._clear_crop_btn = QPushButton("✕ Clear")
+        self._clear_crop_btn.setStyleSheet(
+            f"QPushButton {{ background: #222; color: {_TEXT_DIM}; "
+            f"border: 1px solid #444; border-radius: 6px; padding: 5px 10px; font-size: 11px; }}"
+            f"QPushButton:hover {{ background: #2a2a2a; color: #fff; }}"
+        )
+        self._clear_crop_btn.setToolTip("Clear crop and show full image")
+        self._clear_crop_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._clear_crop_btn.clicked.connect(self._clear_crop)
+        self._clear_crop_btn.setVisible(False)
+        layout.addWidget(self._clear_crop_btn)
 
         # Before/After toggle
         self._ba_btn = QPushButton("Before / After  [\\]")
@@ -2227,6 +2292,18 @@ class PhotoEditorWidget(QWidget):
                 self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
         self._tone_curve_widget.set_points(self._curve_data[self._current_curve_channel])
 
+        # Restore crop from overrides
+        cx = overrides.get("crop_x", 0)
+        cy = overrides.get("crop_y", 0)
+        cw = overrides.get("crop_w", 0)
+        ch_val = overrides.get("crop_h", 0)
+        if cw > 0 and ch_val > 0:
+            self._crop_rect = QRect(int(cx), int(cy), int(cw), int(ch_val))
+            self._canvas.set_crop_rect(self._crop_rect)
+        else:
+            self._crop_rect = None
+            self._canvas.clear_crop()
+
         # Expert combos
         if "hl_recovery_method" in overrides:
             idx = self._hl_recovery_combo.findText(overrides["hl_recovery_method"])
@@ -2258,6 +2335,13 @@ class PhotoEditorWidget(QWidget):
             params[key] = slider.value()
         params["color_grade"] = self._grade_combo.currentText()
         params["color_grade_intensity"] = self._grade_intensity.value()
+
+        # Include crop data if set
+        if self._crop_rect and self._crop_rect.width() > 0 and self._crop_rect.height() > 0:
+            params["crop_x"] = self._crop_rect.x()
+            params["crop_y"] = self._crop_rect.y()
+            params["crop_w"] = self._crop_rect.width()
+            params["crop_h"] = self._crop_rect.height()
 
         # Expert mode: tone curve data
         if self._expert_btn.isChecked():
@@ -2347,6 +2431,18 @@ class PhotoEditorWidget(QWidget):
                 self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
         self._tone_curve_widget.set_points(self._curve_data[self._current_curve_channel])
 
+        # Restore crop state for undo/redo
+        cx = params.get("crop_x", 0)
+        cy = params.get("crop_y", 0)
+        cw = params.get("crop_w", 0)
+        ch_val = params.get("crop_h", 0)
+        if cw > 0 and ch_val > 0:
+            self._crop_rect = QRect(int(cx), int(cy), int(cw), int(ch_val))
+            self._canvas.set_crop_rect(self._crop_rect)
+        else:
+            self._crop_rect = None
+            self._canvas.clear_crop()
+
     def _update_preview(self) -> None:
         """Apply current adjustments to the RAW data and display."""
         if self._raw_rgb is None:
@@ -2361,6 +2457,17 @@ class PhotoEditorWidget(QWidget):
         else:
             params = self._gather_params()
             result = PreviewEngine.apply(source, params)
+
+            # Apply crop to preview when not in crop mode (crop already applied)
+            crop_rect = self._crop_rect
+            if crop_rect and not self._crop_btn.isChecked():
+                rh, rw = result.shape[:2]
+                x1 = max(0, min(crop_rect.x(), rw - 1))
+                y1 = max(0, min(crop_rect.y(), rh - 1))
+                x2 = min(rw, crop_rect.x() + crop_rect.width())
+                y2 = min(rh, crop_rect.y() + crop_rect.height())
+                if x2 > x1 + 5 and y2 > y1 + 5:
+                    result = result[y1:y2, x1:x2]
 
         # Update histogram
         self._histogram.update_histogram(result)
@@ -2440,11 +2547,6 @@ class PhotoEditorWidget(QWidget):
         if not self._photos or self._raw_rgb is None:
             return
         params = self._gather_params()
-        if self._crop_rect and self._crop_rect.width() > 0:
-            params["crop_x"] = self._crop_rect.x()
-            params["crop_y"] = self._crop_rect.y()
-            params["crop_w"] = self._crop_rect.width()
-            params["crop_h"] = self._crop_rect.height()
         params["_editor_touched"] = True
         self._photos[self._index]["manual_overrides"] = json.dumps(params)
 
@@ -2513,6 +2615,7 @@ class PhotoEditorWidget(QWidget):
             slider.reset()
         self._grade_combo.setCurrentIndex(0)
         self._canvas.clear_crop()
+        self._crop_rect = None
         if self._crop_btn.isChecked():
             self._crop_btn.setChecked(False)
         # Reset expert tone curves
@@ -2535,6 +2638,14 @@ class PhotoEditorWidget(QWidget):
     def _toggle_crop_mode(self, enabled: bool) -> None:
         self._canvas.set_crop_mode(enabled)
         self._apply_crop_btn.setVisible(enabled)
+        self._ai_crop_btn.setVisible(enabled)
+        self._crop_ratio_combo.setVisible(enabled)
+        self._clear_crop_btn.setVisible(enabled)
+        if enabled and self._crop_rect:
+            # Re-show existing crop rect on canvas when re-entering crop mode
+            self._canvas.set_crop_rect(self._crop_rect)
+            self._canvas._crop_mode = True
+            self._canvas.update()
 
     def _on_crop_changed(self, rect: QRect) -> None:
         """Store crop rectangle for export."""
@@ -2547,6 +2658,120 @@ class PhotoEditorWidget(QWidget):
         self._schedule_preview()
         self._commit_undo_state()
         self.setFocus()
+
+    def _clear_crop(self) -> None:
+        """Remove the current crop and return to full image."""
+        self._crop_rect = None
+        self._canvas.clear_crop()
+        if self._crop_btn.isChecked():
+            self._crop_btn.setChecked(False)
+        self._schedule_preview()
+        self._commit_undo_state()
+        self.setFocus()
+
+    def _on_crop_ratio_changed(self, text: str) -> None:
+        """Update canvas crop constraint when aspect ratio changes."""
+        self._crop_aspect_ratio = text
+        ratio_map = {"1:1": 1.0, "3:2": 3/2, "2:3": 2/3, "4:3": 4/3,
+                     "3:4": 3/4, "16:9": 16/9, "9:16": 9/16}
+        if text == "Original" and self._raw_rgb_preview is not None:
+            h, w = self._raw_rgb_preview.shape[:2]
+            forced = w / h if h > 0 else 0
+        else:
+            forced = ratio_map.get(text, 0)
+        self._canvas.set_crop_aspect_ratio(forced)
+        # If there's already a crop and user changes ratio, re-crop with new ratio
+        if self._crop_rect and self._crop_rect.width() > 0:
+            self._apply_ratio_to_crop(text)
+
+    def _apply_ratio_to_crop(self, ratio_text: str) -> None:
+        """Adjust the existing crop rect to match the chosen aspect ratio."""
+        if not self._crop_rect or ratio_text == "Free":
+            return
+        cx, cy = self._crop_rect.x(), self._crop_rect.y()
+        cw, ch = self._crop_rect.width(), self._crop_rect.height()
+        if ratio_text == "Original" and self._raw_rgb_preview is not None:
+            h, w = self._raw_rgb_preview.shape[:2]
+            target = w / h if h > 0 else 1.0
+        else:
+            ratio_map = {"1:1": 1.0, "3:2": 3/2, "2:3": 2/3, "4:3": 4/3,
+                         "3:4": 3/4, "16:9": 16/9, "9:16": 9/16}
+            target = ratio_map.get(ratio_text, 0)
+            if target == 0:
+                return
+        # Fit new ratio inside the current crop area
+        current_ratio = cw / ch if ch > 0 else 1.0
+        if current_ratio > target:
+            new_w = int(ch * target)
+            new_h = ch
+        else:
+            new_w = cw
+            new_h = int(cw / target)
+        # Center the new crop within the old one
+        new_x = cx + (cw - new_w) // 2
+        new_y = cy + (ch - new_h) // 2
+        self._crop_rect = QRect(new_x, new_y, new_w, new_h)
+        self._canvas.set_crop_rect(self._crop_rect)
+        self._canvas.crop_changed.emit(self._crop_rect)
+
+    def _ai_suggest_crop(self) -> None:
+        """Run the AI auto-crop analyzer and apply the suggestion."""
+        if not self._photos:
+            return
+        photo = self._photos[self._index]
+
+        # Determine which ratio to target (from combo)
+        ratio_text = self._crop_ratio_combo.currentText()
+        target_ratio = None
+        if ratio_text not in ("Free", "Original"):
+            target_ratio = ratio_text
+
+        # Try thumbnail first, fall back to file_path
+        image_path = photo.get("thumbnail_path", "") or photo.get("file_path", "")
+        if not image_path or not Path(image_path).is_file():
+            return
+
+        self._ai_crop_btn.setEnabled(False)
+        self._ai_crop_btn.setText("⏳ Analyzing…")
+
+        try:
+            from imagic.services.auto_crop import analyze_crop
+            result = analyze_crop(Path(image_path), target_ratio=target_ratio)
+
+            if result.w > 0 and result.h > 0 and result.confidence > 0:
+                # Scale crop from thumbnail/source dimensions to preview dimensions
+                if self._raw_rgb_preview is not None:
+                    ph, pw = self._raw_rgb_preview.shape[:2]
+                elif self._raw_rgb is not None:
+                    ph, pw = self._raw_rgb.shape[:2]
+                else:
+                    ph, pw = result.original_h, result.original_w
+                sx = pw / result.original_w if result.original_w > 0 else 1.0
+                sy = ph / result.original_h if result.original_h > 0 else 1.0
+                scaled_rect = QRect(
+                    int(result.x * sx), int(result.y * sy),
+                    int(result.w * sx), int(result.h * sy),
+                )
+                self._crop_rect = scaled_rect
+                self._canvas.set_crop_rect(scaled_rect)
+                self._canvas._crop_mode = True
+                self._canvas.update()
+                self._canvas.crop_changed.emit(scaled_rect)
+            else:
+                # No significant crop suggested
+                self._ai_crop_btn.setText("✓ No crop needed")
+                QTimer.singleShot(2000, lambda: self._ai_crop_btn.setText("🤖 AI Crop"))
+                self._ai_crop_btn.setEnabled(True)
+                return
+        except Exception as exc:
+            logger.warning("AI crop failed: %s", exc)
+            self._ai_crop_btn.setText("✗ Failed")
+            QTimer.singleShot(2000, lambda: self._ai_crop_btn.setText("🤖 AI Crop"))
+            self._ai_crop_btn.setEnabled(True)
+            return
+
+        self._ai_crop_btn.setText("🤖 AI Crop")
+        self._ai_crop_btn.setEnabled(True)
 
     # ------------------------------------------------------------------
     # AI Optimize-All

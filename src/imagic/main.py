@@ -1217,8 +1217,9 @@ def run_gui(args: argparse.Namespace) -> int:
         if update_info:
             latest = update_info.get("latest_version", "")
             url = update_info.get("download_url", "")
+            installer_url = update_info.get("installer_url", "")
             if latest:
-                window.show_update_banner(latest, url)
+                window.show_update_banner(latest, url, installer_url)
 
     QTimer.singleShot(2000, _show_update_banner)
 

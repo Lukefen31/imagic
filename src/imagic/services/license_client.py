@@ -102,8 +102,9 @@ class DesktopLicenseClient:
     def check_for_update(self, current_version: str) -> dict[str, Any] | None:
         """Check if a newer version is available.
 
-        Returns a dict with 'latest_version' and 'download_url' if an update
-        is available, or None if already up to date (or on error).
+        Returns a dict with 'latest_version', 'download_url', and
+        'installer_url' (direct installer link for the current platform)
+        if an update is available, or None if already up to date (or on error).
         """
         if not self.enabled:
             return None
@@ -116,6 +117,11 @@ class DesktopLicenseClient:
                 data = json.loads(response.read().decode("utf-8"))
             latest = data.get("latest_version", "")
             if latest and _version_tuple(latest) > _version_tuple(current_version):
+                import sys
+                if sys.platform == "darwin":
+                    data["installer_url"] = data.get("installer_macos", "")
+                else:
+                    data["installer_url"] = data.get("installer_windows", "")
                 return data
         except Exception:
             pass

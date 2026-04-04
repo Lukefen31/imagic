@@ -215,7 +215,19 @@ class MainWindow(QMainWindow):
             "color: #fff; font-size: 12px; font-weight: bold; background: transparent;"
         )
         _banner_layout.addWidget(self._update_banner_label, stretch=1)
-        self._update_banner_btn = QPushButton("Download Update")
+
+        self._update_progress = QProgressBar()
+        self._update_progress.setFixedWidth(200)
+        self._update_progress.setFixedHeight(18)
+        self._update_progress.setStyleSheet(
+            "QProgressBar { background: #92400e; border: 1px solid #78350f; border-radius: 4px; "
+            "text-align: center; color: #fff; font-size: 10px; } "
+            "QProgressBar::chunk { background: #f59e0b; border-radius: 3px; }"
+        )
+        self._update_progress.hide()
+        _banner_layout.addWidget(self._update_progress)
+
+        self._update_banner_btn = QPushButton("Download && Install")
         self._update_banner_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._update_banner_btn.setStyleSheet(
             "QPushButton { background: #fff; color: #92400e; font-weight: bold; "
@@ -821,8 +833,9 @@ class MainWindow(QMainWindow):
     def show_error(self, title: str, message: str) -> None:
         QMessageBox.critical(self, title, message)
 
-    def show_update_banner(self, latest_version: str, download_url: str) -> None:
-        """Show a persistent banner at the top of the window prompting the user to update."""
+    def show_update_banner(self, latest_version: str, download_url: str,
+                           installer_url: str = "") -> None:
+        """Show a persistent banner with in-app download & install."""
         self._update_banner_label.setText(
             f"\u2b06\ufe0f  Update available: v{latest_version} is ready to download."
         )
@@ -830,12 +843,78 @@ class MainWindow(QMainWindow):
             self._update_banner_btn.clicked.disconnect()
         except TypeError:
             pass
-        if download_url:
+
+        if installer_url:
+            from imagic.services.auto_updater import AutoUpdater
+
+            self._auto_updater = AutoUpdater(self)
+
+            def _start_download():
+                self._update_banner_btn.setEnabled(False)
+                self._update_banner_btn.setText("Downloading…")
+                self._update_progress.setValue(0)
+                self._update_progress.show()
+                self._auto_updater.download(installer_url)
+
+            def _on_progress(downloaded: int, total: int):
+                if total > 0:
+                    self._update_progress.setMaximum(total)
+                    self._update_progress.setValue(downloaded)
+                    pct = int(downloaded * 100 / total)
+                    mb_down = downloaded / (1024 * 1024)
+                    mb_total = total / (1024 * 1024)
+                    self._update_progress.setFormat(
+                        f"{mb_down:.1f} / {mb_total:.1f} MB ({pct}%)"
+                    )
+                else:
+                    self._update_progress.setMaximum(0)  # indeterminate
+
+            def _on_finished(path: str):
+                self._update_progress.hide()
+                self._update_banner_label.setText(
+                    f"\u2b06\ufe0f  v{latest_version} downloaded. Ready to install."
+                )
+                self._update_banner_btn.setText("Install && Restart")
+                self._update_banner_btn.setEnabled(True)
+                try:
+                    self._update_banner_btn.clicked.disconnect()
+                except TypeError:
+                    pass
+                self._update_banner_btn.clicked.connect(
+                    lambda: AutoUpdater.launch_installer(path)
+                )
+
+            def _on_error(msg: str):
+                self._update_progress.hide()
+                self._update_banner_label.setText(
+                    f"\u2b06\ufe0f  Download failed. You can download manually."
+                )
+                self._update_banner_btn.setText("Open Download Page")
+                self._update_banner_btn.setEnabled(True)
+                try:
+                    self._update_banner_btn.clicked.disconnect()
+                except TypeError:
+                    pass
+                if download_url:
+                    from PyQt6.QtGui import QDesktopServices
+                    from PyQt6.QtCore import QUrl
+                    self._update_banner_btn.clicked.connect(
+                        lambda: QDesktopServices.openUrl(QUrl(download_url))
+                    )
+                logger.warning("Auto-update download failed: %s", msg)
+
+            self._auto_updater.download_progress.connect(_on_progress)
+            self._auto_updater.download_finished.connect(_on_finished)
+            self._auto_updater.download_error.connect(_on_error)
+            self._update_banner_btn.clicked.connect(_start_download)
+        elif download_url:
             from PyQt6.QtGui import QDesktopServices
             from PyQt6.QtCore import QUrl
+            self._update_banner_btn.setText("Download Update")
             self._update_banner_btn.clicked.connect(
                 lambda: QDesktopServices.openUrl(QUrl(download_url))
             )
+
         self._update_banner.show()
 
     def show_info(self, title: str, message: str) -> None:

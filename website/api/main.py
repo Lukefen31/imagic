@@ -867,10 +867,12 @@ DESKTOP_LATEST_VERSION = os.environ.get("IMAGIC_DESKTOP_LATEST_VERSION", "0.1.0"
 
 @app.get("/api/desktop/latest-version")
 async def desktop_latest_version():
-    """Return the latest desktop app version and download page URL."""
+    """Return the latest desktop app version and direct installer URLs."""
     return {
         "latest_version": DESKTOP_LATEST_VERSION,
         "download_url": f"{BASE_URL}/desktop",
+        "installer_windows": os.environ.get("IMAGIC_DESKTOP_INSTALLER_URL", ""),
+        "installer_macos": os.environ.get("IMAGIC_DESKTOP_MACOS_INSTALLER_URL", ""),
     }
 
 

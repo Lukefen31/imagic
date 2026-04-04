@@ -27,6 +27,7 @@
         }
         .changelog-hero h1 { font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 16px; }
         .changelog-hero p { color: var(--text-muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto; }
+        .changelog-hero-actions { margin-top: 24px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
 
         .changelog-timeline {
             max-width: 720px;
@@ -65,6 +66,17 @@
             color: var(--text-muted);
             font-weight: 500;
         }
+        .changelog-version .changelog-download {
+            font-size: 0.8rem;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: opacity 0.2s;
+        }
+        .changelog-version .changelog-download:hover { opacity: 0.8; }
 
         .changelog-tag {
             display: inline-block;
@@ -87,6 +99,102 @@
             line-height: 1.7;
             margin-bottom: 4px;
         }
+
+        /* Report modal */
+        .report-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .report-overlay.active { display: flex; }
+        .report-modal {
+            background: var(--bg-card, var(--bg-secondary));
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 36px 32px 28px;
+            max-width: 520px;
+            width: 100%;
+            position: relative;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+        }
+        .report-modal h2 {
+            font-size: 1.35rem;
+            margin: 0 0 4px;
+        }
+        .report-modal .modal-sub {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        .report-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .report-close:hover { background: var(--bg-secondary); }
+        .report-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+        .report-field label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .report-field input,
+        .report-field select,
+        .report-field textarea {
+            background: var(--bg-primary, #0d0d0d);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            padding: 10px 14px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .report-field input:focus,
+        .report-field select:focus,
+        .report-field textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .report-field textarea { resize: vertical; min-height: 100px; }
+        .report-field select { cursor: pointer; }
+        .report-submit {
+            width: 100%;
+            margin-top: 8px;
+            padding: 12px;
+        }
+        .report-msg {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 0.9rem;
+            min-height: 1.4em;
+        }
+        .report-msg.success { color: #22c55e; }
+        .report-msg.error { color: #ef4444; }
     </style>
 </head>
 <body>
@@ -116,12 +224,66 @@
     <div class="container">
         <h1><i class="fa-solid fa-clock-rotate-left"></i> <span class="gradient-text">Changelog</span></h1>
         <p>Everything that's shipped. Follow along as imagic evolves.</p>
+        <div class="changelog-hero-actions">
+            <a href="/desktop" class="btn btn-primary btn-sm"><i class="fa-solid fa-download"></i> Download Latest</a>
+            <button class="btn btn-secondary btn-sm" onclick="openReportModal()"><i class="fa-solid fa-bug"></i> Report a Bug</button>
+        </div>
     </div>
 </div>
 
 <section class="section">
     <div class="container">
         <div class="changelog-timeline">
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
+                    <h2>v0.3.1</h2>
+                    <span class="changelog-date">April 2026</span>
+                    <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.3.1" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
+                </div>
+                <span class="changelog-tag tag-new">New</span>
+                <span class="changelog-tag tag-fixed">Fixed</span>
+                <ul>
+                    <li>Added TIF/TIFF as supported input formats (scanner, config, and defaults)</li>
+                    <li>Fixed product key activation for licenses without a linked user account</li>
+                    <li>Updated website format references to 11+ supported formats</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
+                    <h2>v0.3.0</h2>
+                    <span class="changelog-date">April 2026</span>
+                    <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.3.0" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
+                </div>
+                <span class="changelog-tag tag-improved">Improved</span>
+                <span class="changelog-tag tag-fixed">Fixed</span>
+                <ul>
+                    <li>Simplified installer to always bundle RawTherapee — no separate "standard" variant</li>
+                    <li>Fixed activation token not persisting between app launches</li>
+                    <li>Disabled heavy AI models (Florence-2, pyiqa) by default to speed up small batch analysis</li>
+                    <li>Parallelized thumbnail generation with thread pool for faster startup</li>
+                    <li>Added visible update notification banner in the main window</li>
+                    <li>Fixed build script stderr handling for PyInstaller on Windows</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
+                    <h2>v0.2.0</h2>
+                    <span class="changelog-date">March 2026</span>
+                </div>
+                <span class="changelog-tag tag-new">New</span>
+                <span class="changelog-tag tag-improved">Improved</span>
+                <ul>
+                    <li>Desktop purchase flow with Stripe checkout and automatic email delivery</li>
+                    <li>License activation system with device-bound tokens</li>
+                    <li>Website launch: landing page, blog, documentation, and desktop download page</li>
+                    <li>Admin dashboard for license and order management</li>
+                    <li>RawTherapee bundle option in installer</li>
+                    <li>Scene-aware PP3 profile auto-selection (portrait, landscape, low-light, high-contrast)</li>
+                </ul>
+            </div>
 
             <div class="changelog-entry">
                 <div class="changelog-version">
@@ -139,12 +301,10 @@
                     <li>Batch export with multi-threaded processing</li>
                     <li>Crash-resilient export pipeline with auto-resume</li>
                     <li>RawTherapee integration for true RAW demosaicing</li>
-                    <li>Scene-aware profile auto-selection (portrait, landscape, low-light, high-contrast)</li>
                     <li>PP3 profile generation for RawTherapee</li>
                     <li>Feedback learning AI that adapts to your keep/trash decisions</li>
                     <li>CLI &amp; headless mode for automation</li>
-                    <li>License activation system with offline use after first activation</li>
-                    <li>11+ format support: CR2, CR3, NEF, ARW, RAF, ORF, RW2, DNG, PEF, TIF, TIFF</li>
+                    <li>9 RAW format support: CR2, CR3, NEF, ARW, RAF, ORF, RW2, DNG, PEF</li>
                 </ul>
             </div>
 
@@ -167,6 +327,43 @@
         </div>
     </div>
 </section>
+
+<!-- Bug Report / Feature Request Modal -->
+<div class="report-overlay" id="reportOverlay">
+    <div class="report-modal">
+        <button class="report-close" onclick="closeReportModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+        <h2><i class="fa-solid fa-envelope" style="color:var(--accent);margin-right:8px;"></i>Report a Bug or Request a Feature</h2>
+        <p class="modal-sub">Fill in the details below and we'll get back to you. All fields except version are required.</p>
+        <form id="reportForm" onsubmit="submitReport(event)">
+            <div class="report-field">
+                <label for="report-type">Type</label>
+                <select id="report-type" required>
+                    <option value="bug">Bug Report</option>
+                    <option value="feature">Feature Request</option>
+                    <option value="other">General Feedback</option>
+                </select>
+            </div>
+            <div class="report-field">
+                <label for="report-email">Your Email</label>
+                <input type="email" id="report-email" placeholder="you@example.com" required>
+            </div>
+            <div class="report-field">
+                <label for="report-version">App Version (optional)</label>
+                <input type="text" id="report-version" placeholder="e.g. 0.3.1">
+            </div>
+            <div class="report-field">
+                <label for="report-subject">Subject</label>
+                <input type="text" id="report-subject" placeholder="Brief summary" required maxlength="200">
+            </div>
+            <div class="report-field">
+                <label for="report-body">Description</label>
+                <textarea id="report-body" placeholder="Describe the issue or idea in detail. Include steps to reproduce for bugs." required maxlength="5000"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary report-submit" id="report-submit-btn">Send Report</button>
+            <div class="report-msg" id="reportMsg"></div>
+        </form>
+    </div>
+</div>
 
 <footer class="footer">
     <div class="container">
@@ -204,8 +401,8 @@
                 <h4>Support</h4>
                 <ul>
                     <li><a href="https://ko-fi.com/imagic" target="_blank" rel="noopener"><i class="fa-solid fa-mug-hot"></i> Buy Us a Coffee</a></li>
-                    <li><a href="https://github.com/Lukefen31/imagic/issues/new?labels=bug" target="_blank" rel="noopener">Report a Bug</a></li>
-                    <li><a href="https://github.com/Lukefen31/imagic/issues/new?labels=enhancement" target="_blank" rel="noopener">Feature Request</a></li>
+                    <li><a href="javascript:void(0)" onclick="openReportModal()"><i class="fa-solid fa-bug"></i> Report a Bug</a></li>
+                    <li><a href="javascript:void(0)" onclick="openReportModal()"><i class="fa-solid fa-lightbulb"></i> Feature Request</a></li>
                     <li><a href="/contact">Contact</a></li>
                 </ul>
             </div>
@@ -221,6 +418,60 @@
 document.getElementById('hamburger')?.addEventListener('click', () => {
     document.getElementById('nav-links')?.classList.toggle('active');
 });
+
+function openReportModal() {
+    document.getElementById('reportOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+function closeReportModal() {
+    document.getElementById('reportOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+}
+document.getElementById('reportOverlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeReportModal();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeReportModal();
+});
+
+async function submitReport(e) {
+    e.preventDefault();
+    const btn = document.getElementById('report-submit-btn');
+    const msg = document.getElementById('reportMsg');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    msg.textContent = '';
+    msg.className = 'report-msg';
+    try {
+        const res = await fetch('/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: document.getElementById('report-type').value,
+                email: document.getElementById('report-email').value.trim(),
+                version: document.getElementById('report-version').value.trim(),
+                subject: document.getElementById('report-subject').value.trim(),
+                body: document.getElementById('report-body').value.trim()
+            })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            msg.textContent = 'Thanks! We received your report and will follow up by email.';
+            msg.className = 'report-msg success';
+            document.getElementById('reportForm').reset();
+            setTimeout(closeReportModal, 3000);
+        } else {
+            msg.textContent = data.detail || 'Something went wrong. Please try again.';
+            msg.className = 'report-msg error';
+        }
+    } catch {
+        msg.textContent = 'Network error. Please try again.';
+        msg.className = 'report-msg error';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Report';
+    }
+}
 </script>
 
 </body>

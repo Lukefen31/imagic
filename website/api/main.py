@@ -885,6 +885,81 @@ async def stripe_webhook(request: Request):
     return result
 
 
+# ---------------------------------------------------------------------------
+# Feedback / bug report
+# ---------------------------------------------------------------------------
+
+_feedback_limiter = RateLimiter(max_tokens=5, refill_per_second=0.05)  # ~3 per min
+
+@app.post("/api/feedback")
+async def submit_feedback(request: Request):
+    """Accept a bug report or feature request from the changelog page."""
+    client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
+    if not _feedback_limiter.allow(client_ip):
+        raise HTTPException(429, "Too many reports. Please wait a minute.")
+
+    body = await request.json()
+    report_type = str(body.get("type", "")).strip()
+    email = str(body.get("email", "")).strip()
+    version = str(body.get("version", "")).strip()[:20]
+    subject = str(body.get("subject", "")).strip()[:200]
+    report_body = str(body.get("body", "")).strip()[:5000]
+
+    if report_type not in ("bug", "feature", "other"):
+        raise HTTPException(400, "Invalid report type.")
+    if not email or "@" not in email:
+        raise HTTPException(400, "A valid email is required.")
+    if not subject:
+        raise HTTPException(400, "Subject is required.")
+    if not report_body:
+        raise HTTPException(400, "Description is required.")
+
+    # Forward via SMTP (same config as purchase emails)
+    import smtplib
+    from email.message import EmailMessage as _EmailMessage
+
+    smtp_host = os.environ.get("IMAGIC_SMTP_HOST", "")
+    smtp_user = os.environ.get("IMAGIC_SMTP_USERNAME", "")
+    smtp_pass = os.environ.get("IMAGIC_SMTP_PASSWORD", "")
+    smtp_port = int(os.environ.get("IMAGIC_SMTP_PORT", "587"))
+    from_email = os.environ.get("IMAGIC_SMTP_FROM_EMAIL", smtp_user)
+
+    if not all([smtp_host, smtp_user, smtp_pass]):
+        raise HTTPException(503, "Email delivery is not configured.")
+
+    type_label = {"bug": "Bug Report", "feature": "Feature Request", "other": "Feedback"}.get(report_type, report_type)
+    msg = _EmailMessage()
+    msg["Subject"] = f"[imagic {type_label}] {subject}"
+    msg["From"] = from_email
+    msg["To"] = from_email  # send to ourselves
+    msg["Reply-To"] = email
+    body_text = (
+        f"Type: {type_label}\n"
+        f"From: {email}\n"
+        f"Version: {version or 'not specified'}\n"
+        f"Subject: {subject}\n"
+        f"IP: {client_ip}\n"
+        f"\n---\n\n{report_body}"
+    )
+    msg.set_content(body_text)
+
+    try:
+        use_ssl = os.environ.get("IMAGIC_SMTP_USE_SSL", "false").lower() == "true"
+        if use_ssl:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+        else:
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+            if os.environ.get("IMAGIC_SMTP_USE_TLS", "true").lower() == "true":
+                server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+        server.quit()
+    except Exception:
+        raise HTTPException(502, "Failed to send report. Please email snap@imagic.ink directly.")
+
+    return {"ok": True}
+
+
 @app.get("/api/stripe/status")
 async def stripe_status(request: Request):
     """Check payment and credit status for the current user."""

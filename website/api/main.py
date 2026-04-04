@@ -889,14 +889,15 @@ async def stripe_webhook(request: Request):
 # Feedback / bug report
 # ---------------------------------------------------------------------------
 
-_feedback_limiter = RateLimiter(max_tokens=5, refill_per_second=0.05)  # ~3 per min
+_feedback_limiter = RateLimiter(free_limit=5)  # 5 reports per IP per day
 
 @app.post("/api/feedback")
 async def submit_feedback(request: Request):
     """Accept a bug report or feature request from the changelog page."""
     client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "unknown").split(",")[0].strip()
-    if not _feedback_limiter.allow(client_ip):
-        raise HTTPException(429, "Too many reports. Please wait a minute.")
+    if _feedback_limiter.remaining(client_ip) <= 0:
+        raise HTTPException(429, "Too many reports. Please try again tomorrow.")
+    _feedback_limiter.consume(client_ip)
 
     body = await request.json()
     report_type = str(body.get("type", "")).strip()

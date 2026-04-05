@@ -69,18 +69,18 @@ logger = logging.getLogger(__name__)
 # Style constants
 # ======================================================================
 
-_BG = "#0d0d0d"
-_PANEL_BG = "#1a1a1a"
-_SECTION_BG = "#222"
-_BORDER = "#333"
-_TEXT = "#ddd"
-_TEXT_DIM = "#888"
+_BG = "#0a0a0f"
+_PANEL_BG = "#12121a"
+_SECTION_BG = "#1a1a28"
+_BORDER = "#2a2a3a"
+_TEXT = "#e0e0e8"
+_TEXT_DIM = "#8888a0"
 _ACCENT = "#ff9800"
-_ACCENT_HOVER = "#ffa726"
+_ACCENT_HOVER = "#ffb74d"
 _GREEN = "#4caf50"
-_SLIDER_GROOVE = "#444"
+_SLIDER_GROOVE = "#3a3a4a"
 _SLIDER_HANDLE = "#ff9800"
-_SLIDER_SUB = "#ff9800"
+_SLIDER_SUB = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e65100, stop:1 #ffb74d)"
 
 _SLIDER_STYLE = (
     f"QSlider::groove:horizontal {{ height: 4px; background: {_SLIDER_GROOVE}; border-radius: 2px; }}"
@@ -105,6 +105,7 @@ from imagic.services.preview_engine import (
 from imagic.services.editor_style_presets import get_editor_style_overrides
 from imagic.views.widgets.ai_loading_modal import AILoadingModal
 from imagic.views.widgets.tone_curve import ToneCurveWidget
+from imagic.views.widgets.color_wheels import ColorWheelsWidget
 
 
 
@@ -666,11 +667,13 @@ class _CollapsibleSection(QWidget):
         # Header
         self._header = QPushButton(f"▼  {title}")
         self._header.setStyleSheet(
-            f"QPushButton {{ background: {_SECTION_BG}; color: {_ACCENT}; "
+            f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 #1e1e2e, stop:1 #16162a); color: {_ACCENT}; "
             f"font-weight: bold; font-size: 11px; text-align: left; "
-            f"padding: 8px 12px; border: none; border-bottom: 1px solid #2a2a2a; "
-            f"letter-spacing: 1px; }}"
-            f"QPushButton:hover {{ background: #282828; }}"
+            f"padding: 10px 14px; border: none; border-bottom: 1px solid {_BORDER}; "
+            f"letter-spacing: 1.5px; }}"
+            f"QPushButton:hover {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 #252538, stop:1 #1c1c32); }}"
         )
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
         self._header.clicked.connect(self._toggle)
@@ -717,7 +720,7 @@ class _HistogramWidget(QWidget):
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor("#111"))
+        p.fillRect(self.rect(), QColor("#0a0a14"))
 
         if self._data is None:
             p.setPen(QColor(_TEXT_DIM))
@@ -984,7 +987,7 @@ class _FilmStripItem(QWidget):
         self._img_label = QLabel()
         self._img_label.setFixedSize(size, size)
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._img_label.setStyleSheet("background: #1a1a1a; border: 1px solid #444; border-radius: 4px;")
+        self._img_label.setStyleSheet(f"background: {_PANEL_BG}; border: 1px solid {_BORDER}; border-radius: 4px;")
         layout.addWidget(self._img_label)
 
         short = file_name[:8] + "…" if len(file_name) > 9 else file_name
@@ -999,10 +1002,10 @@ class _FilmStripItem(QWidget):
 
     def set_selected(self, selected: bool) -> None:
         self._selected = selected
-        border = _ACCENT if selected else "#444"
+        border = _ACCENT if selected else _BORDER
         width = 2 if selected else 1
         self._img_label.setStyleSheet(
-            f"background: #1a1a1a; border: {width}px solid {border}; border-radius: 4px;"
+            f"background: {_PANEL_BG}; border: {width}px solid {border}; border-radius: 4px;"
         )
 
     def mousePressEvent(self, event) -> None:
@@ -1030,8 +1033,8 @@ class _FilmStrip(QWidget):
         self._scroll.setStyleSheet(
             "QScrollArea { border: none; background: transparent; }"
             "QScrollBar:horizontal { height: 6px; background: transparent; }"
-            f"QScrollBar::handle:horizontal {{ background: #444; border-radius: 3px; min-width: 30px; }}"
-            f"QScrollBar::handle:horizontal:hover {{ background: #555; }}"
+            f"QScrollBar::handle:horizontal {{ background: #3a3a4a; border-radius: 3px; min-width: 30px; }}"
+            f"QScrollBar::handle:horizontal:hover {{ background: {_ACCENT}; }}"
         )
         layout.addWidget(self._scroll)
 
@@ -1159,6 +1162,10 @@ class PhotoEditorWidget(QWidget):
         self._ai_run_counter: dict[tuple, int] = {}
         self._batch_optimize_run: int = 0
 
+        # Active AI mask for selective editing
+        self._active_mask: Optional[np.ndarray] = None
+        self._active_mask_type = None
+
         # AI loading overlay (created after _build_ui so it sits on top)
         self._ai_modal: Optional[AILoadingModal] = None
 
@@ -1209,7 +1216,7 @@ class PhotoEditorWidget(QWidget):
         # Left sidebar: histogram
         left = QWidget()
         left.setFixedWidth(220)
-        left.setStyleSheet(f"background: {_PANEL_BG};")
+        left.setStyleSheet(f"background: {_PANEL_BG}; border-right: 1px solid {_BORDER};")
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(8, 10, 8, 10)
         left_layout.setSpacing(10)
@@ -1241,9 +1248,9 @@ class PhotoEditorWidget(QWidget):
             btn = QPushButton(label)
             btn.setFixedHeight(26)
             btn.setStyleSheet(
-                f"QPushButton {{ background: #222; color: {_TEXT}; "
-                f"border: 1px solid #444; border-radius: 4px; font-size: 10px; padding: 2px 8px; }}"
-                f"QPushButton:hover {{ background: #2a2a2a; border-color: #555; }}"
+                f"QPushButton {{ background: #1a1a28; color: {_TEXT}; "
+                f"border: 1px solid {_BORDER}; border-radius: 4px; font-size: 10px; padding: 2px 8px; }}"
+                f"QPushButton:hover {{ background: #222230; border-color: #3a3a4a; }}"
             )
             btn.clicked.connect(lambda _, z=factor: self._set_zoom(z))
             zoom_row.addWidget(btn)
@@ -1302,8 +1309,8 @@ class PhotoEditorWidget(QWidget):
         scroll.setStyleSheet(
             f"QScrollArea {{ border: none; background: {_PANEL_BG}; }}"
             "QScrollBar:vertical { width: 6px; background: transparent; }"
-            f"QScrollBar::handle:vertical {{ background: #444; border-radius: 3px; min-height: 30px; }}"
-            f"QScrollBar::handle:vertical:hover {{ background: #555; }}"
+            f"QScrollBar::handle:vertical {{ background: #3a3a4a; border-radius: 3px; min-height: 30px; }}"
+            f"QScrollBar::handle:vertical:hover {{ background: {_ACCENT}; }}"
         )
 
         panels_widget = QWidget()
@@ -1331,9 +1338,10 @@ class PhotoEditorWidget(QWidget):
 
     def _build_toolbar(self) -> QWidget:
         toolbar = QWidget()
-        toolbar.setFixedHeight(46)
+        toolbar.setFixedHeight(48)
         toolbar.setStyleSheet(
-            f"background: #141414; border-bottom: 1px solid {_BORDER};"
+            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 #14141e, stop:1 #0f0f18); border-bottom: 1px solid {_BORDER};"
         )
         layout = QHBoxLayout(toolbar)
         layout.setContentsMargins(12, 6, 12, 6)
@@ -1341,9 +1349,11 @@ class PhotoEditorWidget(QWidget):
 
         # Nav buttons
         btn_style = (
-            f"QPushButton {{ background: #222; color: {_TEXT}; "
-            f"border: 1px solid #444; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #2a2a2a; border-color: #555; }}"
+            f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 #222230, stop:1 #1a1a28); color: {_TEXT}; "
+            f"border: 1px solid {_BORDER}; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
+            f"QPushButton:hover {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 #2a2a3a, stop:1 #222230); border-color: #3a3a4a; }}"
         )
 
         self._prev_btn = QPushButton("◀ Prev")
@@ -1618,6 +1628,7 @@ class PhotoEditorWidget(QWidget):
         # ═══════════ TONE / PRESENCE ═══════════
         sec = _CollapsibleSection("PRESENCE")
         presence_sliders = [
+            ("texture", "Texture", -100, 100, 0),
             ("clarity", "Clarity", -100, 100, 0),
             ("dehaze", "Dehaze", -100, 100, 0),
             ("vibrance", "Vibrance", -100, 100, 0),
@@ -1635,6 +1646,17 @@ class PhotoEditorWidget(QWidget):
         sec = _CollapsibleSection("HSL / COLOR")
         sec._toggle()  # start collapsed — lots of sliders
         channels = ["red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta"]
+        # Hue sub-group
+        hue_lbl = QLabel("Hue")
+        hue_lbl.setStyleSheet(f"color: {_ACCENT}; font-size: 10px; font-weight: bold;")
+        sec.add_widget(hue_lbl)
+        for ch in channels:
+            key = f"hsl_hue_{ch}"
+            s = _SliderRow(ch.capitalize(), -100, 100, 0)
+            s.value_changed.connect(self._schedule_preview)
+            s.released.connect(self._commit_undo_state)
+            sec.add_widget(s)
+            self._sliders[key] = s
         # Saturation sub-group
         sat_lbl = QLabel("Saturation")
         sat_lbl.setStyleSheet(f"color: {_ACCENT}; font-size: 10px; font-weight: bold;")
@@ -1712,9 +1734,11 @@ class PhotoEditorWidget(QWidget):
         sec = _CollapsibleSection("AI TOOLS")
 
         ai_btn_style = (
-            f"QPushButton {{ background: #2a2a2a; color: {_TEXT}; "
-            f"border: 1px solid {_BORDER}; border-radius: 4px; padding: 6px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: {_ACCENT}; color: #111; }}"
+            f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 #1e1e2e, stop:1 #16162a); color: {_TEXT}; "
+            f"border: 1px solid {_BORDER}; border-radius: 6px; padding: 8px 12px; font-size: 11px; }}"
+            f"QPushButton:hover {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 {_ACCENT}, stop:1 #e65100); color: #111; border-color: {_ACCENT}; }}"
         )
 
         ai_enhance_btn = QPushButton("✨ AI Auto-Enhance")
@@ -1747,15 +1771,53 @@ class PhotoEditorWidget(QWidget):
         ai_bw_btn.clicked.connect(self._ai_bw)
         sec.add_widget(ai_bw_btn)
 
-        self._panels_layout.addWidget(sec)
+        # --- Separator ---
+        _sep = QLabel("─── Advanced AI ───")
+        _sep.setStyleSheet(f"color: {_ACCENT}; font-size: 10px; padding: 4px 0;")
+        _sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sec.add_widget(_sep)
 
-        # ==============================================================
-        # EXPERT MODE PANELS (hidden by default)
-        # ==============================================================
-        self._expert_sections: list[QWidget] = []
+        ai_mask_btn = QPushButton("🎭 AI Masking (Select Subject)")
+        ai_mask_btn.setStyleSheet(ai_btn_style)
+        ai_mask_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_mask_btn.clicked.connect(self._ai_masking)
+        sec.add_widget(ai_mask_btn)
+
+        ai_blur_btn = QPushButton("📷 AI Lens Blur (Bokeh)")
+        ai_blur_btn.setStyleSheet(ai_btn_style)
+        ai_blur_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_blur_btn.clicked.connect(self._ai_lens_blur)
+        sec.add_widget(ai_blur_btn)
+
+        ai_face_btn = QPushButton("👤 AI Face Detection")
+        ai_face_btn.setStyleSheet(ai_btn_style)
+        ai_face_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_face_btn.clicked.connect(self._ai_face_detect)
+        sec.add_widget(ai_face_btn)
+
+        ai_sr_btn = QPushButton("🔎 AI Super Resolution")
+        ai_sr_btn.setStyleSheet(ai_btn_style)
+        ai_sr_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_sr_btn.clicked.connect(self._ai_super_resolution)
+        sec.add_widget(ai_sr_btn)
+
+        ai_detail_btn = QPushButton("🔬 AI Enhance Details")
+        ai_detail_btn.setStyleSheet(ai_btn_style)
+        ai_detail_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_detail_btn.clicked.connect(self._ai_enhance_details)
+        sec.add_widget(ai_detail_btn)
+
+        ai_adaptive_btn = QPushButton("🧠 AI Adaptive Preset")
+        ai_adaptive_btn.setStyleSheet(ai_btn_style)
+        ai_adaptive_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_adaptive_btn.clicked.connect(self._ai_adaptive_preset)
+        sec.add_widget(ai_adaptive_btn)
+
+        self._panels_layout.addWidget(sec)
 
         # ═══════════ TONE CURVE ═══════════
         sec = _CollapsibleSection("TONE CURVE")
+        sec._toggle()  # start collapsed
         self._tone_curve_widget = ToneCurveWidget()
         self._tone_curve_widget.curve_changed.connect(self._schedule_preview)
         self._tone_curve_widget.curve_changed.connect(self._commit_undo_state)
@@ -1786,8 +1848,6 @@ class PhotoEditorWidget(QWidget):
         ch_row.addStretch()
         sec.add_layout(ch_row)
 
-        sec.setVisible(False)
-        self._expert_sections.append(sec)
         self._panels_layout.addWidget(sec)
 
         # Store per-channel curves: {channel_name: [(x,y), ...]}
@@ -1798,6 +1858,55 @@ class PhotoEditorWidget(QWidget):
             "Blue": [(0.0, 0.0), (1.0, 1.0)],
         }
         self._current_curve_channel = "Luminance"
+
+        # ═══════════ COLOR WHEELS (3-way) ═══════════
+        sec = _CollapsibleSection("COLOR WHEELS")
+        sec._toggle()  # start collapsed
+        self._color_wheels = ColorWheelsWidget()
+        self._color_wheels.wheels_changed.connect(self._schedule_preview)
+        self._color_wheels.wheels_changed.connect(self._commit_undo_state)
+        sec.add_widget(self._color_wheels)
+        self._panels_layout.addWidget(sec)
+
+        # ═══════════ LENS & GEOMETRY ═══════════
+        sec = _CollapsibleSection("LENS & GEOMETRY")
+        sec._toggle()  # start collapsed
+
+        # Auto lens profile checkbox
+        self._auto_lens_cb = QCheckBox("Auto Lens Profile")
+        self._auto_lens_cb.setChecked(True)
+        self._auto_lens_cb.setStyleSheet(
+            f"QCheckBox {{ color: {_TEXT}; font-size: 11px; spacing: 6px; }}"
+            f"QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid #555; "
+            f"border-radius: 3px; background: #222; }}"
+            f"QCheckBox::indicator:checked {{ background: {_ACCENT}; border-color: {_ACCENT}; }}"
+        )
+        sec.add_widget(self._auto_lens_cb)
+
+        # Rotation slider
+        rot_s = _SliderRow("Rotation", -45, 45, 0)
+        rot_s.value_changed.connect(self._schedule_preview)
+        rot_s.released.connect(self._commit_undo_state)
+        sec.add_widget(rot_s)
+        self._sliders["rotation"] = rot_s
+
+        lens_geo_sliders = [
+            ("distortion", "Distortion", -100, 100, 0),
+            ("perspective_h", "Perspective Horiz", -45, 45, 0),
+            ("perspective_v", "Perspective Vert", -45, 45, 0),
+        ]
+        for key, label, lo, hi, default in lens_geo_sliders:
+            s = _SliderRow(label, lo, hi, default)
+            s.value_changed.connect(self._schedule_preview)
+            s.released.connect(self._commit_undo_state)
+            sec.add_widget(s)
+            self._sliders[key] = s
+        self._panels_layout.addWidget(sec)
+
+        # ==============================================================
+        # EXPERT MODE PANELS (hidden by default)
+        # ==============================================================
+        self._expert_sections: list[QWidget] = []
 
         # ═══════════ ADVANCED TONE ═══════════
         sec = _CollapsibleSection("ADVANCED TONE")
@@ -1852,37 +1961,6 @@ class PhotoEditorWidget(QWidget):
             ("defringe_threshold", "Defringe Threshold", 0, 50, 13),
         ]
         for key, label, lo, hi, default in adv_detail_sliders:
-            s = _SliderRow(label, lo, hi, default)
-            s.value_changed.connect(self._schedule_preview)
-            s.released.connect(self._commit_undo_state)
-            sec.add_widget(s)
-            self._sliders[key] = s
-
-        sec.setVisible(False)
-        self._expert_sections.append(sec)
-        self._panels_layout.addWidget(sec)
-
-        # ═══════════ LENS & GEOMETRY ═══════════
-        sec = _CollapsibleSection("LENS & GEOMETRY")
-        sec._toggle()  # start collapsed
-
-        # Auto lens profile checkbox
-        self._auto_lens_cb = QCheckBox("Auto Lens Profile")
-        self._auto_lens_cb.setChecked(True)
-        self._auto_lens_cb.setStyleSheet(
-            f"QCheckBox {{ color: {_TEXT}; font-size: 11px; spacing: 6px; }}"
-            f"QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid #555; "
-            f"border-radius: 3px; background: #222; }}"
-            f"QCheckBox::indicator:checked {{ background: {_ACCENT}; border-color: {_ACCENT}; }}"
-        )
-        sec.add_widget(self._auto_lens_cb)
-
-        lens_geo_sliders = [
-            ("distortion", "Distortion", -100, 100, 0),
-            ("perspective_h", "Perspective Horiz", -45, 45, 0),
-            ("perspective_v", "Perspective Vert", -45, 45, 0),
-        ]
-        for key, label, lo, hi, default in lens_geo_sliders:
             s = _SliderRow(label, lo, hi, default)
             s.value_changed.connect(self._schedule_preview)
             s.released.connect(self._commit_undo_state)
@@ -2293,6 +2371,9 @@ class PhotoEditorWidget(QWidget):
                 self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
         self._tone_curve_widget.set_points(self._curve_data[self._current_curve_channel])
 
+        # Restore color wheels
+        self._color_wheels.set_from_params(overrides)
+
         # Restore crop from overrides
         cx = overrides.get("crop_x", 0)
         cy = overrides.get("crop_y", 0)
@@ -2344,22 +2425,26 @@ class PhotoEditorWidget(QWidget):
             params["crop_w"] = self._crop_rect.width()
             params["crop_h"] = self._crop_rect.height()
 
-        # Expert mode: tone curve data
-        if self._expert_btn.isChecked():
-            # Save current channel first
-            self._curve_data[self._current_curve_channel] = list(
-                self._tone_curve_widget.get_points()
-            )
-            for ch, pts in self._curve_data.items():
-                if len(pts) > 2 or (len(pts) == 2 and (pts[0] != (0.0, 0.0) or pts[1] != (1.0, 1.0))):
-                    params[f"tone_curve_{ch.lower()}"] = pts
+        # Tone curve data (always gathered — main panel)
+        self._curve_data[self._current_curve_channel] = list(
+            self._tone_curve_widget.get_points()
+        )
+        for ch, pts in self._curve_data.items():
+            if len(pts) > 2 or (len(pts) == 2 and (pts[0] != (0.0, 0.0) or pts[1] != (1.0, 1.0))):
+                params[f"tone_curve_{ch.lower()}"] = pts
 
-            # Expert combos
+        # Color wheels data
+        params.update(self._color_wheels.get_params())
+
+        # Auto lens profile
+        params["auto_lens_profile"] = self._auto_lens_cb.isChecked()
+
+        # Expert mode combos
+        if self._expert_btn.isChecked():
             params["hl_recovery_method"] = self._hl_recovery_combo.currentText()
             params["demosaic_method"] = self._demosaic_combo.currentText()
             params["working_profile"] = self._working_profile_combo.currentText()
             params["output_profile"] = self._output_profile_combo.currentText()
-            params["auto_lens_profile"] = self._auto_lens_cb.isChecked()
 
         return params
 
@@ -2431,6 +2516,9 @@ class PhotoEditorWidget(QWidget):
             else:
                 self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
         self._tone_curve_widget.set_points(self._curve_data[self._current_curve_channel])
+
+        # Restore color wheels
+        self._color_wheels.set_from_params(params)
 
         # Restore crop state for undo/redo
         cx = params.get("crop_x", 0)
@@ -2661,6 +2749,8 @@ class PhotoEditorWidget(QWidget):
         for ch in self._curve_data:
             self._curve_data[ch] = [(0.0, 0.0), (1.0, 1.0)]
         self._tone_curve_widget.reset()
+        # Reset color wheels
+        self._color_wheels.reset()
         # Reset expert combos
         self._hl_recovery_combo.setCurrentIndex(0)
         self._demosaic_combo.setCurrentIndex(0)
@@ -3011,6 +3101,197 @@ class PhotoEditorWidget(QWidget):
         self._apply_ai_suggestions(suggestions)
         if self._ai_modal:
             self._ai_modal.hide_modal()
+
+    # ------------------------------------------------------------------
+    # Advanced AI tools
+    # ------------------------------------------------------------------
+
+    def _ai_masking(self) -> None:
+        """AI masking — select subject/sky/people/background."""
+        if self._raw_rgb is None:
+            return
+        items = ["Subject", "Sky", "People", "Background"]
+        choice, ok = QInputDialog.getItem(
+            self, "AI Masking", "Select mask target:", items, 0, False,
+        )
+        if not ok:
+            return
+        if self._ai_modal:
+            self._ai_modal.show_message("AI Masking", f"Generating {choice.lower()} mask…")
+        try:
+            from imagic.ai.masking import (
+                MaskType, generate_subject_mask, generate_sky_mask,
+                generate_people_mask, generate_background_mask,
+                apply_masked_adjustment,
+            )
+            mask_map = {
+                "Subject": (MaskType.SUBJECT, generate_subject_mask),
+                "Sky": (MaskType.SKY, generate_sky_mask),
+                "People": (MaskType.PEOPLE, generate_people_mask),
+                "Background": (MaskType.BACKGROUND, generate_background_mask),
+            }
+            mask_type, gen_fn = mask_map[choice]
+            result = gen_fn(self._raw_rgb)
+            # Store mask for potential selective editing
+            self._active_mask = result.mask
+            self._active_mask_type = mask_type
+            # Show a quick overlay preview on the canvas
+            overlay = self._raw_rgb.copy()
+            mask_3ch = np.stack([result.mask] * 3, axis=2)
+            tint = np.zeros_like(overlay, dtype=np.float32)
+            tint[:, :, 0] = 255  # red tint
+            overlay = (overlay.astype(np.float32) * (1 - mask_3ch * 0.4)
+                       + tint * mask_3ch * 0.4).clip(0, 255).astype(np.uint8)
+            h, w = overlay.shape[:2]
+            qimg = QImage(overlay.data, w, h, 3 * w, QImage.Format.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            self._canvas._display_item.setPixmap(pixmap)
+            QMessageBox.information(
+                self, "AI Masking",
+                f"{choice} mask generated (confidence: {result.confidence:.0%}).\n"
+                f"The red overlay shows the selected area.\n"
+                f"Press any edit slider to apply adjustments to the masked area.",
+            )
+        except Exception as e:
+            logger.error("AI masking failed: %s", e)
+            QMessageBox.warning(self, "AI Masking", f"Masking failed: {e}")
+        finally:
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
+
+    def _ai_lens_blur(self) -> None:
+        """AI lens blur / bokeh effect."""
+        if self._raw_rgb is None:
+            return
+        amount, ok = QInputDialog.getInt(
+            self, "AI Lens Blur", "Blur amount (1-100):", 50, 1, 100,
+        )
+        if not ok:
+            return
+        if self._ai_modal:
+            self._ai_modal.show_message("AI Lens Blur", "Estimating depth & applying bokeh…")
+        try:
+            from imagic.ai.lens_blur import apply_lens_blur
+            result = apply_lens_blur(self._raw_rgb, blur_amount=amount / 100.0)
+            self._raw_rgb = result.image
+            self._schedule_preview()
+            self._commit_undo_state()
+        except Exception as e:
+            logger.error("AI lens blur failed: %s", e)
+            QMessageBox.warning(self, "AI Lens Blur", f"Lens blur failed: {e}")
+        finally:
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
+
+    def _ai_face_detect(self) -> None:
+        """Detect faces and draw bounding boxes."""
+        if self._raw_rgb is None:
+            return
+        if self._ai_modal:
+            self._ai_modal.show_message("AI Face Detection", "Scanning for faces…")
+        try:
+            from imagic.ai.face_detection import detect_faces
+            result = detect_faces(self._raw_rgb)
+            if not result.faces:
+                QMessageBox.information(self, "Face Detection", "No faces detected.")
+                return
+            # Draw bounding boxes on a preview overlay
+            overlay = self._raw_rgb.copy()
+            for face in result.faces:
+                x, y, w, h = face.x, face.y, face.w, face.h
+                # Draw rectangle
+                overlay[y:y+2, x:x+w] = [0, 255, 0]
+                overlay[y+h-2:y+h, x:x+w] = [0, 255, 0]
+                overlay[y:y+h, x:x+2] = [0, 255, 0]
+                overlay[y:y+h, x+w-2:x+w] = [0, 255, 0]
+            oh, ow = overlay.shape[:2]
+            qimg = QImage(overlay.data, ow, oh, 3 * ow, QImage.Format.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            self._canvas._display_item.setPixmap(pixmap)
+            QMessageBox.information(
+                self, "Face Detection",
+                f"Detected {len(result.faces)} face(s) — highlighted in green.",
+            )
+        except Exception as e:
+            logger.error("Face detection failed: %s", e)
+            QMessageBox.warning(self, "Face Detection", f"Face detection failed: {e}")
+        finally:
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
+
+    def _ai_super_resolution(self) -> None:
+        """Upscale image using AI super resolution."""
+        if self._raw_rgb is None:
+            return
+        scale, ok = QInputDialog.getItem(
+            self, "AI Super Resolution", "Upscale factor:",
+            ["2x", "4x"], 0, False,
+        )
+        if not ok:
+            return
+        factor = int(scale[0])
+        if self._ai_modal:
+            self._ai_modal.show_message("AI Super Resolution", f"Upscaling {factor}x…")
+        try:
+            from imagic.ai.super_resolution import enhance_resolution
+            result = enhance_resolution(self._raw_rgb, scale=factor)
+            self._raw_rgb = result.image
+            self._schedule_preview()
+            self._commit_undo_state()
+            QMessageBox.information(
+                self, "Super Resolution",
+                f"Upscaled {factor}x using {result.method}.\n"
+                f"New size: {result.image.shape[1]}×{result.image.shape[0]}",
+            )
+        except Exception as e:
+            logger.error("Super resolution failed: %s", e)
+            QMessageBox.warning(self, "Super Resolution", f"Super resolution failed: {e}")
+        finally:
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
+
+    def _ai_enhance_details(self) -> None:
+        """Enhance fine details without upscaling."""
+        if self._raw_rgb is None:
+            return
+        if self._ai_modal:
+            self._ai_modal.show_message("AI Enhance Details", "Enhancing fine details…")
+        try:
+            from imagic.ai.super_resolution import enhance_details
+            self._raw_rgb = enhance_details(self._raw_rgb)
+            self._schedule_preview()
+            self._commit_undo_state()
+        except Exception as e:
+            logger.error("Detail enhancement failed: %s", e)
+            QMessageBox.warning(self, "Enhance Details", f"Detail enhancement failed: {e}")
+        finally:
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
+
+    def _ai_adaptive_preset(self) -> None:
+        """Apply an AI adaptive preset based on scene detection."""
+        if self._raw_rgb is None:
+            return
+        if self._ai_modal:
+            self._ai_modal.show_message("AI Adaptive Preset", "Analysing scene…")
+        try:
+            from imagic.ai.adaptive_presets import detect_scene, get_adaptive_preset
+            scene = detect_scene(self._raw_rgb)
+            preset = get_adaptive_preset(scene)
+            # Apply global params as slider suggestions
+            self._apply_ai_suggestions(preset.global_params)
+            QMessageBox.information(
+                self, "Adaptive Preset",
+                f"Applied: {preset.name}\n"
+                f"Scene detected: {scene.value}\n\n"
+                f"{preset.description}",
+            )
+        except Exception as e:
+            logger.error("Adaptive preset failed: %s", e)
+            QMessageBox.warning(self, "Adaptive Preset", f"Adaptive preset failed: {e}")
+        finally:
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
 
     def _get_slider_bounds(self) -> dict[str, tuple]:
         """Return {key: (min, max)} for every registered slider."""

@@ -40,15 +40,15 @@ _CARD_WIDTH = 250
 # ======================================================================
 
 _DIALOG_STYLE = """
-QDialog { background: #0d0d0d; }
-QScrollArea { background: #0d0d0d; border: none; }
-QWidget#scrollContent { background: #0d0d0d; }
+QDialog { background: #0a0a0f; }
+QScrollArea { background: #0a0a0f; border: none; }
+QWidget#scrollContent { background: #0a0a0f; }
 """
 
 _GROUP_FRAME_STYLE = """
 QFrame#groupFrame {
-    background: #222;
-    border: 1px solid #333;
+    background: #1a1a28;
+    border: 1px solid #2a2a3a;
     border-radius: 10px;
 }
 """

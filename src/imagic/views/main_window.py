@@ -47,11 +47,11 @@ from imagic.views.widgets.ai_loading_modal import AILoadingModal
 logger = logging.getLogger(__name__)
 
 # ── Style constants ─────────────────────────────────────────────────
-_BG = "#0d0d0d"
-_PANEL = "#1a1a1a"
-_BORDER = "#333"
-_TEXT = "#ddd"
-_DIM = "#888"
+_BG = "#0a0a0f"
+_PANEL = "#12121a"
+_BORDER = "#2a2a3a"
+_TEXT = "#e0e0e8"
+_DIM = "#8888a0"
 _ACCENT = "#ff9800"
 _GREEN = "#4caf50"
 
@@ -127,10 +127,10 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1100, 700)
         self.setStyleSheet(
             f"QMainWindow {{ background: {_BG}; }}"
-            f"QMenuBar {{ background: #141414; color: {_TEXT}; border-bottom: 1px solid {_BORDER}; padding: 2px 0; }}"
-            f"QMenuBar::item {{ padding: 6px 12px; border-radius: 4px; }}"
-            f"QMenuBar::item:selected {{ background: #2a2a2a; }}"
-            f"QMenu {{ background: #1a1a1a; color: {_TEXT}; border: 1px solid {_BORDER}; border-radius: 8px; padding: 4px 0; }}"
+            f"QMenuBar {{ background: #0f0f18; color: {_TEXT}; border-bottom: 1px solid {_BORDER}; padding: 2px 0; }}"
+            f"QMenuBar::item {{ padding: 6px 14px; border-radius: 4px; }}"
+            f"QMenuBar::item:selected {{ background: #1e1e2e; }}"
+            f"QMenu {{ background: #14141e; color: {_TEXT}; border: 1px solid {_BORDER}; border-radius: 8px; padding: 4px 0; }}"
             f"QMenu::item {{ padding: 8px 24px 8px 16px; border-radius: 4px; margin: 2px 4px; }}"
             f"QMenu::item:selected {{ background: {_ACCENT}; color: #111; }}"
             f"QMenu::separator {{ height: 1px; background: {_BORDER}; margin: 4px 12px; }}"

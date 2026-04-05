@@ -16,11 +16,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-_BG = "#1e1e1e"
-_SURFACE = "#2a2a2a"
-_BORDER = "#444"
-_TEXT = "#e0e0e0"
-_TEXT_DIM = "#aaa"
+_BG = "#12121a"
+_SURFACE = "#1e1e2e"
+_BORDER = "#2a2a3a"
+_TEXT = "#e0e0e8"
+_TEXT_DIM = "#8888a0"
 _ACCENT = "#ff9800"
 _ACCENT_HOVER = "#ffb74d"
 

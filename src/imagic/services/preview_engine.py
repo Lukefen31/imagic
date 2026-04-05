@@ -220,6 +220,15 @@ class PreviewEngine:
             t = np.clip(t, 0.2, 1.0)
             img = (img - atmo * (1 - t[:, :, np.newaxis])) / np.maximum(t[:, :, np.newaxis], 0.2)
 
+        # -- Texture (fine-frequency detail enhancement) --
+        texture = params.get("texture", 0) / 100.0
+        if texture != 0:
+            lum_t = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
+            k_t = max(3, int(min(lum_t.shape) * 0.008)) | 1  # smaller radius than clarity
+            blurred_t = _cv2_blur(lum_t, k_t)
+            detail_t = lum_t - blurred_t
+            img += (detail_t * texture * 1.2)[:, :, np.newaxis]
+
         # -- Vibrance (boost low-sat pixels more) --
         vibrance = params.get("vibrance", 0) / 100.0
         if vibrance != 0:
@@ -330,6 +339,14 @@ class PreviewEngine:
         if distortion != 0:
             img = _apply_distortion(img, distortion / 100.0)
 
+        # -- Rotation --
+        rotation = params.get("rotation", 0)
+        if rotation != 0:
+            img = _apply_rotation(img, rotation)
+
+        # -- Color Wheels (3-way grading) --
+        _apply_color_wheels(img, params)
+
         # -- Final clip and convert --
         return np.clip(img * 255, 0, 255).astype(np.uint8)
 
@@ -370,15 +387,30 @@ def _apply_hsl(img: np.ndarray, params: dict) -> None:
     }
 
     for ch_name in channels:
+        hue_adj = params.get(f"hsl_hue_{ch_name}", 0)
         sat_adj = params.get(f"hsl_sat_{ch_name}", 0) / 100.0
         lum_adj = params.get(f"hsl_lum_{ch_name}", 0) / 100.0
-        if sat_adj == 0 and lum_adj == 0:
+        if sat_adj == 0 and lum_adj == 0 and hue_adj == 0:
             continue
 
         center, width = hue_ranges[ch_name]
         diff = np.abs(hue - center)
         diff = np.minimum(diff, 360 - diff)
         mask = np.clip(1.0 - diff / width, 0, 1) ** 2
+
+        if hue_adj != 0:
+            # Rotate hue by shifting R/G/B via rotation matrix approximation
+            angle = hue_adj * 1.8  # -100..100 → -180..180 degrees
+            cos_a = math.cos(math.radians(angle))
+            sin_a = math.sin(math.radians(angle))
+            lum_val = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
+            r_new = lum_val + (img[:, :, 0] - lum_val) * cos_a + (img[:, :, 1] - lum_val) * sin_a
+            g_new = lum_val + (img[:, :, 1] - lum_val) * cos_a - (img[:, :, 0] - lum_val) * sin_a
+            b_new = lum_val + (img[:, :, 2] - lum_val) * cos_a
+            blend = mask[:, :, np.newaxis]
+            img[:, :, 0] = img[:, :, 0] * (1 - blend[:, :, 0]) + r_new * blend[:, :, 0]
+            img[:, :, 1] = img[:, :, 1] * (1 - blend[:, :, 0]) + g_new * blend[:, :, 0]
+            img[:, :, 2] = img[:, :, 2] * (1 - blend[:, :, 0]) + b_new * blend[:, :, 0]
 
         if sat_adj != 0:
             lum_val = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
@@ -669,3 +701,56 @@ def _apply_distortion(img: np.ndarray, amount: float) -> np.ndarray:
         return result
     except ImportError:
         return img
+
+
+def _apply_rotation(img: np.ndarray, angle: float) -> np.ndarray:
+    """Rotate image by *angle* degrees (positive = clockwise)."""
+    if abs(angle) < 0.05:
+        return img
+    try:
+        import cv2
+        h, w = img.shape[:2]
+        M = cv2.getRotationMatrix2D((w / 2, h / 2), -angle, 1.0)
+        return cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REFLECT_101)
+    except ImportError:
+        return img
+
+
+def _apply_color_wheels(img: np.ndarray, params: dict) -> None:
+    """Apply 3-way color wheel grading (shadows / midtones / highlights) in-place."""
+    zones = {}
+    for zone in ("shadows", "midtones", "highlights"):
+        h = params.get(f"cw_{zone}_hue", 0.0)
+        s = params.get(f"cw_{zone}_sat", 0.0)
+        l = params.get(f"cw_{zone}_lum", 0)
+        if s > 0.5 or l != 0:
+            zones[zone] = (float(h), float(s), int(l))
+
+    if not zones:
+        return
+
+    lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
+
+    for zone, (hue, sat, lum_adj) in zones.items():
+        # Build tonal mask
+        if zone == "shadows":
+            mask = np.clip(1.0 - lum * 2.5, 0, 1)
+        elif zone == "midtones":
+            mask = 1.0 - np.abs(lum - 0.5) * 3.0
+            mask = np.clip(mask, 0, 1)
+        else:  # highlights
+            mask = np.clip((lum - 0.4) * 2.5, 0, 1)
+
+        # Apply color tint
+        if sat > 0.5:
+            strength = sat / 100.0 * 0.15
+            r = math.cos(math.radians(hue)) * strength
+            g = math.cos(math.radians(hue - 120)) * strength
+            b = math.cos(math.radians(hue - 240)) * strength
+            img[:, :, 0] += r * mask
+            img[:, :, 1] += g * mask
+            img[:, :, 2] += b * mask
+
+        # Apply luminance shift
+        if lum_adj != 0:
+            img += (lum_adj / 100.0 * 0.3 * mask)[:, :, np.newaxis]

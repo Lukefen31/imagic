@@ -1,35 +1,35 @@
 /* ============================================================
-   Imagic — Modern Dark Theme Stylesheet
+   Imagic — Futuristic Dark Theme Stylesheet
    ============================================================ */
 
 /* --- Base Window --- */
 QMainWindow {
-    background-color: #0d0d0d;
-    color: #ddd;
+    background-color: #0a0a0f;
+    color: #e0e0e8;
 }
 
 /* --- Menu Bar --- */
 QMenuBar {
-    background-color: #181818;
-    color: #ddd;
-    border-bottom: 1px solid #333;
+    background-color: #0f0f18;
+    color: #e0e0e8;
+    border-bottom: 1px solid #2a2a3a;
     padding: 2px 0;
     font-size: 13px;
 }
 
 QMenuBar::item {
-    padding: 6px 12px;
+    padding: 6px 14px;
     border-radius: 4px;
 }
 
 QMenuBar::item:selected {
-    background-color: #2a2a2a;
+    background-color: #1e1e2e;
 }
 
 QMenu {
-    background-color: #1a1a1a;
-    color: #ddd;
-    border: 1px solid #333;
+    background-color: #14141e;
+    color: #e0e0e8;
+    border: 1px solid #2a2a3a;
     border-radius: 8px;
     padding: 4px 0;
 }
@@ -47,7 +47,7 @@ QMenu::item:selected {
 
 QMenu::separator {
     height: 1px;
-    background: #333;
+    background: #2a2a3a;
     margin: 4px 12px;
 }
 

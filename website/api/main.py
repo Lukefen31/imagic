@@ -862,7 +862,7 @@ async def desktop_public_download(variant: str):
     return FileResponse(target["path"], filename=target["filename"])
 
 
-DESKTOP_LATEST_VERSION = os.environ.get("IMAGIC_DESKTOP_LATEST_VERSION", "0.1.0").strip()
+DESKTOP_LATEST_VERSION = os.environ.get("IMAGIC_DESKTOP_LATEST_VERSION", "0.4.0").strip()
 
 
 @app.get("/api/desktop/latest-version")

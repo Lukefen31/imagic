@@ -74,8 +74,18 @@ def _detect_opencv_dnn(img: np.ndarray, min_conf: float) -> Optional[List[FaceBo
 
         # Use OpenCV's built-in Yunet face detector if available (4.5.4+)
         try:
+            # Locate the bundled YuNet ONNX model
+            import os
+            model_path = os.path.join(
+                os.path.dirname(cv2.__file__), "data",
+                "face_detection_yunet_2023mar.onnx",
+            )
+            if not os.path.isfile(model_path):
+                # No bundled model — skip YuNet
+                return None
+
             detector = cv2.FaceDetectorYN.create(
-                "",  # model path — empty uses built-in
+                model_path,
                 "",
                 (w, h),
                 min_conf,
@@ -116,34 +126,77 @@ def _detect_haar(img: np.ndarray, min_conf: float) -> Optional[List[FaceBox]]:
         h, w = img.shape[:2]
 
         cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        if not Path(cascade_path).exists():
-            return None
+        alt_path = cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml"
+        profile_path = cv2.data.haarcascades + "haarcascade_profileface.xml"
 
-        cascade = cv2.CascadeClassifier(cascade_path)
         gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
+        # Equalise histogram for better detection in shadows / uneven lighting
+        gray = cv2.equalizeHist(gray)
+
         # Scale for performance
-        scale = min(1.0, 800 / max(h, w))
+        scale = min(1.0, 1200 / max(h, w))
         if scale < 1.0:
             small = cv2.resize(gray, None, fx=scale, fy=scale)
         else:
             small = gray
 
-        rects = cascade.detectMultiScale(small, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-
         faces = []
-        for (fx, fy, fw, fh) in rects:
-            if scale < 1.0:
-                fx, fy, fw, fh = (
-                    int(fx / scale), int(fy / scale),
-                    int(fw / scale), int(fh / scale),
-                )
-            faces.append(FaceBox(
-                x=fx, y=fy, width=fw, height=fh,
-                confidence=0.8,  # Haar doesn't give confidence
-            ))
+        seen = set()  # deduplicate overlapping detections
 
-        return faces
+        def _add_rects(rects, conf=0.8):
+            for (fx, fy, fw, fh) in rects:
+                if scale < 1.0:
+                    fx, fy, fw, fh = (
+                        int(fx / scale), int(fy / scale),
+                        int(fw / scale), int(fh / scale),
+                    )
+                # Simple dedup: skip if center is near an existing face
+                cx, cy = fx + fw // 2, fy + fh // 2
+                dup = False
+                for (ex, ey) in seen:
+                    if abs(cx - ex) < fw // 2 and abs(cy - ey) < fh // 2:
+                        dup = True
+                        break
+                if not dup:
+                    seen.add((cx, cy))
+                    faces.append(FaceBox(
+                        x=fx, y=fy, width=fw, height=fh,
+                        confidence=conf,
+                    ))
+
+        # Try default frontal cascade with relaxed parameters
+        if Path(cascade_path).exists():
+            cascade = cv2.CascadeClassifier(cascade_path)
+            rects = cascade.detectMultiScale(
+                small, scaleFactor=1.08, minNeighbors=3, minSize=(20, 20),
+            )
+            _add_rects(rects, 0.8)
+
+        # Try alt2 cascade (better with rotated / partially occluded faces)
+        if Path(alt_path).exists():
+            cascade2 = cv2.CascadeClassifier(alt_path)
+            rects2 = cascade2.detectMultiScale(
+                small, scaleFactor=1.08, minNeighbors=3, minSize=(20, 20),
+            )
+            _add_rects(rects2, 0.7)
+
+        # Try profile cascade
+        if Path(profile_path).exists():
+            profile = cv2.CascadeClassifier(profile_path)
+            rects3 = profile.detectMultiScale(
+                small, scaleFactor=1.08, minNeighbors=3, minSize=(20, 20),
+            )
+            _add_rects(rects3, 0.6)
+            # Also try flipped image for the other profile
+            rects4 = profile.detectMultiScale(
+                cv2.flip(small, 1), scaleFactor=1.08, minNeighbors=3, minSize=(20, 20),
+            )
+            sw = small.shape[1]
+            flipped = [(sw - fx - fw, fy, fw, fh) for (fx, fy, fw, fh) in rects4]
+            _add_rects(flipped, 0.6)
+
+        return faces if faces else []
 
     except ImportError:
         return None

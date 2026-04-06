@@ -131,11 +131,12 @@ def apply_lens_blur(
         fy = max(0, min(fy, h - 1))
         focus_depth = depth_map[fy, fx]
         # Remap: pixels at same depth as focus = near, others = far
-        depth_map = np.abs(depth_map - focus_depth)
-        depth_map = depth_map / (depth_map.max() + 1e-8)
-
-    # Invert so that far = high blur
-    blur_map = depth_map  # 0 = focus, 1 = max blur
+        blur_map = np.abs(depth_map - focus_depth)
+        blur_map = blur_map / (blur_map.max() + 1e-8)
+    else:
+        # depth_map: 1 = close to camera, 0 = far away
+        # Invert so that far = high blur, close = sharp
+        blur_map = 1.0 - depth_map
 
     # Apply variable blur using multiple blur passes at different radii
     max_radius = int(blur_amount * 0.4) + 1

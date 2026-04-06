@@ -819,6 +819,16 @@ class _PreviewCanvas(QWidget):
         self._crop_start: Optional[QPoint] = None
         self._crop_forced_ratio: float = 0  # 0 = free crop
 
+        # Mask painting state
+        self._mask_paint_mode = False
+        self._mask_brush_size = 40  # pixels in image space
+        self._mask_feather = 10  # feather radius in image space
+        self._mask_erasing = False  # right-click erases
+        self._mask_canvas: Optional[np.ndarray] = None  # float32 H×W [0,1]
+        self._mask_strokes: list = []  # list of (x, y) tuples in image coords
+        self._mask_lasso_points: list = []  # for lasso mode
+        self._mask_tool = "brush"  # "brush" | "lasso" 
+
     def set_pixmap(self, pix: QPixmap) -> None:
         self._pixmap = pix
         self.update()
@@ -853,6 +863,83 @@ class _PreviewCanvas(QWidget):
     def set_crop_aspect_ratio(self, ratio: float) -> None:
         """Set the forced aspect ratio for crop dragging. 0 = free."""
         self._crop_forced_ratio = ratio
+
+    # -- Mask painting API --
+
+    mask_updated = pyqtSignal()  # emitted when mask strokes change
+
+    def set_mask_paint_mode(self, enabled: bool, tool: str = "brush") -> None:
+        """Enable/disable manual mask painting."""
+        self._mask_paint_mode = enabled
+        self._mask_tool = tool
+        if enabled:
+            self.setCursor(Qt.CursorShape.CrossCursor)
+        else:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.update()
+
+    def init_mask_canvas(self, h: int, w: int) -> None:
+        """Create a blank mask canvas of given dimensions."""
+        import numpy as np
+        self._mask_canvas = np.zeros((h, w), dtype=np.float32)
+        self._mask_lasso_points = []
+        self._mask_strokes = []
+
+    def get_mask_canvas(self):
+        return self._mask_canvas
+
+    def clear_mask_canvas(self) -> None:
+        if self._mask_canvas is not None:
+            self._mask_canvas[:] = 0
+            self._mask_lasso_points = []
+            self._mask_strokes = []
+            self.mask_updated.emit()
+
+    def _paint_brush_stroke(self, img_pos, erase: bool = False) -> None:
+        """Paint or erase a brush stroke at the given image position."""
+        import cv2
+        import numpy as np
+        if self._mask_canvas is None:
+            return
+        x, y = img_pos.x(), img_pos.y()
+        h, w = self._mask_canvas.shape[:2]
+        if x < 0 or y < 0 or x >= w or y >= h:
+            return
+        radius = max(1, self._mask_brush_size // 2)
+        if erase:
+            cv2.circle(self._mask_canvas, (x, y), radius, 0.0, -1)
+        else:
+            cv2.circle(self._mask_canvas, (x, y), radius, 1.0, -1)
+        # Apply feathering via blur on modified region
+        if self._mask_feather > 0:
+            k = self._mask_feather * 2 + 1
+            region_y1 = max(0, y - radius - self._mask_feather * 2)
+            region_y2 = min(h, y + radius + self._mask_feather * 2)
+            region_x1 = max(0, x - radius - self._mask_feather * 2)
+            region_x2 = min(w, x + radius + self._mask_feather * 2)
+            roi = self._mask_canvas[region_y1:region_y2, region_x1:region_x2]
+            if roi.size > 0:
+                blurred = cv2.GaussianBlur(roi, (k, k), 0)
+                self._mask_canvas[region_y1:region_y2, region_x1:region_x2] = blurred
+
+    def _commit_lasso(self) -> None:
+        """Fill the lasso polygon and commit to mask canvas."""
+        import cv2
+        import numpy as np
+        if self._mask_canvas is None or len(self._mask_lasso_points) < 3:
+            self._mask_lasso_points = []
+            return
+        pts = np.array([(p.x(), p.y()) for p in self._mask_lasso_points], dtype=np.int32)
+        if self._mask_erasing:
+            cv2.fillPoly(self._mask_canvas, [pts], 0.0)
+        else:
+            cv2.fillPoly(self._mask_canvas, [pts], 1.0)
+        if self._mask_feather > 0:
+            k = self._mask_feather * 2 + 1
+            self._mask_canvas = cv2.GaussianBlur(self._mask_canvas, (k, k), 0)
+        self._mask_lasso_points = []
+        self.mask_updated.emit()
+        self.update()
 
     def _image_rect(self) -> QRect:
         """Calculate where the image is drawn on the widget."""
@@ -930,10 +1017,47 @@ class _PreviewCanvas(QWidget):
                 y = crop_w.y() + crop_w.height() * i // 3
                 p.drawLine(crop_w.x(), y, crop_w.right(), y)
 
+        # Draw mask overlay
+        if self._mask_paint_mode and self._mask_canvas is not None:
+            mc = self._mask_canvas
+            if mc.max() > 0:
+                h, w = mc.shape[:2]
+                rgba = np.zeros((h, w, 4), dtype=np.uint8)
+                rgba[..., 0] = 255  # Red channel
+                rgba[..., 3] = (mc * 120).clip(0, 255).astype(np.uint8)  # Alpha from mask
+                mask_img = QImage(rgba.data, w, h, w * 4, QImage.Format.Format_RGBA8888)
+                mask_pix = QPixmap.fromImage(mask_img.copy())
+                p.drawPixmap(r, mask_pix)
+            # Draw lasso path in progress
+            if self._mask_lasso_points and len(self._mask_lasso_points) > 1:
+                p.setPen(QPen(QColor(255, 255, 0, 180), 2, Qt.PenStyle.DashLine))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                for i in range(1, len(self._mask_lasso_points)):
+                    w1 = self._image_to_widget(self._mask_lasso_points[i - 1])
+                    w2 = self._image_to_widget(self._mask_lasso_points[i])
+                    p.drawLine(w1, w2)
+            # Draw brush cursor
+            if self._mask_tool == "brush" and self.underMouse():
+                cursor_pos = self.mapFromGlobal(QCursor.pos())
+                brush_widget_radius = max(2, int(
+                    self._mask_brush_size * r.width() / (self._pixmap.width() if self._pixmap else 1)
+                ))
+                p.setPen(QPen(QColor(255, 255, 255, 160), 1))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawEllipse(cursor_pos, brush_widget_radius, brush_widget_radius)
+
         p.end()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
+            if self._mask_paint_mode:
+                img_pos = self._widget_to_image(event.pos())
+                if self._mask_tool == "brush":
+                    self._paint_brush_stroke(img_pos, erase=False)
+                    self.update()
+                elif self._mask_tool == "lasso":
+                    self._mask_lasso_points = [img_pos]
+                return
             if self._crop_mode:
                 self._crop_dragging = True
                 self._crop_start = self._widget_to_image(event.pos())
@@ -943,8 +1067,28 @@ class _PreviewCanvas(QWidget):
                 self._pan_start = event.pos()
                 self._pan_start_offset = QPoint(self._pan_offset)
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        elif event.button() == Qt.MouseButton.RightButton:
+            if self._mask_paint_mode and self._mask_tool == "brush":
+                img_pos = self._widget_to_image(event.pos())
+                self._mask_erasing = True
+                self._paint_brush_stroke(img_pos, erase=True)
+                self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._mask_paint_mode:
+            img_pos = self._widget_to_image(event.pos())
+            if event.buttons() & Qt.MouseButton.LeftButton:
+                if self._mask_tool == "brush":
+                    self._paint_brush_stroke(img_pos, erase=False)
+                    self.update()
+                elif self._mask_tool == "lasso":
+                    self._mask_lasso_points.append(img_pos)
+                    self.update()
+            elif event.buttons() & Qt.MouseButton.RightButton:
+                if self._mask_tool == "brush":
+                    self._paint_brush_stroke(img_pos, erase=True)
+                    self.update()
+            return
         if self._crop_dragging and self._crop_start is not None:
             current = self._widget_to_image(event.pos())
             self._crop_rect = QRect(self._crop_start, current).normalized()
@@ -971,6 +1115,12 @@ class _PreviewCanvas(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
+            if self._mask_paint_mode:
+                if self._mask_tool == "brush":
+                    self.mask_updated.emit()
+                elif self._mask_tool == "lasso":
+                    self._commit_lasso()
+                return
             if self._crop_dragging:
                 self._crop_dragging = False
                 if self._crop_rect and self._crop_rect.width() > 5 and self._crop_rect.height() > 5:
@@ -982,6 +1132,10 @@ class _PreviewCanvas(QWidget):
                     self.setCursor(Qt.CursorShape.CrossCursor)
                 else:
                     self.setCursor(Qt.CursorShape.OpenHandCursor if self._zoom != 0 else Qt.CursorShape.ArrowCursor)
+        elif event.button() == Qt.MouseButton.RightButton:
+            if self._mask_paint_mode and self._mask_erasing:
+                self._mask_erasing = False
+                self.mask_updated.emit()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         delta = event.angleDelta().y()
@@ -1934,6 +2088,12 @@ class PhotoEditorWidget(QWidget):
         ai_mask_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         ai_mask_btn.clicked.connect(self._ai_masking)
         sec.add_widget(ai_mask_btn)
+
+        manual_mask_btn = QPushButton("✏️ Manual Masking")
+        manual_mask_btn.setStyleSheet(ai_btn_style)
+        manual_mask_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        manual_mask_btn.clicked.connect(self._manual_masking)
+        sec.add_widget(manual_mask_btn)
 
         ai_blur_btn = QPushButton("📷 AI Lens Blur (Bokeh)")
         ai_blur_btn.setStyleSheet(ai_btn_style)
@@ -3216,6 +3376,11 @@ class PhotoEditorWidget(QWidget):
             }
             mask_type, gen_fn = mask_map[target]
             result = gen_fn(rgb)
+            if result is None:
+                raise RuntimeError(
+                    f"{target} mask generation failed — the required AI model "
+                    f"is not available. Please install 'rembg' for subject/people/background masks."
+                )
             # Build overlay preview
             overlay = rgb.copy()
             mask_3ch = np.stack([result.mask] * 3, axis=2)
@@ -3255,6 +3420,194 @@ class PhotoEditorWidget(QWidget):
         self._stop_ai_worker()
         self._ai_worker = worker
         worker.start()
+
+    # ------------------------------------------------------------------
+    # Manual masking
+    # ------------------------------------------------------------------
+
+    def _manual_masking(self) -> None:
+        """Open manual masking mode with brush/lasso/auto-detect tools."""
+        if self._raw_rgb is None:
+            return
+
+        # If already in mask paint mode, exit it
+        if self._canvas._mask_paint_mode:
+            self._finish_manual_masking()
+            return
+
+        h, w = self._raw_rgb.shape[:2]
+        self._canvas.init_mask_canvas(h, w)
+        self._canvas.set_mask_paint_mode(True, "brush")
+        self._canvas.mask_updated.connect(self._on_manual_mask_updated)
+
+        # Build floating toolbar
+        self._mask_toolbar = QWidget(self)
+        self._mask_toolbar.setStyleSheet(
+            f"background: {_PANEL_BG_SOLID}; border: 1px solid {_BORDER}; border-radius: 6px; padding: 6px;"
+        )
+        tb_layout = QHBoxLayout(self._mask_toolbar)
+        tb_layout.setContentsMargins(8, 4, 8, 4)
+        tb_layout.setSpacing(6)
+
+        # Tool buttons
+        brush_btn = QPushButton("\U0001f58c Brush")
+        brush_btn.setCheckable(True)
+        brush_btn.setChecked(True)
+        brush_btn.setStyleSheet(f"color: {_TEXT}; padding: 4px 8px;")
+        lasso_btn = QPushButton("\u2702 Lasso")
+        lasso_btn.setCheckable(True)
+        lasso_btn.setStyleSheet(f"color: {_TEXT}; padding: 4px 8px;")
+        auto_btn = QPushButton("\U0001f50d Auto-Detect")
+        auto_btn.setStyleSheet(f"color: {_TEXT}; padding: 4px 8px;")
+
+        def _set_brush():
+            brush_btn.setChecked(True)
+            lasso_btn.setChecked(False)
+            self._canvas.set_mask_paint_mode(True, "brush")
+
+        def _set_lasso():
+            brush_btn.setChecked(False)
+            lasso_btn.setChecked(True)
+            self._canvas.set_mask_paint_mode(True, "lasso")
+
+        brush_btn.clicked.connect(_set_brush)
+        lasso_btn.clicked.connect(_set_lasso)
+        auto_btn.clicked.connect(self._auto_detect_mask)
+
+        tb_layout.addWidget(brush_btn)
+        tb_layout.addWidget(lasso_btn)
+        tb_layout.addWidget(auto_btn)
+
+        # Separator
+        sep = QLabel("|")
+        sep.setStyleSheet(f"color: {_TEXT_DIM};")
+        tb_layout.addWidget(sep)
+
+        # Brush size
+        size_label = QLabel("Size:")
+        size_label.setStyleSheet(f"color: {_TEXT_MUTED}; font-size: 11px;")
+        tb_layout.addWidget(size_label)
+        size_slider = QSlider(Qt.Orientation.Horizontal)
+        size_slider.setRange(2, 200)
+        size_slider.setValue(self._canvas._mask_brush_size)
+        size_slider.setFixedWidth(80)
+        size_slider.valueChanged.connect(lambda v: setattr(self._canvas, '_mask_brush_size', v))
+        tb_layout.addWidget(size_slider)
+
+        # Feather
+        feather_label = QLabel("Feather:")
+        feather_label.setStyleSheet(f"color: {_TEXT_MUTED}; font-size: 11px;")
+        tb_layout.addWidget(feather_label)
+        feather_slider = QSlider(Qt.Orientation.Horizontal)
+        feather_slider.setRange(0, 50)
+        feather_slider.setValue(self._canvas._mask_feather)
+        feather_slider.setFixedWidth(60)
+        feather_slider.valueChanged.connect(lambda v: setattr(self._canvas, '_mask_feather', v))
+        tb_layout.addWidget(feather_slider)
+
+        # Separator
+        sep2 = QLabel("|")
+        sep2.setStyleSheet(f"color: {_TEXT_DIM};")
+        tb_layout.addWidget(sep2)
+
+        # Clear & Done buttons
+        clear_btn = QPushButton("\U0001f5d1 Clear")
+        clear_btn.setStyleSheet(f"color: {_TEXT}; padding: 4px 8px;")
+        clear_btn.clicked.connect(lambda: (self._canvas.clear_mask_canvas(), self._canvas.update()))
+        tb_layout.addWidget(clear_btn)
+
+        done_btn = QPushButton("\u2705 Done")
+        done_btn.setStyleSheet(f"color: {_ACCENT}; font-weight: bold; padding: 4px 10px;")
+        done_btn.clicked.connect(self._finish_manual_masking)
+        tb_layout.addWidget(done_btn)
+
+        cancel_btn = QPushButton("\u2716 Cancel")
+        cancel_btn.setStyleSheet(f"color: {_TEXT_DIM}; padding: 4px 8px;")
+        cancel_btn.clicked.connect(self._cancel_manual_masking)
+        tb_layout.addWidget(cancel_btn)
+
+        # Position at top-center of canvas
+        self._mask_toolbar.adjustSize()
+        canvas_geo = self._canvas.geometry()
+        toolbar_x = canvas_geo.x() + (canvas_geo.width() - self._mask_toolbar.width()) // 2
+        toolbar_y = canvas_geo.y() + 10
+        self._mask_toolbar.move(toolbar_x, toolbar_y)
+        self._mask_toolbar.show()
+        self._mask_toolbar.raise_()
+
+    def _on_manual_mask_updated(self) -> None:
+        """Update _active_mask from canvas paint."""
+        mask = self._canvas.get_mask_canvas()
+        if mask is not None:
+            self._active_mask = mask.copy()
+            self._active_mask_type = "manual"
+
+    def _finish_manual_masking(self) -> None:
+        """Exit mask paint mode and apply painted mask."""
+        mask = self._canvas.get_mask_canvas()
+        if mask is not None and mask.max() > 0:
+            self._active_mask = mask.copy()
+            self._active_mask_type = "manual"
+            QMessageBox.information(
+                self, "Manual Masking",
+                "Mask applied. Use any edit slider to adjust the masked area.\n"
+                "Right-click was eraser. The red overlay shows the selected region.",
+            )
+        self._canvas.set_mask_paint_mode(False)
+        try:
+            self._canvas.mask_updated.disconnect(self._on_manual_mask_updated)
+        except TypeError:
+            pass
+        if hasattr(self, '_mask_toolbar') and self._mask_toolbar:
+            self._mask_toolbar.hide()
+            self._mask_toolbar.deleteLater()
+            self._mask_toolbar = None
+        # Refresh preview to remove overlay
+        self._update_preview()
+
+    def _cancel_manual_masking(self) -> None:
+        """Cancel manual masking without applying."""
+        self._canvas.clear_mask_canvas()
+        self._canvas.set_mask_paint_mode(False)
+        try:
+            self._canvas.mask_updated.disconnect(self._on_manual_mask_updated)
+        except TypeError:
+            pass
+        if hasattr(self, '_mask_toolbar') and self._mask_toolbar:
+            self._mask_toolbar.hide()
+            self._mask_toolbar.deleteLater()
+            self._mask_toolbar = None
+        self._update_preview()
+
+    def _auto_detect_mask(self) -> None:
+        """Use GrabCut for auto-detect masking."""
+        if self._raw_rgb is None:
+            return
+        import cv2
+        h, w = self._raw_rgb.shape[:2]
+        mask = np.zeros((h, w), np.uint8)
+        # Use a margin-based rect (exclude 5% borders)
+        margin_x, margin_y = max(1, w // 20), max(1, h // 20)
+        rect = (margin_x, margin_y, w - 2 * margin_x, h - 2 * margin_y)
+        bgd_model = np.zeros((1, 65), np.float64)
+        fgd_model = np.zeros((1, 65), np.float64)
+        try:
+            cv2.grabCut(self._raw_rgb, mask, rect, bgd_model, fgd_model, 5, cv2.GC_INIT_WITH_RECT)
+        except cv2.error as e:
+            QMessageBox.warning(self, "Auto-Detect", f"GrabCut failed: {e}")
+            return
+        # Convert GrabCut mask to float: foreground/probable foreground = 1
+        result_mask = np.where(
+            (mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 1.0, 0.0
+        ).astype(np.float32)
+        # Apply to canvas if in mask paint mode
+        if self._canvas._mask_paint_mode:
+            self._canvas._mask_canvas = result_mask
+            self._canvas.mask_updated.emit()
+            self._canvas.update()
+        else:
+            self._active_mask = result_mask
+            self._active_mask_type = "auto_detect"
 
     def _ai_lens_blur(self) -> None:
         """AI lens blur / bokeh effect."""

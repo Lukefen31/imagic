@@ -138,16 +138,16 @@ class _SingleWheel(QWidget):
         gradient = QConicalGradient(cx, cy, 0)
         for i in range(13):
             h = (i * 30) % 360
-            gradient.setColorAt(i / 12.0, QColor.fromHsv(h, 180, 200))
+            gradient.setColorAt(i / 12.0, QColor.fromHsv(h, 220, 230))
         p.setPen(QPen(QColor(0, 0, 0, 0)))
         p.setBrush(gradient)
-        p.setOpacity(0.65)
+        p.setOpacity(0.9)
         p.drawEllipse(QPointF(cx, cy), radius, radius)
 
         # Fade to center (radial gradient overlay)
         fade = QRadialGradient(cx, cy, radius)
-        fade.setColorAt(0.0, QColor(30, 30, 30, 220))
-        fade.setColorAt(0.45, QColor(30, 30, 30, 100))
+        fade.setColorAt(0.0, QColor(30, 30, 30, 180))
+        fade.setColorAt(0.55, QColor(30, 30, 30, 50))
         fade.setColorAt(1.0, QColor(30, 30, 30, 0))
         p.setOpacity(1.0)
         p.setBrush(fade)

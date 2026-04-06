@@ -352,6 +352,23 @@ class PreviewEngine:
         # -- Color Wheels (3-way grading) --
         _apply_color_wheels(img, params)
 
+        # -- Anti-clipping: soft-rolloff highlights and shadows --
+        # Compress values beyond [0, 1] using a smooth shoulder curve
+        # instead of hard clipping.  This preserves detail in bright
+        # highlights and deep shadows rather than crushing them.
+        shoulder = 0.05  # rolloff zone width in 0-1 space
+        # Highlight rolloff: compress values above (1 - shoulder)
+        hi_thresh = 1.0 - shoulder
+        hi_mask = img > hi_thresh
+        if np.any(hi_mask):
+            excess = (img[hi_mask] - hi_thresh) / shoulder
+            img[hi_mask] = hi_thresh + shoulder * (1.0 - np.exp(-excess))
+        # Shadow rolloff: compress values below shoulder
+        lo_mask = img < shoulder
+        if np.any(lo_mask):
+            deficit = (shoulder - img[lo_mask]) / shoulder
+            img[lo_mask] = shoulder - shoulder * (1.0 - np.exp(-deficit))
+
         # -- Final clip and convert --
         return np.clip(img * 255, 0, 255).astype(np.uint8)
 

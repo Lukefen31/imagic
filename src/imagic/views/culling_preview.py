@@ -596,11 +596,11 @@ class CullingPreviewDialog(QDialog):
         self._table.setColumnWidth(5, 160)
 
         self._table.setStyleSheet(
-            "QTableWidget { background: #0a0a0f; color: #e0e0e8; font-size: 12px; border: none; }"
-            "QTableWidget::item { border-bottom: 1px solid #1a1a28; padding: 4px; }"
-            "QHeaderView::section { background: #12121a; color: #8888a0; "
+            "QTableWidget { background: #0a0a0a; color: #e0e0e0; font-size: 12px; border: none; }"
+            "QTableWidget::item { border-bottom: 1px solid #1a1a1a; padding: 4px; }"
+            "QHeaderView::section { background: #121212; color: #888888; "
             "font-weight: bold; font-size: 11px; padding: 6px 8px; border: none; "
-            "border-bottom: 1px solid #2a2a3a; }"
+            "border-bottom: 1px solid #2a2a2a; }"
         )
 
         self._table.cellDoubleClicked.connect(self._on_row_double_clicked)

@@ -47,11 +47,11 @@ from imagic.views.widgets.ai_loading_modal import AILoadingModal
 logger = logging.getLogger(__name__)
 
 # ── Style constants ─────────────────────────────────────────────────
-_BG = "#0a0a0f"
-_PANEL = "#12121a"
-_BORDER = "#2a2a3a"
-_TEXT = "#e0e0e8"
-_DIM = "#8888a0"
+_BG = "#0a0a0a"
+_PANEL = "#121212"
+_BORDER = "#2a2a2a"
+_TEXT = "#e0e0e0"
+_DIM = "#888888"
 _ACCENT = "#ff9800"
 _GREEN = "#4caf50"
 

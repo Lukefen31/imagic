@@ -90,10 +90,10 @@ _PICK_BTN = (
 )
 
 _AUTO_BTN = (
-    "QPushButton { background: #1565c0; color: white; border: none; "
+    "QPushButton { background: #e89530; color: #111; border: none; "
     "border-radius: 5px; padding: 6px 14px; font-weight: 600; font-size: 10px; }"
-    "QPushButton:hover { background: #1976d2; }"
-    "QPushButton:pressed { background: #0d47a1; }"
+    "QPushButton:hover { background: #f5ad4a; }"
+    "QPushButton:pressed { background: #c07820; }"
 )
 
 _APPLY_BTN = (

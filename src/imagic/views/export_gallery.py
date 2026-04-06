@@ -90,7 +90,7 @@ class _ExportTile(QWidget):
         self._image_label = QLabel()
         self._image_label.setFixedSize(size, size)
         self._image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image_label.setStyleSheet("background: #12121a; border: 1px solid #2a2a3a; border-radius: 4px;")
+        self._image_label.setStyleSheet("background: #121212; border: 1px solid #2a2a2a; border-radius: 4px;")
         self._image_label.setText("Loading…")
         layout.addWidget(self._image_label)
 

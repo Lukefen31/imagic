@@ -99,7 +99,7 @@ def get_adaptive_preset(scene: SceneType) -> AdaptivePreset:
             name="Adaptive Portrait",
             scene=SceneType.PORTRAIT,
             global_params={
-                "exposure_comp": 0.15,
+                "exposure": 15,
                 "contrast": 5,
                 "clarity": -10,  # soften slightly
                 "vibrance": 10,
@@ -109,9 +109,9 @@ def get_adaptive_preset(scene: SceneType) -> AdaptivePreset:
                 {
                     "mask_type": "people",
                     "params": {
-                        "exposure_comp": 0.2,
+                        "exposure": 20,
                         "clarity": -15,
-                        "sharpening": 15,
+                        "sharp_amount": 15,
                     },
                 },
                 {
@@ -128,7 +128,7 @@ def get_adaptive_preset(scene: SceneType) -> AdaptivePreset:
             name="Adaptive Landscape",
             scene=SceneType.LANDSCAPE,
             global_params={
-                "exposure_comp": 0.05,
+                "exposure": 5,
                 "contrast": 10,
                 "clarity": 20,
                 "vibrance": 15,
@@ -139,10 +139,10 @@ def get_adaptive_preset(scene: SceneType) -> AdaptivePreset:
                 {
                     "mask_type": "sky",
                     "params": {
-                        "exposure_comp": -0.3,
+                        "exposure": -30,
                         "contrast": 15,
                         "vibrance": 20,
-                        "hsl_blue_saturation": 20,
+                        "hsl_sat_blue": 20,
                     },
                 },
             ],
@@ -152,10 +152,10 @@ def get_adaptive_preset(scene: SceneType) -> AdaptivePreset:
             name="Adaptive Night",
             scene=SceneType.NIGHT,
             global_params={
-                "exposure_comp": 0.5,
+                "exposure": 50,
                 "contrast": 15,
                 "shadows": 40,
-                "noise_reduction": 30,
+                "nr_luminance": 30,
                 "vibrance": 10,
                 "clarity": 10,
             },
@@ -165,12 +165,12 @@ def get_adaptive_preset(scene: SceneType) -> AdaptivePreset:
             name="Adaptive Indoor",
             scene=SceneType.INDOOR,
             global_params={
-                "exposure_comp": 0.1,
-                "wb_temperature": 5800,  # warm up slightly
+                "exposure": 10,
+                "temperature": 15,
                 "contrast": 5,
                 "shadows": 20,
                 "clarity": 10,
-                "noise_reduction": 15,
+                "nr_luminance": 15,
                 "vibrance": 5,
             },
             description="Warms tones, lifts shadows, mild noise reduction for indoor lighting.",
@@ -181,7 +181,7 @@ def get_adaptive_preset(scene: SceneType) -> AdaptivePreset:
             global_params={
                 "contrast": 10,
                 "clarity": 25,
-                "sharpening": 20,
+                "sharp_amount": 20,
                 "vibrance": 15,
                 "saturation": 5,
             },
@@ -191,7 +191,7 @@ def get_adaptive_preset(scene: SceneType) -> AdaptivePreset:
             name="Adaptive Auto",
             scene=SceneType.UNKNOWN,
             global_params={
-                "exposure_comp": 0.1,
+                "exposure": 10,
                 "contrast": 8,
                 "clarity": 10,
                 "vibrance": 10,

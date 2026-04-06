@@ -16,13 +16,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-_BG = "#12121a"
-_SURFACE = "#1e1e2e"
-_BORDER = "#2a2a3a"
-_TEXT = "#e0e0e8"
-_TEXT_DIM = "#8888a0"
-_ACCENT = "#ff9800"
-_ACCENT_HOVER = "#ffb74d"
+_BG = "#0d0d0d"
+_SURFACE = "#191919"
+_BORDER = "#232323"
+_TEXT = "#d6d6d6"
+_TEXT_DIM = "#787878"
+_TEXT_MUTED = "#505050"
+_ACCENT = "#e89530"
+_ACCENT_HOVER = "#f5ad4a"
 
 
 class ExportOptionsDialog(QDialog):
@@ -39,17 +40,17 @@ class ExportOptionsDialog(QDialog):
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(14)
-        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+        layout.setContentsMargins(28, 24, 28, 24)
 
         # ─── Title ───
         title = QLabel("Export Options")
-        title.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {_TEXT};")
+        title.setStyleSheet(f"font-size: 15px; font-weight: 600; color: {_TEXT};")
         layout.addWidget(title)
 
         # ─── File Format ───
         fmt_label = QLabel("File Format")
-        fmt_label.setStyleSheet(f"font-size: 11px; color: {_TEXT_DIM}; font-weight: bold;")
+        fmt_label.setStyleSheet(f"font-size: 10px; color: {_TEXT_DIM}; font-weight: 600; letter-spacing: 0.5px;")
         layout.addWidget(fmt_label)
 
         self._format_combo = QComboBox()
@@ -67,17 +68,17 @@ class ExportOptionsDialog(QDialog):
 
         # ─── Quality Slider ───
         self._quality_label = QLabel("Quality: 95")
-        self._quality_label.setStyleSheet(f"font-size: 11px; color: {_TEXT_DIM}; font-weight: bold;")
+        self._quality_label.setStyleSheet(f"font-size: 10px; color: {_TEXT_DIM}; font-weight: 600; letter-spacing: 0.5px;")
         layout.addWidget(self._quality_label)
 
         self._quality_slider = QSlider(Qt.Orientation.Horizontal)
         self._quality_slider.setRange(1, 100)
         self._quality_slider.setValue(95)
         self._quality_slider.setStyleSheet(
-            f"QSlider::groove:horizontal {{ background: {_SURFACE}; height: 6px; border-radius: 3px; }}"
-            f"QSlider::handle:horizontal {{ background: {_ACCENT}; width: 16px; height: 16px; "
-            f"margin: -5px 0; border-radius: 8px; }}"
-            f"QSlider::sub-page:horizontal {{ background: {_ACCENT}; border-radius: 3px; }}"
+            f"QSlider::groove:horizontal {{ background: {_SURFACE}; height: 3px; border-radius: 1px; }}"
+            f"QSlider::handle:horizontal {{ background: {_ACCENT}; width: 13px; height: 13px; "
+            f"margin: -5px 0; border-radius: 7px; border: 1.5px solid {_BG}; }}"
+            f"QSlider::sub-page:horizontal {{ background: {_ACCENT}; border-radius: 1px; }}"
         )
         self._quality_slider.valueChanged.connect(
             lambda v: self._quality_label.setText(f"Quality: {v}")
@@ -86,7 +87,7 @@ class ExportOptionsDialog(QDialog):
 
         # ─── Export Scope ───
         scope_label = QLabel("Export Scope")
-        scope_label.setStyleSheet(f"font-size: 11px; color: {_TEXT_DIM}; font-weight: bold;")
+        scope_label.setStyleSheet(f"font-size: 10px; color: {_TEXT_DIM}; font-weight: 600; letter-spacing: 0.5px;")
         layout.addWidget(scope_label)
 
         scope_row = QHBoxLayout()
@@ -125,18 +126,18 @@ class ExportOptionsDialog(QDialog):
         cancel_btn = QPushButton("Cancel")
         cancel_btn.setStyleSheet(
             f"QPushButton {{ background: {_SURFACE}; color: {_TEXT_DIM}; "
-            f"border: 1px solid {_BORDER}; border-radius: 6px; padding: 8px 20px; font-size: 12px; }}"
-            f"QPushButton:hover {{ background: #333; color: {_TEXT}; }}"
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 8px 20px; font-size: 11px; }}"
+            f"QPushButton:hover {{ background: #252525; color: {_TEXT}; }}"
         )
         cancel_btn.clicked.connect(self.reject)
         btn_row.addWidget(cancel_btn)
 
         export_btn = QPushButton("Export")
         export_btn.setStyleSheet(
-            f"QPushButton {{ background: {_ACCENT}; color: #111; font-weight: bold; "
-            f"border: none; border-radius: 6px; padding: 8px 28px; font-size: 12px; }}"
+            f"QPushButton {{ background: {_ACCENT}; color: #111; font-weight: 600; "
+            f"border: none; border-radius: 5px; padding: 8px 28px; font-size: 11px; }}"
             f"QPushButton:hover {{ background: {_ACCENT_HOVER}; }}"
-            f"QPushButton:pressed {{ background: #f57c00; }}"
+            f"QPushButton:pressed {{ background: #d07a18; }}"
         )
         export_btn.clicked.connect(self.accept)
         export_btn.setDefault(True)

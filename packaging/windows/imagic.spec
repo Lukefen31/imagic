@@ -98,8 +98,8 @@ if IS_MACOS:
         info_plist={
             "CFBundleDisplayName": "imagic",
             "CFBundleName": "imagic",
-            "CFBundleShortVersionString": "0.2.0",
-            "CFBundleVersion": "0.2.0",
+            "CFBundleShortVersionString": "0.4.0",
+            "CFBundleVersion": "0.4.0",
             "NSHighResolutionCapable": True,
             "NSRequiresAquaSystemAppearance": False,
             "LSMinimumSystemVersion": "12.0",

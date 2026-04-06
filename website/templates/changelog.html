@@ -237,27 +237,13 @@
 
             <div class="changelog-entry">
                 <div class="changelog-version">
-                    <h2>v0.3.1</h2>
-                    <span class="changelog-date">April 2026</span>
-                    <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.3.1" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
-                </div>
-                <span class="changelog-tag tag-new">New</span>
-                <span class="changelog-tag tag-fixed">Fixed</span>
-                <ul>
-                    <li>Added TIF/TIFF as supported input formats (scanner, config, and defaults)</li>
-                    <li>Fixed product key activation for licenses without a linked user account</li>
-                    <li>Updated website format references to 11+ supported formats</li>
-                </ul>
-            </div>
-
-            <div class="changelog-entry">
-                <div class="changelog-version">
                     <h2>v0.4.0</h2>
-                    <span class="changelog-date">May 2026</span>
+                    <span class="changelog-date">April 2026</span>
                     <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.4.0" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
                 </div>
                 <span class="changelog-tag tag-new">New</span>
                 <span class="changelog-tag tag-improved">Improved</span>
+                <span class="changelog-tag tag-fixed">Fixed</span>
                 <ul>
                     <li><strong>AI Masking:</strong> Select Subject, Sky, People, or Background with AI-powered mask generation for targeted edits</li>
                     <li><strong>AI Lens Blur:</strong> Depth-based bokeh simulation using MiDaS depth estimation for realistic background blur</li>
@@ -270,7 +256,12 @@
                     <li><strong>Texture Slider:</strong> Fine-frequency detail enhancement in the Presence panel</li>
                     <li><strong>Rotation Control:</strong> Precise rotation slider in Lens &amp; Geometry panel</li>
                     <li>Tone Curve and Lens &amp; Geometry promoted from expert-only to always-visible main panels</li>
-                    <li><strong>UI Modernization:</strong> Refined futuristic dark theme with navy-tinted backgrounds, gradient section headers, improved scrollbar styling, and polished colour palette across all views</li>
+                    <li><strong>Premium UI Overhaul:</strong> Neutral dark theme with refined colour palette, gradient section headers, improved scrollbar styling, and polished visuals across all views</li>
+                    <li><strong>AI Cancel:</strong> Press Escape or click cancel to interrupt AI batch processing mid-run without losing completed results</li>
+                    <li><strong>AI Model Caching:</strong> Background-removal model loaded once and reused across multiple operations for faster processing</li>
+                    <li>Fixed thumbnail cache eviction off-by-one error that could cause spurious cache misses</li>
+                    <li>Fixed AI worker race conditions and proper thread cleanup on batch completion</li>
+                    <li>Website security hardening: CORS origin validation, timing-safe admin auth, upload size pre-check</li>
                 </ul>
             </div>
 
@@ -294,6 +285,21 @@
                     <li>Added changelog page with full version history and release notes</li>
                     <li>Bug report &amp; feature request form on changelog page with email delivery</li>
                     <li>Export options dialog: choose file format (JPEG/PNG/TIFF), quality, and export scope (single photo or entire batch) before exporting</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
+                    <h2>v0.3.1</h2>
+                    <span class="changelog-date">April 2026</span>
+                    <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.3.1" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
+                </div>
+                <span class="changelog-tag tag-new">New</span>
+                <span class="changelog-tag tag-fixed">Fixed</span>
+                <ul>
+                    <li>Added TIF/TIFF as supported input formats (scanner, config, and defaults)</li>
+                    <li>Fixed product key activation for licenses without a linked user account</li>
+                    <li>Updated website format references to 11+ supported formats</li>
                 </ul>
             </div>
 
@@ -364,10 +370,11 @@
                 <ul>
                     <li>Linux desktop builds</li>
                     <li>Browser-based version (coming later in 2026)</li>
-                    <li>Smart auto-crop with confidence scoring</li>
-                    <li>Face detection and portrait-aware culling</li>
+                    <li>Portrait-aware culling with automatic face quality ranking</li>
                     <li>Plugin system for custom export pipelines</li>
                     <li>Improved feedback learning with per-category style models</li>
+                    <li>Cloud sync for edits and library across devices</li>
+                    <li>Batch AI presets — apply adaptive corrections to entire folders in one click</li>
                 </ul>
             </div>
 

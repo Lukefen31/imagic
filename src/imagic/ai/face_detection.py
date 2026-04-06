@@ -80,13 +80,12 @@ def _detect_opencv_dnn(img: np.ndarray, min_conf: float) -> Optional[List[FaceBo
                 (w, h),
                 min_conf,
             )
-        except (cv2.error, AttributeError):
-            # YuNet not available, try Haar
+            # Detect
+            bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            _, detections = detector.detect(bgr)
+        except (cv2.error, AttributeError, Exception):
+            # YuNet not available or failed, fall back to Haar
             return None
-
-        # Detect
-        bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        _, detections = detector.detect(bgr)
 
         if detections is None:
             return []

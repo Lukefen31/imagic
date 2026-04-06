@@ -40,34 +40,34 @@ _CARD_WIDTH = 250
 # ======================================================================
 
 _DIALOG_STYLE = """
-QDialog { background: #0a0a0f; }
-QScrollArea { background: #0a0a0f; border: none; }
-QWidget#scrollContent { background: #0a0a0f; }
+QDialog { background: #0d0d0d; }
+QScrollArea { background: #0d0d0d; border: none; }
+QWidget#scrollContent { background: #0d0d0d; }
 """
 
 _GROUP_FRAME_STYLE = """
 QFrame#groupFrame {
-    background: #1a1a28;
-    border: 1px solid #2a2a3a;
+    background: #161616;
+    border: 1px solid #232323;
     border-radius: 10px;
 }
 """
 
 _CARD_NORMAL = """
 QFrame#photoCard {
-    background: #2a2a2a;
-    border: 2px solid #444;
+    background: #1e1e1e;
+    border: 2px solid #333333;
     border-radius: 8px;
 }
 QFrame#photoCard:hover {
-    border-color: #666;
+    border-color: #4a4a4a;
 }
 """
 
 _CARD_SELECTED = """
 QFrame#photoCard {
-    background: #1b3a1b;
-    border: 2px solid #4caf50;
+    background: #1a321a;
+    border: 2px solid #3cb44e;
     border-radius: 8px;
 }
 """
@@ -82,37 +82,37 @@ QFrame#photoCard {
 """
 
 _PICK_BTN = (
-    "QPushButton { background: #4caf50; color: white; border: none; "
-    "border-radius: 6px; padding: 7px 14px; font-weight: bold; font-size: 11px; }"
-    "QPushButton:hover { background: #66bb6a; }"
-    "QPushButton:pressed { background: #388e3c; }"
+    "QPushButton { background: #3cb44e; color: white; border: none; "
+    "border-radius: 5px; padding: 6px 14px; font-weight: 600; font-size: 10px; }"
+    "QPushButton:hover { background: #4cc85e; }"
+    "QPushButton:pressed { background: #2e9a3e; }"
     "QPushButton:disabled { background: #2e7d32; color: #81c784; }"
 )
 
 _AUTO_BTN = (
     "QPushButton { background: #1565c0; color: white; border: none; "
-    "border-radius: 6px; padding: 7px 14px; font-weight: bold; font-size: 11px; }"
+    "border-radius: 5px; padding: 6px 14px; font-weight: 600; font-size: 10px; }"
     "QPushButton:hover { background: #1976d2; }"
     "QPushButton:pressed { background: #0d47a1; }"
 )
 
 _APPLY_BTN = (
-    "QPushButton { background: #ff9800; color: #111; border: none; "
-    "border-radius: 8px; padding: 10px 28px; font-weight: bold; font-size: 13px; }"
-    "QPushButton:hover { background: #ffa726; }"
-    "QPushButton:pressed { background: #f57c00; }"
+    "QPushButton { background: #e89530; color: #111; border: none; "
+    "border-radius: 6px; padding: 9px 24px; font-weight: 600; font-size: 12px; }"
+    "QPushButton:hover { background: #f5ad4a; }"
+    "QPushButton:pressed { background: #d07a18; }"
 )
 
 _SKIP_BTN = (
-    "QPushButton { background: #2a2a2a; color: #ccc; border: 1px solid #444; "
-    "border-radius: 6px; padding: 7px 14px; font-size: 11px; }"
-    "QPushButton:hover { background: #333; border-color: #555; }"
+    "QPushButton { background: #1e1e1e; color: #b0b0b0; border: 1px solid #333333; "
+    "border-radius: 5px; padding: 6px 14px; font-size: 10px; }"
+    "QPushButton:hover { background: #282828; border-color: #3e3e3e; }"
 )
 
-_SCORE_BEST = "color: #4caf50; font-weight: bold; font-size: 11px;"
-_SCORE_NORMAL = "color: #999; font-size: 11px;"
-_METRIC_GOOD = "#4caf50"
-_METRIC_MED = "#ff9800"
+_SCORE_BEST = "color: #3cb44e; font-weight: 600; font-size: 11px;"
+_SCORE_NORMAL = "color: #787878; font-size: 11px;"
+_METRIC_GOOD = "#3cb44e"
+_METRIC_MED = "#e89530"
 _METRIC_BAD = "#ef5350"
 
 

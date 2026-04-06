@@ -41,14 +41,31 @@ class MaskResult:
         self.confidence = confidence
 
 
+_rembg_available: Optional[bool] = None
+_rembg_session = None  # cached rembg session (~170 MB model)
+
+
 def _ensure_rembg():
     """Lazy-import rembg, install hint if missing."""
+    global _rembg_available
+    if _rembg_available is not None:
+        return _rembg_available
     try:
         import rembg  # noqa: F401
-        return True
+        _rembg_available = True
     except ImportError:
         logger.warning("rembg not installed — AI masking unavailable. pip install rembg")
-        return False
+        _rembg_available = False
+    return _rembg_available
+
+
+def _get_rembg_session():
+    """Return a cached rembg U2-Net session."""
+    global _rembg_session
+    if _rembg_session is None:
+        from rembg import new_session
+        _rembg_session = new_session("u2net")
+    return _rembg_session
 
 
 def generate_subject_mask(img: np.ndarray) -> Optional[MaskResult]:
@@ -64,11 +81,11 @@ def generate_subject_mask(img: np.ndarray) -> Optional[MaskResult]:
         return None
 
     try:
-        from rembg import remove, new_session
+        from rembg import remove
         from PIL import Image
         import io
 
-        session = new_session("u2net")
+        session = _get_rembg_session()
         pil_img = Image.fromarray(img)
         # Get RGBA output — alpha channel IS the mask
         result = remove(pil_img, session=session, only_mask=True)

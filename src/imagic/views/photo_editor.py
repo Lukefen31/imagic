@@ -1,4 +1,4 @@
-"""Professional photo editor — Lightroom-style editing with live preview.
+"""Professional photo editor â€” Lightroom-style editing with live preview.
 
 Full-featured editing dialog with:
 - Real-time preview using numpy-based image processing
@@ -69,25 +69,33 @@ logger = logging.getLogger(__name__)
 # Style constants
 # ======================================================================
 
-_BG = "#0a0a0f"
-_PANEL_BG = "#12121a"
-_SECTION_BG = "#1a1a28"
-_BORDER = "#2a2a3a"
-_TEXT = "#e0e0e8"
-_TEXT_DIM = "#8888a0"
-_ACCENT = "#ff9800"
-_ACCENT_HOVER = "#ffb74d"
-_GREEN = "#4caf50"
-_SLIDER_GROOVE = "#3a3a4a"
-_SLIDER_HANDLE = "#ff9800"
-_SLIDER_SUB = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e65100, stop:1 #ffb74d)"
+_BG = "#0d0d0d"
+_PANEL_BG = "rgba(18, 18, 18, 240)"
+_PANEL_BG_SOLID = "#121212"
+_SECTION_BG = "#1a1a1a"
+_BORDER = "#232323"
+_TEXT = "#d6d6d6"
+_TEXT_DIM = "#787878"
+_TEXT_MUTED = "#505050"
+_ACCENT = "#e89530"
+_ACCENT_HOVER = "#f5ad4a"
+_ACCENT_DIM = "rgba(232, 149, 48, 0.12)"
+_GREEN = "#3cb44e"
+_GREEN_HOVER = "#4cc85e"
+_GREEN_PRESSED = "#2e9a3e"
+_SLIDER_GROOVE = "#282828"
+_SLIDER_HANDLE = "#e89530"
+_SLIDER_SUB = "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b87200, stop:1 #e89530)"
+_BTN_BG = "#1e1e1e"
+_BTN_BORDER = "#333333"
+_BTN_HOVER = "#282828"
 
 _SLIDER_STYLE = (
-    f"QSlider::groove:horizontal {{ height: 4px; background: {_SLIDER_GROOVE}; border-radius: 2px; }}"
-    f"QSlider::handle:horizontal {{ width: 14px; height: 14px; margin: -5px 0; "
-    f"background: {_SLIDER_HANDLE}; border: 2px solid {_PANEL_BG}; border-radius: 7px; }}"
+    f"QSlider::groove:horizontal {{ height: 2px; background: {_SLIDER_GROOVE}; border-radius: 1px; }}"
+    f"QSlider::handle:horizontal {{ width: 11px; height: 11px; margin: -5px 0; "
+    f"background: {_SLIDER_HANDLE}; border: 1.5px solid {_PANEL_BG_SOLID}; border-radius: 6px; }}"
     f"QSlider::handle:horizontal:hover {{ background: {_ACCENT_HOVER}; }}"
-    f"QSlider::sub-page:horizontal {{ background: {_SLIDER_SUB}; border-radius: 2px; }}"
+    f"QSlider::sub-page:horizontal {{ background: {_SLIDER_SUB}; border-radius: 1px; }}"
 )
 
 _GRADES = [
@@ -208,6 +216,27 @@ class _BatchOptimizeWorker(QThread):
 
         self.finished_all.emit()
 
+
+class _AITaskWorker(QThread):
+    """Generic worker for running AI tasks off the main thread."""
+
+    finished = pyqtSignal(object)  # result object
+    error = pyqtSignal(str)  # error message
+
+    def __init__(self, fn, *args, parent=None, **kwargs):
+        super().__init__(parent)
+        self._fn = fn
+        self._args = args
+        self._kwargs = kwargs
+
+    def run(self) -> None:
+        try:
+            result = self._fn(*self._args, **self._kwargs)
+            self.finished.emit(result)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 class _RawDecodeWorker(QThread):
     """Decode a RAW file to a numpy RGB array in the background."""
 
@@ -278,22 +307,22 @@ def ai_auto_enhance(rgb: np.ndarray) -> dict:
     median_lum = float(np.median(lum))
     p99 = float(np.percentile(lum, 99))
 
-    # Any image with mean luminance below 0.25 is "dark" — be conservative.
+    # Any image with mean luminance below 0.25 is "dark" â€” be conservative.
     # Most intentional dark scenes (clubs, concerts, night) fall here.
     is_dark = mean_lum < 0.25
 
     if is_dark:
         # Gentle lift: aim to improve visibility without destroying mood.
         # Scale the target based on how dark the image is.
-        # Very dark (mean 0.02) → target ~0.06 (3x)
-        # Moderately dark (mean 0.13) → target ~0.18 (1.4x)
+        # Very dark (mean 0.02) â†’ target ~0.06 (3x)
+        # Moderately dark (mean 0.13) â†’ target ~0.18 (1.4x)
         target = mean_lum + min(0.06, mean_lum * 0.5)
 
         if mean_lum < target - 0.01 and mean_lum > 0.001:
             ev_need = (target - mean_lum) / mean_lum
             params["exposure"] = int(np.clip(ev_need * 50, 0, 25))
 
-        # Highlights recovery — protect any existing bright areas
+        # Highlights recovery â€” protect any existing bright areas
         clip_hi = float(np.sum(lum > 0.92) / lum.size)
         if clip_hi > 0.005:
             params["highlights"] = int(max(-50, -clip_hi * 800))
@@ -390,7 +419,7 @@ _VARIATION_RANGES: dict[str, int] = {
     "grain_amount": 5,
 }
 
-# Curated "flavour" offsets — the first re-run picks flavour 0, second
+# Curated "flavour" offsets â€” the first re-run picks flavour 0, second
 # picks flavour 1, etc.  After exhausting flavours, seeded jitter is used.
 _FLAVOURS: list[dict[str, int]] = [
     {"contrast": 8, "clarity": 6, "vibrance": 5, "shadows": 5},      # punchier
@@ -413,7 +442,7 @@ def vary_suggestions(base: dict, run: int, slider_ranges: dict[str, tuple] | Non
         base: The deterministic AI suggestions dict.
         run: How many times the user has already triggered this AI tool on
              the current photo (0 = first time).
-        slider_ranges: Optional mapping of key → (min, max) to clamp values.
+        slider_ranges: Optional mapping of key â†’ (min, max) to clamp values.
 
     Returns:
         A new dict with varied parameter values.
@@ -517,7 +546,7 @@ def ai_visual_refine(rgb: np.ndarray, suggestions: dict) -> dict:
     # --- Check 3: Over-brightened ---
     brightness_ratio = opt_mean / max(orig_mean, 0.001)
     if brightness_ratio > 2.5 and orig_mean > 0.05:
-        # Image got way too bright — dial exposure back
+        # Image got way too bright â€” dial exposure back
         cur_exp = refined.get("exposure", 0)
         refined["exposure"] = max(0, int(cur_exp * 0.5))
     elif brightness_ratio > 1.8 and orig_mean > 0.15:
@@ -539,7 +568,7 @@ def ai_visual_refine(rgb: np.ndarray, suggestions: dict) -> dict:
     opt_sat = float(np.mean(np.where(opt_mx > 0, (opt_mx - opt_mn) / (opt_mx + 1e-6), 0)))
 
     if opt_sat > orig_sat * 1.5 and opt_sat > 0.25:
-        # Over-saturated — pull vibrance/saturation back
+        # Over-saturated â€” pull vibrance/saturation back
         cur_vib = refined.get("vibrance", 0)
         if cur_vib > 5:
             refined["vibrance"] = max(0, int(cur_vib * 0.5))
@@ -604,24 +633,25 @@ class _SliderRow(QWidget):
         super().__init__(parent)
         self._default = default
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 1, 0, 1)
-        layout.setSpacing(6)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(8)
 
         self._label = QLabel(label)
-        self._label.setFixedWidth(100)
-        self._label.setStyleSheet(f"color: {_TEXT}; font-size: 11px;")
+        self._label.setFixedWidth(96)
+        self._label.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 11px;")
         layout.addWidget(self._label)
 
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(lo, hi)
         self._slider.setValue(default)
         self._slider.setStyleSheet(_SLIDER_STYLE)
+        self._slider.setFixedHeight(18)
         layout.addWidget(self._slider, stretch=1)
 
         self._val = QLabel(str(default))
-        self._val.setFixedWidth(36)
+        self._val.setFixedWidth(32)
         self._val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._val.setStyleSheet(f"color: {_TEXT}; font-size: 11px;")
+        self._val.setStyleSheet(f"color: {_TEXT_MUTED}; font-size: 10px; font-family: 'Consolas', 'SF Mono', monospace;")
         layout.addWidget(self._val)
 
         self._slider.valueChanged.connect(self._on_changed)
@@ -664,16 +694,16 @@ class _CollapsibleSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header
-        self._header = QPushButton(f"▼  {title}")
+        # Header â€” refined section header with subtle left accent
+        self._header = QPushButton(f"â–¾  {title}")
         self._header.setStyleSheet(
-            f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-            f"stop:0 #1e1e2e, stop:1 #16162a); color: {_ACCENT}; "
-            f"font-weight: bold; font-size: 11px; text-align: left; "
-            f"padding: 10px 14px; border: none; border-bottom: 1px solid {_BORDER}; "
-            f"letter-spacing: 1.5px; }}"
-            f"QPushButton:hover {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-            f"stop:0 #252538, stop:1 #1c1c32); }}"
+            f"QPushButton {{ background: transparent; color: {_TEXT}; "
+            f"font-weight: 600; font-size: 10px; text-align: left; "
+            f"padding: 9px 14px 9px 12px; border: none; "
+            f"border-bottom: 1px solid {_BORDER}; "
+            f"border-left: 2px solid {_ACCENT}; "
+            f"letter-spacing: 1.2px; }}"
+            f"QPushButton:hover {{ background: {_ACCENT_DIM}; }}"
         )
         self._header.setCursor(Qt.CursorShape.PointingHandCursor)
         self._header.clicked.connect(self._toggle)
@@ -683,8 +713,8 @@ class _CollapsibleSection(QWidget):
         # Content container
         self._content = QWidget()
         self._content_layout = QVBoxLayout(self._content)
-        self._content_layout.setContentsMargins(12, 8, 12, 8)
-        self._content_layout.setSpacing(3)
+        self._content_layout.setContentsMargins(14, 10, 14, 10)
+        self._content_layout.setSpacing(2)
         layout.addWidget(self._content)
 
     def add_widget(self, w: QWidget) -> None:
@@ -696,7 +726,7 @@ class _CollapsibleSection(QWidget):
     def _toggle(self) -> None:
         self._expanded = not self._expanded
         self._content.setVisible(self._expanded)
-        arrow = "▼" if self._expanded else "▶"
+        arrow = "â–¾" if self._expanded else "â–¸"
         self._header.setText(f"{arrow}  {self._title}")
 
 
@@ -720,7 +750,7 @@ class _HistogramWidget(QWidget):
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor("#0a0a14"))
+        p.fillRect(self.rect(), QColor("#0a0a0a"))
 
         if self._data is None:
             p.setPen(QColor(_TEXT_DIM))
@@ -990,7 +1020,7 @@ class _FilmStripItem(QWidget):
         self._img_label.setStyleSheet(f"background: {_PANEL_BG}; border: 1px solid {_BORDER}; border-radius: 4px;")
         layout.addWidget(self._img_label)
 
-        short = file_name[:8] + "…" if len(file_name) > 9 else file_name
+        short = file_name[:8] + "â€¦" if len(file_name) > 9 else file_name
         lbl = QLabel(short)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 9px;")
@@ -1019,7 +1049,7 @@ class _FilmStrip(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedHeight(100)
+        self.setFixedHeight(90)
         self.setStyleSheet(f"background: {_BG}; border-top: 1px solid {_BORDER};")
 
         layout = QHBoxLayout(self)
@@ -1032,9 +1062,11 @@ class _FilmStrip(QWidget):
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._scroll.setStyleSheet(
             "QScrollArea { border: none; background: transparent; }"
-            "QScrollBar:horizontal { height: 6px; background: transparent; }"
-            f"QScrollBar::handle:horizontal {{ background: #3a3a4a; border-radius: 3px; min-width: 30px; }}"
-            f"QScrollBar::handle:horizontal:hover {{ background: {_ACCENT}; }}"
+            "QScrollBar:horizontal { height: 4px; background: transparent; }"
+            f"QScrollBar::handle:horizontal {{ background: rgba(100, 100, 100, 0.3); border-radius: 2px; min-width: 30px; }}"
+            f"QScrollBar::handle:horizontal:hover {{ background: rgba(100, 100, 100, 0.6); }}"
+            "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }"
+            "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
         )
         layout.addWidget(self._scroll)
 
@@ -1166,6 +1198,9 @@ class PhotoEditorWidget(QWidget):
         self._active_mask: Optional[np.ndarray] = None
         self._active_mask_type = None
 
+        # Currently running AI task worker (prevent GC + allow cancellation)
+        self._ai_worker: Optional[_AITaskWorker] = None
+
         # AI loading overlay (created after _build_ui so it sits on top)
         self._ai_modal: Optional[AILoadingModal] = None
 
@@ -1193,6 +1228,27 @@ class PhotoEditorWidget(QWidget):
         if self._ai_modal and self._ai_modal.isVisible():
             self._ai_modal.setGeometry(self.rect())
 
+    def _stop_ai_worker(self) -> None:
+        """Safely stop any running AI worker thread."""
+        if self._ai_worker is not None and self._ai_worker.isRunning():
+            self._ai_worker.quit()
+            self._ai_worker.wait(3000)
+        self._ai_worker = None
+
+    def closeEvent(self, event) -> None:
+        """Clean up threads before closing."""
+        self._stop_ai_worker()
+        if self._decode_worker and self._decode_worker.isRunning():
+            self._decode_worker.quit()
+            self._decode_worker.wait(2000)
+        if self._prefetch_worker and self._prefetch_worker.isRunning():
+            self._prefetch_worker.quit()
+            self._prefetch_worker.wait(1000)
+        if self._batch_worker and self._batch_worker.isRunning():
+            self._batch_worker.quit()
+            self._batch_worker.wait(2000)
+        super().closeEvent(event)
+
     # ------------------------------------------------------------------
     # UI Construction
     # ------------------------------------------------------------------
@@ -1210,7 +1266,7 @@ class PhotoEditorWidget(QWidget):
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         main_splitter.setStyleSheet(
             f"QSplitter::handle {{ background: {_BORDER}; width: 1px; }}"
-            f"QSplitter::handle:hover {{ background: {_ACCENT}; }}"
+            f"QSplitter::handle:hover {{ background: rgba(232, 149, 48, 0.4); }}"
         )
 
         # Left sidebar: histogram
@@ -1218,12 +1274,12 @@ class PhotoEditorWidget(QWidget):
         left.setFixedWidth(220)
         left.setStyleSheet(f"background: {_PANEL_BG}; border-right: 1px solid {_BORDER};")
         left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(8, 10, 8, 10)
-        left_layout.setSpacing(10)
+        left_layout.setContentsMargins(10, 12, 10, 12)
+        left_layout.setSpacing(8)
 
         hist_label = QLabel("HISTOGRAM")
         hist_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hist_label.setStyleSheet(f"color: {_ACCENT}; font-weight: bold; font-size: 10px; letter-spacing: 2px;")
+        hist_label.setStyleSheet(f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;")
         left_layout.addWidget(hist_label)
 
         self._histogram = _HistogramWidget()
@@ -1239,18 +1295,18 @@ class PhotoEditorWidget(QWidget):
 
         # Zoom controls
         zoom_lbl = QLabel("ZOOM")
-        zoom_lbl.setStyleSheet(f"color: {_ACCENT}; font-weight: bold; font-size: 10px; letter-spacing: 2px;")
+        zoom_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;")
         zoom_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(zoom_lbl)
 
         zoom_row = QHBoxLayout()
         for label, factor in [("Fit", 0), ("50%", 0.5), ("100%", 1.0), ("200%", 2.0)]:
             btn = QPushButton(label)
-            btn.setFixedHeight(26)
+            btn.setFixedHeight(24)
             btn.setStyleSheet(
-                f"QPushButton {{ background: #1a1a28; color: {_TEXT}; "
-                f"border: 1px solid {_BORDER}; border-radius: 4px; font-size: 10px; padding: 2px 8px; }}"
-                f"QPushButton:hover {{ background: #222230; border-color: #3a3a4a; }}"
+                f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+                f"border: 1px solid {_BORDER}; border-radius: 4px; font-size: 10px; padding: 2px 6px; }}"
+                f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
             )
             btn.clicked.connect(lambda _, z=factor: self._set_zoom(z))
             zoom_row.addWidget(btn)
@@ -1266,11 +1322,11 @@ class PhotoEditorWidget(QWidget):
         # Keyboard shortcuts
         shortcuts_lbl = QLabel("SHORTCUTS")
         shortcuts_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        shortcuts_lbl.setStyleSheet(f"color: {_ACCENT}; font-weight: bold; font-size: 10px; letter-spacing: 2px;")
+        shortcuts_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;")
         left_layout.addWidget(shortcuts_lbl)
 
         shortcuts_text = QLabel(
-            "← →  Navigate photos\n"
+            "â† â†’  Navigate photos\n"
             "\\     Before / After\n"
             "F     Fit to screen\n"
             "1     100% zoom\n"
@@ -1284,7 +1340,7 @@ class PhotoEditorWidget(QWidget):
             "Scroll  Zoom in/out\n"
             "Esc   Close editor"
         )
-        shortcuts_text.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 10px; line-height: 1.4;")
+        shortcuts_text.setStyleSheet(f"color: {_TEXT_MUTED}; font-size: 10px; line-height: 1.6;")
         left_layout.addWidget(shortcuts_text)
 
         main_splitter.addWidget(left)
@@ -1307,10 +1363,12 @@ class PhotoEditorWidget(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet(
-            f"QScrollArea {{ border: none; background: {_PANEL_BG}; }}"
-            "QScrollBar:vertical { width: 6px; background: transparent; }"
-            f"QScrollBar::handle:vertical {{ background: #3a3a4a; border-radius: 3px; min-height: 30px; }}"
-            f"QScrollBar::handle:vertical:hover {{ background: {_ACCENT}; }}"
+            f"QScrollArea {{ border: none; background: transparent; }}"
+            "QScrollBar:vertical { width: 5px; background: transparent; margin: 2px 0; }"
+            f"QScrollBar::handle:vertical {{ background: rgba(100, 100, 100, 0.3); border-radius: 2px; min-height: 40px; }}"
+            f"QScrollBar::handle:vertical:hover {{ background: rgba(100, 100, 100, 0.6); }}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+            "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
         )
 
         panels_widget = QWidget()
@@ -1338,25 +1396,22 @@ class PhotoEditorWidget(QWidget):
 
     def _build_toolbar(self) -> QWidget:
         toolbar = QWidget()
-        toolbar.setFixedHeight(48)
+        toolbar.setFixedHeight(44)
         toolbar.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-            f"stop:0 #14141e, stop:1 #0f0f18); border-bottom: 1px solid {_BORDER};"
+            f"background: {_PANEL_BG}; border-bottom: 1px solid {_BORDER};"
         )
         layout = QHBoxLayout(toolbar)
-        layout.setContentsMargins(12, 6, 12, 6)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(6)
 
         # Nav buttons
         btn_style = (
-            f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-            f"stop:0 #222230, stop:1 #1a1a28); color: {_TEXT}; "
-            f"border: 1px solid {_BORDER}; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-            f"stop:0 #2a2a3a, stop:1 #222230); border-color: #3a3a4a; }}"
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; border-color: {_BTN_BORDER}; }}"
         )
 
-        self._prev_btn = QPushButton("◀ Prev")
+        self._prev_btn = QPushButton("â—€ Prev")
         self._prev_btn.setStyleSheet(btn_style)
         self._prev_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._prev_btn.clicked.connect(lambda: self._navigate(-1))
@@ -1364,24 +1419,24 @@ class PhotoEditorWidget(QWidget):
 
         self._title_label = QLabel()
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title_label.setStyleSheet(f"color: {_TEXT}; font-size: 12px; font-weight: bold;")
+        self._title_label.setStyleSheet(f"color: {_TEXT}; font-size: 11px; font-weight: 600;")
         layout.addWidget(self._title_label, stretch=1)
 
-        self._next_btn = QPushButton("Next ▶")
+        self._next_btn = QPushButton("Next â–¶")
         self._next_btn.setStyleSheet(btn_style)
         self._next_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._next_btn.clicked.connect(lambda: self._navigate(1))
         layout.addWidget(self._next_btn)
 
-        layout.addSpacing(20)
+        layout.addSpacing(12)
 
         # AI Optimize-All button
-        self._optimize_btn = QPushButton("⚡ AI Optimize All")
+        self._optimize_btn = QPushButton("âš¡ AI Optimize All")
         self._optimize_btn.setStyleSheet(
-            f"QPushButton {{ background: {_GREEN}; color: #fff; font-weight: bold; "
-            f"border: none; border-radius: 6px; padding: 5px 16px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #66bb6a; }}"
-            f"QPushButton:pressed {{ background: #388e3c; }}"
+            f"QPushButton {{ background: {_GREEN}; color: #fff; font-weight: 600; "
+            f"border: none; border-radius: 5px; padding: 4px 14px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_GREEN_HOVER}; }}"
+            f"QPushButton:pressed {{ background: {_GREEN_PRESSED}; }}"
         )
         self._optimize_btn.setToolTip("One-click AI: auto-enhance, white balance, denoise, sharpen")
         self._optimize_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1389,24 +1444,24 @@ class PhotoEditorWidget(QWidget):
         layout.addWidget(self._optimize_btn)
 
         # Crop tool toggle
-        self._crop_btn = QPushButton("✂ Crop")
+        self._crop_btn = QPushButton("âœ‚ Crop")
         self._crop_btn.setCheckable(True)
         self._crop_btn.setStyleSheet(
-            f"QPushButton {{ background: #222; color: {_TEXT}; "
-            f"border: 1px solid #444; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #2a2a2a; border-color: #555; }}"
-            f"QPushButton:checked {{ background: {_ACCENT}; color: #111; font-weight: bold; border-color: {_ACCENT}; }}"
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
+            f"QPushButton:checked {{ background: {_ACCENT}; color: #111; font-weight: 600; border-color: {_ACCENT}; }}"
         )
         self._crop_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._crop_btn.toggled.connect(self._toggle_crop_mode)
         layout.addWidget(self._crop_btn)
 
         # Apply Crop button (hidden until crop mode enabled)
-        self._apply_crop_btn = QPushButton("✓ Apply Crop")
+        self._apply_crop_btn = QPushButton("âœ“ Apply Crop")
         self._apply_crop_btn.setStyleSheet(
-            f"QPushButton {{ background: {_GREEN}; color: #fff; font-weight: bold; "
-            f"border: none; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #66bb6a; }}"
+            f"QPushButton {{ background: {_GREEN}; color: #fff; font-weight: 600; "
+            f"border: none; border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_GREEN_HOVER}; }}"
         )
         self._apply_crop_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._apply_crop_btn.clicked.connect(self._apply_crop)
@@ -1414,11 +1469,11 @@ class PhotoEditorWidget(QWidget):
         layout.addWidget(self._apply_crop_btn)
 
         # AI Suggest Crop button (hidden until crop mode enabled)
-        self._ai_crop_btn = QPushButton("🤖 AI Crop")
+        self._ai_crop_btn = QPushButton("ðŸ¤– AI Crop")
         self._ai_crop_btn.setStyleSheet(
-            f"QPushButton {{ background: #1e3a5f; color: #7dd3fc; font-weight: bold; "
-            f"border: 1px solid #2563eb; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #1e40af; }}"
+            f"QPushButton {{ background: rgba(30, 50, 80, 0.6); color: #90caf9; font-weight: 600; "
+            f"border: 1px solid rgba(66, 133, 244, 0.3); border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: rgba(30, 64, 120, 0.8); }}"
         )
         self._ai_crop_btn.setToolTip("Let AI suggest the best crop for this photo")
         self._ai_crop_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1432,8 +1487,8 @@ class PhotoEditorWidget(QWidget):
             "Free", "Original", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"
         ])
         self._crop_ratio_combo.setStyleSheet(
-            f"QComboBox {{ background: #222; color: {_TEXT}; "
-            f"border: 1px solid #444; border-radius: 6px; padding: 4px 10px; font-size: 11px; }}"
+            f"QComboBox {{ background: {_BTN_BG}; color: {_TEXT}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 3px 8px; font-size: 10px; }}"
         )
         self._crop_ratio_combo.setToolTip("Lock crop to a specific aspect ratio")
         self._crop_ratio_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1442,11 +1497,11 @@ class PhotoEditorWidget(QWidget):
         layout.addWidget(self._crop_ratio_combo)
 
         # Clear Crop button (hidden until crop mode enabled)
-        self._clear_crop_btn = QPushButton("✕ Clear")
+        self._clear_crop_btn = QPushButton("âœ• Clear")
         self._clear_crop_btn.setStyleSheet(
-            f"QPushButton {{ background: #222; color: {_TEXT_DIM}; "
-            f"border: 1px solid #444; border-radius: 6px; padding: 5px 10px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #2a2a2a; color: #fff; }}"
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_MUTED}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 4px 8px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
         )
         self._clear_crop_btn.setToolTip("Clear crop and show full image")
         self._clear_crop_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1457,16 +1512,16 @@ class PhotoEditorWidget(QWidget):
         # Before/After toggle
         self._ba_btn = QPushButton("Before / After  [\\]")
         self._ba_btn.setStyleSheet(
-            f"QPushButton {{ background: #222; color: {_TEXT}; "
-            f"border: 1px solid #444; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #2a2a2a; border-color: #555; }}"
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
         )
         self._ba_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._ba_btn.clicked.connect(self._toggle_before_after)
         layout.addWidget(self._ba_btn)
 
         # Copy edits
-        copy_btn = QPushButton("📋 Copy")
+        copy_btn = QPushButton("ðŸ“‹ Copy")
         copy_btn.setStyleSheet(btn_style)
         copy_btn.setToolTip("Copy current edits (Ctrl+C)")
         copy_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1474,7 +1529,7 @@ class PhotoEditorWidget(QWidget):
         layout.addWidget(copy_btn)
 
         # Paste edits
-        paste_btn = QPushButton("📌 Paste")
+        paste_btn = QPushButton("ðŸ“Œ Paste")
         paste_btn.setStyleSheet(btn_style)
         paste_btn.setToolTip("Paste copied edits (Ctrl+V)")
         paste_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1482,7 +1537,7 @@ class PhotoEditorWidget(QWidget):
         layout.addWidget(paste_btn)
 
         # Presets menu button
-        self._preset_btn = QPushButton("💾 Presets ▾")
+        self._preset_btn = QPushButton("ðŸ’¾ Presets â–¾")
         self._preset_btn.setStyleSheet(btn_style)
         self._preset_btn.setToolTip("Save or load edit presets")
         self._preset_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1492,38 +1547,39 @@ class PhotoEditorWidget(QWidget):
         # Reset all
         reset_btn = QPushButton("Reset All")
         reset_btn.setStyleSheet(
-            f"QPushButton {{ background: #222; color: {_TEXT_DIM}; "
-            f"border: 1px solid #444; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #2a2a2a; color: {_TEXT}; border-color: #555; }}"
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_MUTED}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
         )
         reset_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         reset_btn.clicked.connect(self._reset_all)
         layout.addWidget(reset_btn)
 
         # Expert mode toggle
-        self._expert_btn = QPushButton("🔧 Expert")
+        self._expert_btn = QPushButton("ðŸ”§ Expert")
         self._expert_btn.setCheckable(True)
         self._expert_btn.setStyleSheet(
-            f"QPushButton {{ background: #222; color: {_TEXT_DIM}; "
-            f"border: 1px solid #444; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #2a2a2a; color: {_TEXT}; border-color: #555; }}"
-            f"QPushButton:checked {{ background: #7c4dff; color: #fff; font-weight: bold; border-color: #7c4dff; }}"
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_MUTED}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
+            f"QPushButton:checked {{ background: rgba(232, 149, 48, 0.15); color: #f5ad4a; "
+            f"font-weight: 600; border-color: rgba(232, 149, 48, 0.35); }}"
         )
         self._expert_btn.setToolTip("Toggle expert editing panels (advanced RawTherapee controls)")
         self._expert_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._expert_btn.toggled.connect(self._toggle_expert_mode)
         layout.addWidget(self._expert_btn)
 
-        layout.addSpacing(20)
+        layout.addSpacing(12)
 
         # Save All Edits (persist to DB without exporting)
-        self._save_btn = QPushButton("💾 Save All Edits")
+        self._save_btn = QPushButton("ðŸ’¾ Save All Edits")
         self._save_btn.setStyleSheet(
-            f"QPushButton {{ background: {_GREEN}; color: #fff; font-weight: bold; "
-            f"border: none; border-radius: 6px; padding: 7px 16px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: #66bb6a; }}"
-            f"QPushButton:pressed {{ background: #388e3c; }}"
-            f"QPushButton:disabled {{ background: #333; color: #666; }}"
+            f"QPushButton {{ background: {_GREEN}; color: #fff; font-weight: 600; "
+            f"border: none; border-radius: 5px; padding: 5px 14px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_GREEN_HOVER}; }}"
+            f"QPushButton:pressed {{ background: {_GREEN_PRESSED}; }}"
+            f"QPushButton:disabled {{ background: #222; color: #555; }}"
         )
         self._save_btn.setToolTip("Save all edits to database (Ctrl+S)")
         self._save_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1533,11 +1589,11 @@ class PhotoEditorWidget(QWidget):
         # Apply & Export
         self._apply_btn = QPushButton("  Apply && Export  ")
         self._apply_btn.setStyleSheet(
-            f"QPushButton {{ background: {_ACCENT}; color: #111; font-weight: bold; "
-            f"border: none; border-radius: 6px; padding: 7px 22px; font-size: 12px; }}"
+            f"QPushButton {{ background: {_ACCENT}; color: #111; font-weight: 600; "
+            f"border: none; border-radius: 5px; padding: 5px 18px; font-size: 11px; }}"
             f"QPushButton:hover {{ background: {_ACCENT_HOVER}; }}"
-            f"QPushButton:pressed {{ background: #f57c00; }}"
-            f"QPushButton:disabled {{ background: #333; color: #666; }}"
+            f"QPushButton:pressed {{ background: #d07a18; }}"
+            f"QPushButton:disabled {{ background: #222; color: #555; }}"
         )
         self._apply_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._apply_btn.clicked.connect(self._on_apply)
@@ -1548,7 +1604,7 @@ class PhotoEditorWidget(QWidget):
     def _build_panels(self) -> None:
         """Build all editing panels."""
 
-        # ═══════════ COLOR GRADE ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• COLOR GRADE â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("COLOR GRADE")
 
         # Keep a hidden combo for compat with gather/load; driven by the grid
@@ -1582,9 +1638,9 @@ class PhotoEditorWidget(QWidget):
         # Apply buttons row
         btn_row = QHBoxLayout()
         btn_style_sm = (
-            f"QPushButton {{ background: #222; color: {_TEXT}; "
-            f"border: 1px solid #444; border-radius: 4px; padding: 4px 10px; font-size: 10px; }}"
-            f"QPushButton:hover {{ background: #2a2a2a; border-color: #555; }}"
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+            f"border: 1px solid {_BORDER}; border-radius: 4px; padding: 4px 10px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
         )
         self._grade_apply_one = QPushButton("Apply to This Photo")
         self._grade_apply_one.setStyleSheet(btn_style_sm)
@@ -1595,8 +1651,8 @@ class PhotoEditorWidget(QWidget):
         self._grade_apply_all = QPushButton("Apply to All Photos")
         self._grade_apply_all.setStyleSheet(
             f"QPushButton {{ background: {_GREEN}; color: #fff; "
-            f"border: none; border-radius: 4px; padding: 4px 10px; font-size: 10px; font-weight: bold; }}"
-            f"QPushButton:hover {{ background: #66bb6a; }}"
+            f"border: none; border-radius: 4px; padding: 4px 10px; font-size: 10px; font-weight: 600; }}"
+            f"QPushButton:hover {{ background: {_GREEN_HOVER}; }}"
         )
         self._grade_apply_all.setToolTip("Apply current color grade + intensity to all photos in batch")
         self._grade_apply_all.clicked.connect(self._grade_save_all)
@@ -1605,7 +1661,7 @@ class PhotoEditorWidget(QWidget):
         sec.add_layout(btn_row)
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ BASIC ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• BASIC â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("BASIC")
         basic_sliders = [
             ("temperature", "Temperature", -100, 100, 0),
@@ -1625,7 +1681,7 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ TONE / PRESENCE ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• TONE / PRESENCE â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("PRESENCE")
         presence_sliders = [
             ("texture", "Texture", -100, 100, 0),
@@ -1642,13 +1698,13 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ HSL / COLOR ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• HSL / COLOR â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("HSL / COLOR")
-        sec._toggle()  # start collapsed — lots of sliders
+        sec._toggle()  # start collapsed â€” lots of sliders
         channels = ["red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta"]
         # Hue sub-group
         hue_lbl = QLabel("Hue")
-        hue_lbl.setStyleSheet(f"color: {_ACCENT}; font-size: 10px; font-weight: bold;")
+        hue_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 10px; font-weight: 600;")
         sec.add_widget(hue_lbl)
         for ch in channels:
             key = f"hsl_hue_{ch}"
@@ -1659,7 +1715,7 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         # Saturation sub-group
         sat_lbl = QLabel("Saturation")
-        sat_lbl.setStyleSheet(f"color: {_ACCENT}; font-size: 10px; font-weight: bold;")
+        sat_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 10px; font-weight: 600;")
         sec.add_widget(sat_lbl)
         for ch in channels:
             key = f"hsl_sat_{ch}"
@@ -1670,7 +1726,7 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         # Luminance sub-group
         lum_lbl = QLabel("Luminance")
-        lum_lbl.setStyleSheet(f"color: {_ACCENT}; font-size: 10px; font-weight: bold;")
+        lum_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 10px; font-weight: 600;")
         sec.add_widget(lum_lbl)
         for ch in channels:
             key = f"hsl_lum_{ch}"
@@ -1681,7 +1737,7 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ DETAIL ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• DETAIL â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("DETAIL")
         detail_sliders = [
             ("sharp_amount", "Sharpen Amount", 0, 150, 0),
@@ -1697,7 +1753,7 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ COLOR GRADING (Split Toning) ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• COLOR GRADING (Split Toning) â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("COLOR GRADING")
         sec._toggle()  # start collapsed
         split_sliders = [
@@ -1715,7 +1771,7 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ EFFECTS ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• EFFECTS â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("EFFECTS")
         effects_sliders = [
             ("vignette_amount", "Vignette", -100, 100, 0),
@@ -1730,92 +1786,7 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ AI TOOLS ═══════════
-        sec = _CollapsibleSection("AI TOOLS")
-
-        ai_btn_style = (
-            f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-            f"stop:0 #1e1e2e, stop:1 #16162a); color: {_TEXT}; "
-            f"border: 1px solid {_BORDER}; border-radius: 6px; padding: 8px 12px; font-size: 11px; }}"
-            f"QPushButton:hover {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-            f"stop:0 {_ACCENT}, stop:1 #e65100); color: #111; border-color: {_ACCENT}; }}"
-        )
-
-        ai_enhance_btn = QPushButton("✨ AI Auto-Enhance")
-        ai_enhance_btn.setStyleSheet(ai_btn_style)
-        ai_enhance_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_enhance_btn.clicked.connect(self._ai_auto_enhance)
-        sec.add_widget(ai_enhance_btn)
-
-        ai_wb_btn = QPushButton("🎨 AI Auto White Balance")
-        ai_wb_btn.setStyleSheet(ai_btn_style)
-        ai_wb_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_wb_btn.clicked.connect(self._ai_auto_wb)
-        sec.add_widget(ai_wb_btn)
-
-        ai_denoise_btn = QPushButton("🔇 AI Denoise")
-        ai_denoise_btn.setStyleSheet(ai_btn_style)
-        ai_denoise_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_denoise_btn.clicked.connect(self._ai_denoise)
-        sec.add_widget(ai_denoise_btn)
-
-        ai_sharpen_btn = QPushButton("🔍 AI Smart Sharpen")
-        ai_sharpen_btn.setStyleSheet(ai_btn_style)
-        ai_sharpen_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_sharpen_btn.clicked.connect(self._ai_sharpen)
-        sec.add_widget(ai_sharpen_btn)
-
-        ai_bw_btn = QPushButton("⚫ AI B&&W Conversion")
-        ai_bw_btn.setStyleSheet(ai_btn_style)
-        ai_bw_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_bw_btn.clicked.connect(self._ai_bw)
-        sec.add_widget(ai_bw_btn)
-
-        # --- Separator ---
-        _sep = QLabel("─── Advanced AI ───")
-        _sep.setStyleSheet(f"color: {_ACCENT}; font-size: 10px; padding: 4px 0;")
-        _sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sec.add_widget(_sep)
-
-        ai_mask_btn = QPushButton("🎭 AI Masking (Select Subject)")
-        ai_mask_btn.setStyleSheet(ai_btn_style)
-        ai_mask_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_mask_btn.clicked.connect(self._ai_masking)
-        sec.add_widget(ai_mask_btn)
-
-        ai_blur_btn = QPushButton("📷 AI Lens Blur (Bokeh)")
-        ai_blur_btn.setStyleSheet(ai_btn_style)
-        ai_blur_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_blur_btn.clicked.connect(self._ai_lens_blur)
-        sec.add_widget(ai_blur_btn)
-
-        ai_face_btn = QPushButton("👤 AI Face Detection")
-        ai_face_btn.setStyleSheet(ai_btn_style)
-        ai_face_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_face_btn.clicked.connect(self._ai_face_detect)
-        sec.add_widget(ai_face_btn)
-
-        ai_sr_btn = QPushButton("🔎 AI Super Resolution")
-        ai_sr_btn.setStyleSheet(ai_btn_style)
-        ai_sr_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_sr_btn.clicked.connect(self._ai_super_resolution)
-        sec.add_widget(ai_sr_btn)
-
-        ai_detail_btn = QPushButton("🔬 AI Enhance Details")
-        ai_detail_btn.setStyleSheet(ai_btn_style)
-        ai_detail_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_detail_btn.clicked.connect(self._ai_enhance_details)
-        sec.add_widget(ai_detail_btn)
-
-        ai_adaptive_btn = QPushButton("🧠 AI Adaptive Preset")
-        ai_adaptive_btn.setStyleSheet(ai_btn_style)
-        ai_adaptive_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        ai_adaptive_btn.clicked.connect(self._ai_adaptive_preset)
-        sec.add_widget(ai_adaptive_btn)
-
-        self._panels_layout.addWidget(sec)
-
-        # ═══════════ TONE CURVE ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• TONE CURVE â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("TONE CURVE")
         sec._toggle()  # start collapsed
         self._tone_curve_widget = ToneCurveWidget()
@@ -1823,7 +1794,7 @@ class PhotoEditorWidget(QWidget):
         self._tone_curve_widget.curve_changed.connect(self._commit_undo_state)
         sec.add_widget(self._tone_curve_widget)
 
-        curve_info = QLabel("Click to add • Drag to move • Right-click to remove • Double-click to reset")
+        curve_info = QLabel("Click to add â€¢ Drag to move â€¢ Right-click to remove â€¢ Double-click to reset")
         curve_info.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 9px;")
         curve_info.setWordWrap(True)
         sec.add_widget(curve_info)
@@ -1837,10 +1808,10 @@ class PhotoEditorWidget(QWidget):
         self._curve_channel.addItems(["Luminance", "Red", "Green", "Blue"])
         self._curve_channel.setFixedHeight(24)
         self._curve_channel.setStyleSheet(
-            f"QComboBox {{ background: #222; color: {_TEXT}; border: 1px solid #444; "
+            f"QComboBox {{ background: {_BTN_BG}; color: {_TEXT}; border: 1px solid {_BORDER}; "
             f"border-radius: 4px; padding: 2px 8px; font-size: 10px; }}"
             f"QComboBox::drop-down {{ border: none; }}"
-            f"QComboBox QAbstractItemView {{ background: #222; color: {_TEXT}; "
+            f"QComboBox QAbstractItemView {{ background: {_SECTION_BG}; color: {_TEXT}; "
             f"selection-background-color: {_ACCENT}; }}"
         )
         self._curve_channel.currentIndexChanged.connect(self._on_curve_channel_changed)
@@ -1859,7 +1830,7 @@ class PhotoEditorWidget(QWidget):
         }
         self._current_curve_channel = "Luminance"
 
-        # ═══════════ COLOR WHEELS (3-way) ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• COLOR WHEELS (3-way) â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("COLOR WHEELS")
         sec._toggle()  # start collapsed
         self._color_wheels = ColorWheelsWidget()
@@ -1868,7 +1839,7 @@ class PhotoEditorWidget(QWidget):
         sec.add_widget(self._color_wheels)
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ LENS & GEOMETRY ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• LENS & GEOMETRY â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("LENS & GEOMETRY")
         sec._toggle()  # start collapsed
 
@@ -1876,9 +1847,9 @@ class PhotoEditorWidget(QWidget):
         self._auto_lens_cb = QCheckBox("Auto Lens Profile")
         self._auto_lens_cb.setChecked(True)
         self._auto_lens_cb.setStyleSheet(
-            f"QCheckBox {{ color: {_TEXT}; font-size: 11px; spacing: 6px; }}"
-            f"QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid #555; "
-            f"border-radius: 3px; background: #222; }}"
+            f"QCheckBox {{ color: {_TEXT_DIM}; font-size: 11px; spacing: 6px; }}"
+            f"QCheckBox::indicator {{ width: 13px; height: 13px; border: 1px solid {_BTN_BORDER}; "
+            f"border-radius: 3px; background: {_BTN_BG}; }}"
             f"QCheckBox::indicator:checked {{ background: {_ACCENT}; border-color: {_ACCENT}; }}"
         )
         sec.add_widget(self._auto_lens_cb)
@@ -1903,12 +1874,97 @@ class PhotoEditorWidget(QWidget):
             self._sliders[key] = s
         self._panels_layout.addWidget(sec)
 
+        # â•â•â•â•â•â•â•â•â•â•â• AI TOOLS â•â•â•â•â•â•â•â•â•â•â•
+        sec = _CollapsibleSection("AI TOOLS")
+        sec._toggle()  # start collapsed
+
+        ai_btn_style = (
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 7px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_ACCENT_DIM}; color: {_TEXT}; "
+            f"border-color: rgba(232, 149, 48, 0.25); }}"
+        )
+
+        ai_enhance_btn = QPushButton("âœ¨ AI Auto-Enhance")
+        ai_enhance_btn.setStyleSheet(ai_btn_style)
+        ai_enhance_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_enhance_btn.clicked.connect(self._ai_auto_enhance)
+        sec.add_widget(ai_enhance_btn)
+
+        ai_wb_btn = QPushButton("ðŸŽ¨ AI Auto White Balance")
+        ai_wb_btn.setStyleSheet(ai_btn_style)
+        ai_wb_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_wb_btn.clicked.connect(self._ai_auto_wb)
+        sec.add_widget(ai_wb_btn)
+
+        ai_denoise_btn = QPushButton("ðŸ”‡ AI Denoise")
+        ai_denoise_btn.setStyleSheet(ai_btn_style)
+        ai_denoise_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_denoise_btn.clicked.connect(self._ai_denoise)
+        sec.add_widget(ai_denoise_btn)
+
+        ai_sharpen_btn = QPushButton("ðŸ” AI Smart Sharpen")
+        ai_sharpen_btn.setStyleSheet(ai_btn_style)
+        ai_sharpen_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_sharpen_btn.clicked.connect(self._ai_sharpen)
+        sec.add_widget(ai_sharpen_btn)
+
+        ai_bw_btn = QPushButton("âš« AI B&&W Conversion")
+        ai_bw_btn.setStyleSheet(ai_btn_style)
+        ai_bw_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_bw_btn.clicked.connect(self._ai_bw)
+        sec.add_widget(ai_bw_btn)
+
+        # --- Separator ---
+        _sep = QLabel("â”€â”€â”€ Advanced AI â”€â”€â”€")
+        _sep.setStyleSheet(f"color: {_TEXT_MUTED}; font-size: 9px; padding: 6px 0 2px 0;")
+        _sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sec.add_widget(_sep)
+
+        ai_mask_btn = QPushButton("ðŸŽ­ AI Masking (Select Subject)")
+        ai_mask_btn.setStyleSheet(ai_btn_style)
+        ai_mask_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_mask_btn.clicked.connect(self._ai_masking)
+        sec.add_widget(ai_mask_btn)
+
+        ai_blur_btn = QPushButton("ðŸ“· AI Lens Blur (Bokeh)")
+        ai_blur_btn.setStyleSheet(ai_btn_style)
+        ai_blur_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_blur_btn.clicked.connect(self._ai_lens_blur)
+        sec.add_widget(ai_blur_btn)
+
+        ai_face_btn = QPushButton("ðŸ‘¤ AI Face Detection")
+        ai_face_btn.setStyleSheet(ai_btn_style)
+        ai_face_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_face_btn.clicked.connect(self._ai_face_detect)
+        sec.add_widget(ai_face_btn)
+
+        ai_sr_btn = QPushButton("ðŸ”Ž AI Super Resolution")
+        ai_sr_btn.setStyleSheet(ai_btn_style)
+        ai_sr_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_sr_btn.clicked.connect(self._ai_super_resolution)
+        sec.add_widget(ai_sr_btn)
+
+        ai_detail_btn = QPushButton("ðŸ”¬ AI Enhance Details")
+        ai_detail_btn.setStyleSheet(ai_btn_style)
+        ai_detail_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_detail_btn.clicked.connect(self._ai_enhance_details)
+        sec.add_widget(ai_detail_btn)
+
+        ai_adaptive_btn = QPushButton("ðŸ§  AI Adaptive Preset")
+        ai_adaptive_btn.setStyleSheet(ai_btn_style)
+        ai_adaptive_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        ai_adaptive_btn.clicked.connect(self._ai_adaptive_preset)
+        sec.add_widget(ai_adaptive_btn)
+
+        self._panels_layout.addWidget(sec)
+
         # ==============================================================
         # EXPERT MODE PANELS (hidden by default)
         # ==============================================================
         self._expert_sections: list[QWidget] = []
 
-        # ═══════════ ADVANCED TONE ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• ADVANCED TONE â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("ADVANCED TONE")
         sec._toggle()  # start collapsed
         adv_tone_sliders = [
@@ -1935,10 +1991,10 @@ class PhotoEditorWidget(QWidget):
         self._hl_recovery_combo.addItems(["Blend", "Luminance", "CIELab"])
         self._hl_recovery_combo.setFixedHeight(24)
         self._hl_recovery_combo.setStyleSheet(
-            f"QComboBox {{ background: #222; color: {_TEXT}; border: 1px solid #444; "
+            f"QComboBox {{ background: {_BTN_BG}; color: {_TEXT}; border: 1px solid {_BORDER}; "
             f"border-radius: 4px; padding: 2px 8px; font-size: 10px; }}"
             f"QComboBox::drop-down {{ border: none; }}"
-            f"QComboBox QAbstractItemView {{ background: #222; color: {_TEXT}; "
+            f"QComboBox QAbstractItemView {{ background: {_SECTION_BG}; color: {_TEXT}; "
             f"selection-background-color: {_ACCENT}; }}"
         )
         hr_row.addWidget(self._hl_recovery_combo)
@@ -1949,7 +2005,7 @@ class PhotoEditorWidget(QWidget):
         self._expert_sections.append(sec)
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ ADVANCED DETAIL ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• ADVANCED DETAIL â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("ADVANCED DETAIL")
         sec._toggle()  # start collapsed
         adv_detail_sliders = [
@@ -1971,20 +2027,20 @@ class PhotoEditorWidget(QWidget):
         self._expert_sections.append(sec)
         self._panels_layout.addWidget(sec)
 
-        # ═══════════ RAW ENGINE ═══════════
+        # â•â•â•â•â•â•â•â•â•â•â• RAW ENGINE â•â•â•â•â•â•â•â•â•â•â•
         sec = _CollapsibleSection("RAW ENGINE")
         sec._toggle()  # start collapsed
 
         export_note = QLabel("These settings affect final export only (not preview)")
-        export_note.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 9px; font-style: italic;")
+        export_note.setStyleSheet(f"color: {_TEXT_MUTED}; font-size: 9px; font-style: italic;")
         export_note.setWordWrap(True)
         sec.add_widget(export_note)
 
         combo_style = (
-            f"QComboBox {{ background: #222; color: {_TEXT}; border: 1px solid #444; "
+            f"QComboBox {{ background: {_BTN_BG}; color: {_TEXT}; border: 1px solid {_BORDER}; "
             f"border-radius: 4px; padding: 4px 8px; font-size: 10px; }}"
             f"QComboBox::drop-down {{ border: none; }}"
-            f"QComboBox QAbstractItemView {{ background: #222; color: {_TEXT}; "
+            f"QComboBox QAbstractItemView {{ background: {_SECTION_BG}; color: {_TEXT}; "
             f"selection-background-color: {_ACCENT}; }}"
         )
 
@@ -2090,7 +2146,7 @@ class PhotoEditorWidget(QWidget):
             self._raw_rgb = self._rgb_cache[index]
             self._raw_rgb_preview = self._make_preview_proxy(self._raw_rgb)
             self._optimize_btn.setEnabled(True)
-            self._optimize_btn.setText("⚡ AI Optimize All")
+            self._optimize_btn.setText("âš¡ AI Optimize All")
             self._rebuild_grade_thumbnails()
             self._update_preview()
         else:
@@ -2098,7 +2154,7 @@ class PhotoEditorWidget(QWidget):
             self._raw_rgb = None
             self._raw_rgb_preview = None
             self._optimize_btn.setEnabled(False)
-            self._optimize_btn.setText("⏳ Decoding…")
+            self._optimize_btn.setText("â³ Decodingâ€¦")
             if self._ai_modal:
                 self._ai_modal.show_message("Decoding RAW", fname)
             thumb = p.get("thumbnail_path", "")
@@ -2107,7 +2163,7 @@ class PhotoEditorWidget(QWidget):
                 if not pix.isNull():
                     self._set_preview_pixmap(pix)
 
-            # Start half-resolution decode (fast preview — full res not needed for editing)
+            # Start half-resolution decode (fast preview â€” full res not needed for editing)
             file_path = p.get("file_path", "")
             if file_path and Path(file_path).is_file():
                 self._decode_worker = _RawDecodeWorker(index, file_path, half_size=True, parent=self)
@@ -2133,19 +2189,19 @@ class PhotoEditorWidget(QWidget):
             return np.array(pil)
 
     def _on_raw_decoded(self, index: int, rgb: np.ndarray) -> None:
-        """RAW decode complete — cache and show preview."""
+        """RAW decode complete â€” cache and show preview."""
         self._rgb_cache[index] = rgb
         # Evict oldest entries to keep memory bounded
-        if len(self._rgb_cache) > self._RGB_CACHE_LIMIT:
+        if len(self._rgb_cache) >= self._RGB_CACHE_LIMIT:
             to_remove = sorted(self._rgb_cache.keys())
-            for k in to_remove[: len(self._rgb_cache) - self._RGB_CACHE_LIMIT]:
+            for k in to_remove[: len(self._rgb_cache) - self._RGB_CACHE_LIMIT + 1]:
                 if k != self._index:
                     del self._rgb_cache[k]
         if index == self._index:
             self._raw_rgb = rgb
             self._raw_rgb_preview = self._make_preview_proxy(rgb)
             self._optimize_btn.setEnabled(True)
-            self._optimize_btn.setText("⚡ AI Optimize All")
+            self._optimize_btn.setText("âš¡ AI Optimize All")
             # Dismiss decode overlay (only if batch optimize isn't running)
             if self._ai_modal and not self._batch_worker:
                 self._ai_modal.hide_modal()
@@ -2169,11 +2225,11 @@ class PhotoEditorWidget(QWidget):
                     return  # Only prefetch one at a time
 
     def _on_prefetch_decoded(self, index: int, rgb: np.ndarray) -> None:
-        """Prefetched RAW decode complete — just cache it."""
+        """Prefetched RAW decode complete â€” just cache it."""
         self._rgb_cache[index] = rgb
-        if len(self._rgb_cache) > self._RGB_CACHE_LIMIT:
+        if len(self._rgb_cache) >= self._RGB_CACHE_LIMIT:
             to_remove = sorted(self._rgb_cache.keys())
-            for k in to_remove[: len(self._rgb_cache) - self._RGB_CACHE_LIMIT]:
+            for k in to_remove[: len(self._rgb_cache) - self._RGB_CACHE_LIMIT + 1]:
                 if k != self._index:
                     del self._rgb_cache[k]
 
@@ -2257,12 +2313,12 @@ class PhotoEditorWidget(QWidget):
     def _grade_btn_style(selected: bool) -> str:
         if selected:
             return (
-                f"QPushButton {{ background: #333; border: 2px solid {_ACCENT}; border-radius: 4px; }}"
-                f"QPushButton:hover {{ background: #3a3a3a; }}"
+                f"QPushButton {{ background: {_SECTION_BG}; border: 2px solid {_ACCENT}; border-radius: 4px; }}"
+                f"QPushButton:hover {{ background: {_BTN_HOVER}; }}"
             )
         return (
-            f"QPushButton {{ background: #222; border: 1px solid {_BORDER}; border-radius: 4px; }}"
-            f"QPushButton:hover {{ background: #333; }}"
+            f"QPushButton {{ background: {_BTN_BG}; border: 1px solid {_BORDER}; border-radius: 4px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; border-color: {_BTN_BORDER}; }}"
         )
 
     def _highlight_selected_grade(self, grade_name: str) -> None:
@@ -2294,7 +2350,7 @@ class PhotoEditorWidget(QWidget):
         photo["manual_overrides"] = json.dumps(ov)
         if pid:
             self.edits_saved.emit([(pid, ov)])
-        self._grade_apply_one.setText("✓ Saved!")
+        self._grade_apply_one.setText("âœ“ Saved!")
         QTimer.singleShot(1500, lambda: self._grade_apply_one.setText("Apply to This Photo"))
 
     def _grade_save_all(self) -> None:
@@ -2317,7 +2373,7 @@ class PhotoEditorWidget(QWidget):
                 batch.append((pid, ov))
         if batch:
             self.edits_saved.emit(batch)
-        self._grade_apply_all.setText(f"✓ Applied to {len(self._photos)}!")
+        self._grade_apply_all.setText(f"âœ“ Applied to {len(self._photos)}!")
         QTimer.singleShot(1500, lambda: self._grade_apply_all.setText("Apply to All Photos"))
 
     # ------------------------------------------------------------------
@@ -2410,6 +2466,18 @@ class PhotoEditorWidget(QWidget):
     # Preview
     # ------------------------------------------------------------------
 
+    def _crop_scale_factors(self) -> Tuple[float, float]:
+        """Return (sx, sy) to convert preview-proxy crop coords to full-res."""
+        if self._raw_rgb is None:
+            return (1.0, 1.0)
+        preview_src = self._raw_rgb_preview if self._raw_rgb_preview is not None else self._raw_rgb
+        full_h, full_w = self._raw_rgb.shape[:2]
+        prev_h, prev_w = preview_src.shape[:2]
+        return (
+            full_w / prev_w if prev_w > 0 else 1.0,
+            full_h / prev_h if prev_h > 0 else 1.0,
+        )
+
     def _gather_params(self) -> dict:
         """Collect all slider values into a params dict."""
         params = {}
@@ -2418,14 +2486,15 @@ class PhotoEditorWidget(QWidget):
         params["color_grade"] = self._grade_combo.currentText()
         params["color_grade_intensity"] = self._grade_intensity.value()
 
-        # Include crop data if set
+        # Include crop data scaled to full-resolution coordinates
         if self._crop_rect and self._crop_rect.width() > 0 and self._crop_rect.height() > 0:
-            params["crop_x"] = self._crop_rect.x()
-            params["crop_y"] = self._crop_rect.y()
-            params["crop_w"] = self._crop_rect.width()
-            params["crop_h"] = self._crop_rect.height()
+            sx, sy = self._crop_scale_factors()
+            params["crop_x"] = int(self._crop_rect.x() * sx)
+            params["crop_y"] = int(self._crop_rect.y() * sy)
+            params["crop_w"] = int(self._crop_rect.width() * sx)
+            params["crop_h"] = int(self._crop_rect.height() * sy)
 
-        # Tone curve data (always gathered — main panel)
+        # Tone curve data (always gathered â€” main panel)
         self._curve_data[self._current_curve_channel] = list(
             self._tone_curve_widget.get_points()
         )
@@ -2449,7 +2518,7 @@ class PhotoEditorWidget(QWidget):
         return params
 
     def _schedule_preview(self) -> None:
-        """Debounced preview update — fires live during slider drag."""
+        """Debounced preview update â€” fires live during slider drag."""
         self._preview_timer.start()
 
     # ------------------------------------------------------------------
@@ -2526,7 +2595,13 @@ class PhotoEditorWidget(QWidget):
         cw = params.get("crop_w", 0)
         ch_val = params.get("crop_h", 0)
         if cw > 0 and ch_val > 0:
-            self._crop_rect = QRect(int(cx), int(cy), int(cw), int(ch_val))
+            # Params store full-res coords; convert back to preview-proxy space
+            sx, sy = self._crop_scale_factors()
+            isx = 1.0 / sx if sx > 0 else 1.0
+            isy = 1.0 / sy if sy > 0 else 1.0
+            self._crop_rect = QRect(
+                int(cx * isx), int(cy * isy), int(cw * isx), int(ch_val * isy)
+            )
             self._canvas.set_crop_rect(self._crop_rect)
         else:
             self._crop_rect = None
@@ -2537,7 +2612,7 @@ class PhotoEditorWidget(QWidget):
         if self._raw_rgb is None:
             return
 
-        # Use the smaller preview proxy for editing — same visual quality
+        # Use the smaller preview proxy for editing â€” same visual quality
         # on screen but ~3-4x fewer pixels to process.
         source = self._raw_rgb_preview if self._raw_rgb_preview is not None else self._raw_rgb
 
@@ -2561,7 +2636,7 @@ class PhotoEditorWidget(QWidget):
         # Update histogram
         self._histogram.update_histogram(result)
 
-        # Convert to QPixmap — use contiguous buffer directly to avoid a copy
+        # Convert to QPixmap â€” use contiguous buffer directly to avoid a copy
         result = np.ascontiguousarray(result)
         h, w = result.shape[:2]
         bytes_per_line = 3 * w
@@ -2589,7 +2664,7 @@ class PhotoEditorWidget(QWidget):
             self._canvas.set_pixmap(self._preview_pix)
 
     def _on_zoom_changed(self) -> None:
-        """Scroll-wheel zoom — just update label, no re-render needed."""
+        """Scroll-wheel zoom â€” just update label, no re-render needed."""
         self._zoom_label.setText(self._canvas.get_zoom_text())
 
     # ------------------------------------------------------------------
@@ -2614,16 +2689,16 @@ class PhotoEditorWidget(QWidget):
     def _toggle_before_after(self) -> None:
         self._show_before = not self._show_before
         if self._show_before:
-            self._ba_btn.setText("◀ SHOWING BEFORE  [\\]")
+            self._ba_btn.setText("â—€ SHOWING BEFORE  [\\]")
             self._ba_btn.setStyleSheet(
-                f"QPushButton {{ background: {_ACCENT}; color: #111; font-weight: bold; "
-                f"border: none; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
+                f"QPushButton {{ background: {_ACCENT}; color: #111; font-weight: 600; "
+                f"border: none; border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
             )
         else:
             self._ba_btn.setText("Before / After  [\\]")
             self._ba_btn.setStyleSheet(
-                f"QPushButton {{ background: #2a2a2a; color: {_TEXT}; "
-                f"border: 1px solid {_BORDER}; border-radius: 6px; padding: 5px 14px; font-size: 11px; }}"
+                f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+                f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
             )
         self._update_preview()
 
@@ -2657,17 +2732,17 @@ class PhotoEditorWidget(QWidget):
                 batch.append((pid, overrides))
         if batch:
             self._save_btn.setEnabled(False)
-            self._save_btn.setText("💾 Saving…")
+            self._save_btn.setText("ðŸ’¾ Savingâ€¦")
             self.edits_saved.emit(batch)
         else:
-            self._save_btn.setText("💾 Nothing to save")
-            QTimer.singleShot(1500, lambda: self._save_btn.setText("💾 Save All Edits"))
+            self._save_btn.setText("ðŸ’¾ Nothing to save")
+            QTimer.singleShot(1500, lambda: self._save_btn.setText("ðŸ’¾ Save All Edits"))
 
     def on_edits_saved(self, count: int) -> None:
         """Called by host after edits are persisted."""
         self._save_btn.setEnabled(True)
-        self._save_btn.setText(f"💾 Saved {count} edits!")
-        QTimer.singleShot(2000, lambda: self._save_btn.setText("💾 Save All Edits"))
+        self._save_btn.setText(f"ðŸ’¾ Saved {count} edits!")
+        QTimer.singleShot(2000, lambda: self._save_btn.setText("ðŸ’¾ Save All Edits"))
         self.setFocus()
 
     def _on_apply(self) -> None:
@@ -2686,13 +2761,6 @@ class PhotoEditorWidget(QWidget):
         params = self._gather_params()
         photo = self._photos[self._index]
         photo_id = photo.get("id", 0)
-
-        # Include crop data if set
-        if self._crop_rect and self._crop_rect.width() > 0:
-            params["crop_x"] = self._crop_rect.x()
-            params["crop_y"] = self._crop_rect.y()
-            params["crop_w"] = self._crop_rect.width()
-            params["crop_h"] = self._crop_rect.height()
 
         # Store locally so navigation remembers the edit
         photo["manual_overrides"] = json.dumps(params)
@@ -2722,10 +2790,10 @@ class PhotoEditorWidget(QWidget):
                     ov["_export_format"] = fmt
                     ov["_export_quality"] = quality
                     batch.append((pid, ov))
-            self._apply_btn.setText(f"Exporting {len(batch)} photos…")
+            self._apply_btn.setText(f"Exporting {len(batch)} photosâ€¦")
             self.batch_export_all.emit(batch, fmt, quality)
         else:
-            self._apply_btn.setText("Exporting…")
+            self._apply_btn.setText("Exportingâ€¦")
             self.edit_applied.emit(photo_id, params)
 
     def on_export_finished(self, success: bool, new_export_path: str = "") -> None:
@@ -2861,7 +2929,7 @@ class PhotoEditorWidget(QWidget):
             return
 
         self._ai_crop_btn.setEnabled(False)
-        self._ai_crop_btn.setText("⏳ Analyzing…")
+        self._ai_crop_btn.setText("â³ Analyzingâ€¦")
 
         try:
             from imagic.services.auto_crop import analyze_crop
@@ -2888,18 +2956,18 @@ class PhotoEditorWidget(QWidget):
                 self._canvas.crop_changed.emit(scaled_rect)
             else:
                 # No significant crop suggested
-                self._ai_crop_btn.setText("✓ No crop needed")
-                QTimer.singleShot(2000, lambda: self._ai_crop_btn.setText("🤖 AI Crop"))
+                self._ai_crop_btn.setText("âœ“ No crop needed")
+                QTimer.singleShot(2000, lambda: self._ai_crop_btn.setText("ðŸ¤– AI Crop"))
                 self._ai_crop_btn.setEnabled(True)
                 return
         except Exception as exc:
             logger.warning("AI crop failed: %s", exc)
-            self._ai_crop_btn.setText("✗ Failed")
-            QTimer.singleShot(2000, lambda: self._ai_crop_btn.setText("🤖 AI Crop"))
+            self._ai_crop_btn.setText("âœ— Failed")
+            QTimer.singleShot(2000, lambda: self._ai_crop_btn.setText("ðŸ¤– AI Crop"))
             self._ai_crop_btn.setEnabled(True)
             return
 
-        self._ai_crop_btn.setText("🤖 AI Crop")
+        self._ai_crop_btn.setText("ðŸ¤– AI Crop")
         self._ai_crop_btn.setEnabled(True)
 
     # ------------------------------------------------------------------
@@ -2947,13 +3015,13 @@ class PhotoEditorWidget(QWidget):
         user_style = self._compute_user_style()
 
         self._optimize_btn.setEnabled(False)
-        self._optimize_btn.setText("⏳ Optimizing all…")
+        self._optimize_btn.setText("â³ Optimizing allâ€¦")
 
         # Show the AI loading overlay
         n = len(self._photos)
         if self._ai_modal:
             title = "AI Optimizing Photos" if run == 0 else f"AI Optimizing (variation {run})"
-            self._ai_modal.show_message(title, f"Preparing {n} photos…", total=n)
+            self._ai_modal.show_message(title, f"Preparing {n} photosâ€¦", total=n)
 
         self._batch_optimize_run = run  # stash for _on_batch_photo_done
         self._batch_worker = _BatchOptimizeWorker(
@@ -2986,7 +3054,7 @@ class PhotoEditorWidget(QWidget):
         self._photos[index]["manual_overrides"] = json.dumps(params)
 
         n = len(self._photos)
-        self._optimize_btn.setText(f"⏳ {index + 1}/{n}…")
+        self._optimize_btn.setText(f"â³ {index + 1}/{n}â€¦")
 
         # Update loading overlay progress
         fname = self._photos[index].get("file_name", "")
@@ -3004,7 +3072,7 @@ class PhotoEditorWidget(QWidget):
     def _on_batch_finished(self) -> None:
         """All photos have been optimized."""
         self._optimize_btn.setEnabled(True)
-        self._optimize_btn.setText("⚡ AI Optimize All")
+        self._optimize_btn.setText("âš¡ AI Optimize All")
         self._batch_worker = None
         if self._ai_modal:
             self._ai_modal.hide_modal()
@@ -3021,7 +3089,7 @@ class PhotoEditorWidget(QWidget):
         run = self._next_ai_run("enhance")
         if self._ai_modal:
             label = "AI Auto-Enhance" if run == 0 else f"AI Auto-Enhance (variation {run})"
-            self._ai_modal.show_message(label, "Analysing image…")
+            self._ai_modal.show_message(label, "Analysing imageâ€¦")
         suggestions = ai_auto_enhance(self._raw_rgb)
         suggestions = vary_suggestions(suggestions, run, self._get_slider_bounds())
         self._apply_ai_suggestions(suggestions)
@@ -3035,7 +3103,7 @@ class PhotoEditorWidget(QWidget):
         run = self._next_ai_run("wb")
         if self._ai_modal:
             label = "AI White Balance" if run == 0 else f"AI White Balance (variation {run})"
-            self._ai_modal.show_message(label, "Calculating colour correction…")
+            self._ai_modal.show_message(label, "Calculating colour correctionâ€¦")
         suggestions = ai_auto_wb(self._raw_rgb)
         suggestions = vary_suggestions(suggestions, run, self._get_slider_bounds())
         self._apply_ai_suggestions(suggestions)
@@ -3047,7 +3115,7 @@ class PhotoEditorWidget(QWidget):
         run = self._next_ai_run("denoise")
         if self._ai_modal:
             label = "AI Denoise" if run == 0 else f"AI Denoise (variation {run})"
-            self._ai_modal.show_message(label, "Applying noise reduction…")
+            self._ai_modal.show_message(label, "Applying noise reductionâ€¦")
         base = {
             "nr_luminance": 60,
             "nr_color": 50,
@@ -3065,7 +3133,7 @@ class PhotoEditorWidget(QWidget):
         run = self._next_ai_run("sharpen")
         if self._ai_modal:
             label = "AI Smart Sharpen" if run == 0 else f"AI Smart Sharpen (variation {run})"
-            self._ai_modal.show_message(label, "Analysing sharpness…")
+            self._ai_modal.show_message(label, "Analysing sharpnessâ€¦")
         # Analyze sharpness
         try:
             from scipy.ndimage import laplace
@@ -3092,7 +3160,7 @@ class PhotoEditorWidget(QWidget):
         run = self._next_ai_run("bw")
         if self._ai_modal:
             label = "AI B\u200a&\u200aW" if run == 0 else f"AI B\u200a&\u200aW (variation {run})"
-            self._ai_modal.show_message(label, "Converting to black & white…")
+            self._ai_modal.show_message(label, "Converting to black & whiteâ€¦")
         self._grade_combo.setCurrentText("bw_classic")
         base = {"saturation": -100, "contrast": 20, "clarity": 15}
         suggestions = vary_suggestions(base, run, self._get_slider_bounds())
@@ -3107,7 +3175,7 @@ class PhotoEditorWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _ai_masking(self) -> None:
-        """AI masking — select subject/sky/people/background."""
+        """AI masking â€” select subject/sky/people/background."""
         if self._raw_rgb is None:
             return
         items = ["Subject", "Sky", "People", "Background"]
@@ -3117,12 +3185,12 @@ class PhotoEditorWidget(QWidget):
         if not ok:
             return
         if self._ai_modal:
-            self._ai_modal.show_message("AI Masking", f"Generating {choice.lower()} mask…")
-        try:
+            self._ai_modal.show_message("AI Masking", f"Generating {choice.lower()} maskâ€¦")
+
+        def _do_masking(rgb, target):
             from imagic.ai.masking import (
                 MaskType, generate_subject_mask, generate_sky_mask,
                 generate_people_mask, generate_background_mask,
-                apply_masked_adjustment,
             )
             mask_map = {
                 "Subject": (MaskType.SUBJECT, generate_subject_mask),
@@ -3130,34 +3198,47 @@ class PhotoEditorWidget(QWidget):
                 "People": (MaskType.PEOPLE, generate_people_mask),
                 "Background": (MaskType.BACKGROUND, generate_background_mask),
             }
-            mask_type, gen_fn = mask_map[choice]
-            result = gen_fn(self._raw_rgb)
-            # Store mask for potential selective editing
-            self._active_mask = result.mask
-            self._active_mask_type = mask_type
-            # Show a quick overlay preview on the canvas
-            overlay = self._raw_rgb.copy()
+            mask_type, gen_fn = mask_map[target]
+            result = gen_fn(rgb)
+            # Build overlay preview
+            overlay = rgb.copy()
             mask_3ch = np.stack([result.mask] * 3, axis=2)
             tint = np.zeros_like(overlay, dtype=np.float32)
             tint[:, :, 0] = 255  # red tint
             overlay = (overlay.astype(np.float32) * (1 - mask_3ch * 0.4)
                        + tint * mask_3ch * 0.4).clip(0, 255).astype(np.uint8)
+            return {"mask": result.mask, "mask_type": mask_type,
+                    "overlay": overlay, "confidence": result.confidence, "target": target}
+
+        def _on_masking_done(result_data):
+            self._active_mask = result_data["mask"]
+            self._active_mask_type = result_data["mask_type"]
+            overlay = result_data["overlay"]
             h, w = overlay.shape[:2]
             qimg = QImage(overlay.data, w, h, 3 * w, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
-            self._canvas._display_item.setPixmap(pixmap)
+            self._canvas.set_pixmap(pixmap)
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
             QMessageBox.information(
                 self, "AI Masking",
-                f"{choice} mask generated (confidence: {result.confidence:.0%}).\n"
+                f"{result_data['target']} mask generated (confidence: {result_data['confidence']:.0%}).\n"
                 f"The red overlay shows the selected area.\n"
                 f"Press any edit slider to apply adjustments to the masked area.",
             )
-        except Exception as e:
-            logger.error("AI masking failed: %s", e)
-            QMessageBox.warning(self, "AI Masking", f"Masking failed: {e}")
-        finally:
+
+        def _on_masking_error(msg):
+            logger.error("AI masking failed: %s", msg)
             if self._ai_modal:
                 self._ai_modal.hide_modal()
+            QMessageBox.warning(self, "AI Masking", f"Masking failed: {msg}")
+
+        worker = _AITaskWorker(_do_masking, self._raw_rgb.copy(), choice, parent=self)
+        worker.finished.connect(_on_masking_done)
+        worker.error.connect(_on_masking_error)
+        self._stop_ai_worker()
+        self._ai_worker = worker
+        worker.start()
 
     def _ai_lens_blur(self) -> None:
         """AI lens blur / bokeh effect."""
@@ -3169,55 +3250,85 @@ class PhotoEditorWidget(QWidget):
         if not ok:
             return
         if self._ai_modal:
-            self._ai_modal.show_message("AI Lens Blur", "Estimating depth & applying bokeh…")
-        try:
+            self._ai_modal.show_message("AI Lens Blur", "Estimating depth & applying bokehâ€¦")
+
+        def _do_blur(rgb, blur_amount):
             from imagic.ai.lens_blur import apply_lens_blur
-            result = apply_lens_blur(self._raw_rgb, blur_amount=amount / 100.0)
+            return apply_lens_blur(rgb, blur_amount=blur_amount)
+
+        def _on_blur_done(result):
             self._raw_rgb = result.image
             self._schedule_preview()
             self._commit_undo_state()
-        except Exception as e:
-            logger.error("AI lens blur failed: %s", e)
-            QMessageBox.warning(self, "AI Lens Blur", f"Lens blur failed: {e}")
-        finally:
             if self._ai_modal:
                 self._ai_modal.hide_modal()
+
+        def _on_blur_error(msg):
+            logger.error("AI lens blur failed: %s", msg)
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
+            QMessageBox.warning(self, "AI Lens Blur", f"Lens blur failed: {msg}")
+
+        worker = _AITaskWorker(_do_blur, self._raw_rgb.copy(), amount, parent=self)
+        worker.finished.connect(_on_blur_done)
+        worker.error.connect(_on_blur_error)
+        self._stop_ai_worker()
+        self._ai_worker = worker
+        worker.start()
 
     def _ai_face_detect(self) -> None:
         """Detect faces and draw bounding boxes."""
         if self._raw_rgb is None:
             return
         if self._ai_modal:
-            self._ai_modal.show_message("AI Face Detection", "Scanning for faces…")
-        try:
+            self._ai_modal.show_message("AI Face Detection", "Scanning for facesâ€¦")
+
+        def _do_detect(rgb):
             from imagic.ai.face_detection import detect_faces
-            result = detect_faces(self._raw_rgb)
+            result = detect_faces(rgb)
             if not result.faces:
+                return {"faces": [], "overlay": None}
+            overlay = rgb.copy()
+            for face in result.faces:
+                x, y, fw, fh = face.x, face.y, face.width, face.height
+                # Draw green rectangle (2px thick)
+                y1, y2 = max(0, y), min(rgb.shape[0], y + fh)
+                x1, x2 = max(0, x), min(rgb.shape[1], x + fw)
+                if y2 - y1 > 4 and x2 - x1 > 4:
+                    overlay[y1:y1+2, x1:x2] = [0, 255, 0]
+                    overlay[y2-2:y2, x1:x2] = [0, 255, 0]
+                    overlay[y1:y2, x1:x1+2] = [0, 255, 0]
+                    overlay[y1:y2, x2-2:x2] = [0, 255, 0]
+            return {"faces": result.faces, "overlay": overlay}
+
+        def _on_detect_done(result_data):
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
+            if not result_data["faces"]:
                 QMessageBox.information(self, "Face Detection", "No faces detected.")
                 return
-            # Draw bounding boxes on a preview overlay
-            overlay = self._raw_rgb.copy()
-            for face in result.faces:
-                x, y, w, h = face.x, face.y, face.w, face.h
-                # Draw rectangle
-                overlay[y:y+2, x:x+w] = [0, 255, 0]
-                overlay[y+h-2:y+h, x:x+w] = [0, 255, 0]
-                overlay[y:y+h, x:x+2] = [0, 255, 0]
-                overlay[y:y+h, x+w-2:x+w] = [0, 255, 0]
+            overlay = result_data["overlay"]
             oh, ow = overlay.shape[:2]
             qimg = QImage(overlay.data, ow, oh, 3 * ow, QImage.Format.Format_RGB888)
             pixmap = QPixmap.fromImage(qimg)
-            self._canvas._display_item.setPixmap(pixmap)
+            self._canvas.set_pixmap(pixmap)
             QMessageBox.information(
                 self, "Face Detection",
-                f"Detected {len(result.faces)} face(s) — highlighted in green.",
+                f"Detected {len(result_data['faces'])} face(s) â€” highlighted in green.",
             )
-        except Exception as e:
-            logger.error("Face detection failed: %s", e)
-            QMessageBox.warning(self, "Face Detection", f"Face detection failed: {e}")
-        finally:
+
+        def _on_detect_error(msg):
+            logger.error("Face detection failed: %s", msg)
             if self._ai_modal:
                 self._ai_modal.hide_modal()
+            QMessageBox.warning(self, "Face Detection", f"Face detection failed: {msg}")
+
+        worker = _AITaskWorker(_do_detect, self._raw_rgb.copy(), parent=self)
+        worker.finished.connect(_on_detect_done)
+        worker.error.connect(_on_detect_error)
+        self._stop_ai_worker()
+        self._ai_worker = worker
+        worker.start()
 
     def _ai_super_resolution(self) -> None:
         """Upscale image using AI super resolution."""
@@ -3231,67 +3342,106 @@ class PhotoEditorWidget(QWidget):
             return
         factor = int(scale[0])
         if self._ai_modal:
-            self._ai_modal.show_message("AI Super Resolution", f"Upscaling {factor}x…")
-        try:
+            self._ai_modal.show_message("AI Super Resolution", f"Upscaling {factor}xâ€¦")
+
+        def _do_sr(rgb, scale_factor):
             from imagic.ai.super_resolution import enhance_resolution
-            result = enhance_resolution(self._raw_rgb, scale=factor)
+            return enhance_resolution(rgb, scale=scale_factor)
+
+        def _on_sr_done(result):
             self._raw_rgb = result.image
             self._schedule_preview()
             self._commit_undo_state()
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
             QMessageBox.information(
                 self, "Super Resolution",
                 f"Upscaled {factor}x using {result.method}.\n"
-                f"New size: {result.image.shape[1]}×{result.image.shape[0]}",
+                f"New size: {result.image.shape[1]}Ã—{result.image.shape[0]}",
             )
-        except Exception as e:
-            logger.error("Super resolution failed: %s", e)
-            QMessageBox.warning(self, "Super Resolution", f"Super resolution failed: {e}")
-        finally:
+
+        def _on_sr_error(msg):
+            logger.error("Super resolution failed: %s", msg)
             if self._ai_modal:
                 self._ai_modal.hide_modal()
+            QMessageBox.warning(self, "Super Resolution", f"Super resolution failed: {msg}")
+
+        worker = _AITaskWorker(_do_sr, self._raw_rgb.copy(), factor, parent=self)
+        worker.finished.connect(_on_sr_done)
+        worker.error.connect(_on_sr_error)
+        self._stop_ai_worker()
+        self._ai_worker = worker
+        worker.start()
 
     def _ai_enhance_details(self) -> None:
         """Enhance fine details without upscaling."""
         if self._raw_rgb is None:
             return
         if self._ai_modal:
-            self._ai_modal.show_message("AI Enhance Details", "Enhancing fine details…")
-        try:
+            self._ai_modal.show_message("AI Enhance Details", "Enhancing fine detailsâ€¦")
+
+        def _do_enhance(rgb):
             from imagic.ai.super_resolution import enhance_details
-            self._raw_rgb = enhance_details(self._raw_rgb)
+            return enhance_details(rgb)
+
+        def _on_enhance_done(result):
+            self._raw_rgb = result
             self._schedule_preview()
             self._commit_undo_state()
-        except Exception as e:
-            logger.error("Detail enhancement failed: %s", e)
-            QMessageBox.warning(self, "Enhance Details", f"Detail enhancement failed: {e}")
-        finally:
             if self._ai_modal:
                 self._ai_modal.hide_modal()
+
+        def _on_enhance_error(msg):
+            logger.error("Detail enhancement failed: %s", msg)
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
+            QMessageBox.warning(self, "Enhance Details", f"Detail enhancement failed: {msg}")
+
+        worker = _AITaskWorker(_do_enhance, self._raw_rgb.copy(), parent=self)
+        worker.finished.connect(_on_enhance_done)
+        worker.error.connect(_on_enhance_error)
+        self._stop_ai_worker()
+        self._ai_worker = worker
+        worker.start()
 
     def _ai_adaptive_preset(self) -> None:
         """Apply an AI adaptive preset based on scene detection."""
         if self._raw_rgb is None:
             return
         if self._ai_modal:
-            self._ai_modal.show_message("AI Adaptive Preset", "Analysing scene…")
-        try:
+            self._ai_modal.show_message("AI Adaptive Preset", "Analysing sceneâ€¦")
+
+        def _do_adaptive(rgb):
             from imagic.ai.adaptive_presets import detect_scene, get_adaptive_preset
-            scene = detect_scene(self._raw_rgb)
+            scene = detect_scene(rgb)
             preset = get_adaptive_preset(scene)
-            # Apply global params as slider suggestions
+            return {"preset": preset, "scene": scene}
+
+        def _on_adaptive_done(result_data):
+            preset = result_data["preset"]
+            scene = result_data["scene"]
             self._apply_ai_suggestions(preset.global_params)
+            if self._ai_modal:
+                self._ai_modal.hide_modal()
             QMessageBox.information(
                 self, "Adaptive Preset",
                 f"Applied: {preset.name}\n"
                 f"Scene detected: {scene.value}\n\n"
                 f"{preset.description}",
             )
-        except Exception as e:
-            logger.error("Adaptive preset failed: %s", e)
-            QMessageBox.warning(self, "Adaptive Preset", f"Adaptive preset failed: {e}")
-        finally:
+
+        def _on_adaptive_error(msg):
+            logger.error("Adaptive preset failed: %s", msg)
             if self._ai_modal:
                 self._ai_modal.hide_modal()
+            QMessageBox.warning(self, "Adaptive Preset", f"Adaptive preset failed: {msg}")
+
+        worker = _AITaskWorker(_do_adaptive, self._raw_rgb.copy(), parent=self)
+        worker.finished.connect(_on_adaptive_done)
+        worker.error.connect(_on_adaptive_error)
+        self._stop_ai_worker()
+        self._ai_worker = worker
+        worker.start()
 
     def _get_slider_bounds(self) -> dict[str, tuple]:
         """Return {key: (min, max)} for every registered slider."""
@@ -3343,12 +3493,13 @@ class PhotoEditorWidget(QWidget):
         """Show a dropdown menu with Save Preset + list of saved presets."""
         menu = QMenu(self)
         menu.setStyleSheet(
-            f"QMenu {{ background: #2a2a2a; color: {_TEXT}; border: 1px solid {_BORDER}; "
-            f"padding: 4px; font-size: 11px; }}"
+            f"QMenu {{ background: {_SECTION_BG}; color: {_TEXT}; border: 1px solid {_BORDER}; "
+            f"border-radius: 6px; padding: 4px; font-size: 10px; }}"
+            f"QMenu::item {{ padding: 6px 16px; border-radius: 3px; margin: 1px 3px; }}"
             f"QMenu::item:selected {{ background: {_ACCENT}; color: #111; }}"
             f"QMenu::separator {{ height: 1px; background: {_BORDER}; margin: 4px 8px; }}"
         )
-        save_action = menu.addAction("💾  Save current as preset…")
+        save_action = menu.addAction("ðŸ’¾  Save current as presetâ€¦")
         save_action.triggered.connect(self._save_preset)
 
         # List existing presets
@@ -3360,7 +3511,7 @@ class PhotoEditorWidget(QWidget):
                 act = menu.addAction(f"  {name}")
                 act.triggered.connect(lambda checked, path=p: self._load_preset(path))
             menu.addSeparator()
-            del_menu = menu.addMenu("🗑  Delete preset")
+            del_menu = menu.addMenu("ðŸ—‘  Delete preset")
             del_menu.setStyleSheet(menu.styleSheet())
             for p in presets:
                 name = p.stem

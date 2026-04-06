@@ -27,20 +27,20 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-# Style constants (match photo_editor theme)
-_BG = "#12121a"
-_RING_BG = "#1a1a28"
-_TEXT = "#e0e0e8"
-_TEXT_DIM = "#8888a0"
-_ACCENT = "#ff9800"
+# Style constants (match photo_editor premium theme)
+_BG = "#0d0d0d"
+_RING_BG = "#191919"
+_TEXT = "#d6d6d6"
+_TEXT_DIM = "#787878"
+_ACCENT = "#e89530"
 _SLIDER_STYLE = (
-    "QSlider::groove:horizontal { height: 4px; background: #3a3a4a; border-radius: 2px; }"
-    "QSlider::handle:horizontal { width: 12px; height: 12px; margin: -4px 0; "
-    f"background: {_ACCENT}; border-radius: 6px; }}"
-    f"QSlider::sub-page:horizontal {{ background: {_ACCENT}; border-radius: 2px; }}"
+    "QSlider::groove:horizontal { height: 2px; background: #282828; border-radius: 1px; }"
+    "QSlider::handle:horizontal { width: 10px; height: 10px; margin: -4px 0; "
+    f"background: {_ACCENT}; border: 1.5px solid #121212; border-radius: 6px; }}"
+    f"QSlider::sub-page:horizontal {{ background: {_ACCENT}; border-radius: 1px; }}"
 )
 
-_WHEEL_SIZE = 100  # diameter in pixels
+_WHEEL_SIZE = 85  # diameter in pixels (3 wheels must fit in 320px sidebar)
 _KNOB_RADIUS = 5
 
 

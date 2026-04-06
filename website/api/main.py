@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import importlib
+import logging
 import os
 import shutil
 import uuid
@@ -68,15 +70,28 @@ app = FastAPI(title="imagic web", version="1.0.0")
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
+_CORS_ORIGINS = [
+    o.strip()
+    for o in os.environ.get("IMAGIC_CORS_ORIGINS", BASE_URL).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+_SESSION_SECRET = os.environ.get("IMAGIC_SESSION_SECRET", "change-me-in-production")
+if _SESSION_SECRET == "change-me-in-production":
+    logging.getLogger(__name__).warning(
+        "IMAGIC_SESSION_SECRET is not set — using insecure default. "
+        "Set the env var before deploying to production."
+    )
+
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.environ.get("IMAGIC_SESSION_SECRET", "change-me-in-production"),
+    secret_key=_SESSION_SECRET,
     same_site="lax",
     https_only=COOKIE_SECURE,
 )
@@ -333,6 +348,9 @@ async def upload_photos(
     for f in files:
         _validate_file(f)
 
+        # Check Content-Length header before reading entire file
+        if f.size is not None and f.size > MAX_FILE_SIZE:
+            raise HTTPException(413, f"File '{f.filename}' exceeds 100 MB limit.")
         content = await f.read()
         if len(content) > MAX_FILE_SIZE:
             raise HTTPException(413, f"File '{f.filename}' exceeds 100 MB limit.")
@@ -658,7 +676,9 @@ async def validate_desktop_license(request: Request):
 def _is_admin(request: Request) -> bool:
     admin_token = request.cookies.get("imagic_admin_token", "")
     expected = os.environ.get("IMAGIC_ADMIN_API_KEY", "")
-    return bool(expected and admin_token == expected)
+    if not expected or not admin_token:
+        return False
+    return hmac.compare_digest(admin_token, expected)
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -673,7 +693,7 @@ async def admin_login(request: Request):
     body = await request.json()
     key = str(body.get("admin_key", "")).strip()
     expected = os.environ.get("IMAGIC_ADMIN_API_KEY", "")
-    if not expected or key != expected:
+    if not expected or not hmac.compare_digest(key, expected):
         raise HTTPException(403, "Invalid admin key.")
     
     response = JSONResponse({"ok": True})
@@ -747,11 +767,25 @@ async def issue_license(request: Request):
     body = await request.json()
     product_type = str(body.get("product_type", "desktop")).strip()
     credits_total = int(body.get("credits_total", DEFAULT_CREDIT_PACK_SIZE))
+    email = str(body.get("email", "")).strip().lower()
     if product_type not in {"desktop", "web_credit"}:
         raise HTTPException(400, "product_type must be 'desktop' or 'web_credit'.")
+
+    # If email provided, create/find user and link the license
+    user_id = None
+    if email and "@" in email:
+        conn = account_store._connect()
+        try:
+            user_row = account_store._get_or_create_purchase_user(conn, email)
+            user_id = user_row["id"]
+            conn.commit()
+        finally:
+            conn.close()
+
     issued = account_store.issue_license(
         product_type=product_type,
         credits_total=credits_total if product_type == "web_credit" else 0,
+        user_id=user_id,
     )
     return {"ok": True, "license": issued}
 

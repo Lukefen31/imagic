@@ -14,19 +14,20 @@ from PyQt6.QtGui import (
     QColor,
     QConicalGradient,
     QFont,
+    QKeyEvent,
     QPainter,
     QPainterPath,
     QPen,
 )
 from PyQt6.QtWidgets import QWidget
 
-_ACCENT = QColor("#ff9800")
-_ACCENT_DIM = QColor(255, 152, 0, 60)
-_BG_OVERLAY = QColor(10, 10, 10, 200)
-_TEXT_COLOR = QColor("#e0e0e0")
-_SUB_COLOR = QColor("#999")
-_CARD_BG = QColor(26, 26, 26, 240)
-_CARD_BORDER = QColor(60, 60, 60)
+_ACCENT = QColor("#e89530")
+_ACCENT_DIM = QColor(232, 149, 48, 50)
+_BG_OVERLAY = QColor(10, 10, 10, 210)
+_TEXT_COLOR = QColor("#d6d6d6")
+_SUB_COLOR = QColor("#8a8a8a")
+_CARD_BG = QColor(22, 22, 22, 245)
+_CARD_BORDER = QColor(50, 50, 50)
 
 
 class AILoadingModal(QWidget):
@@ -51,6 +52,7 @@ class AILoadingModal(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setWindowFlags(Qt.WindowType.Widget)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         # Animation state
         self._angle = 0.0
@@ -100,6 +102,7 @@ class AILoadingModal(QWidget):
             self.setGeometry(self.parent().rect())
         self.show()
         self.raise_()
+        self.setFocus()
         self._timer.start()
         self._dot_timer.start()
 
@@ -126,6 +129,21 @@ class AILoadingModal(QWidget):
         self._timer.stop()
         self._dot_timer.stop()
         self.hide()
+
+    # ------------------------------------------------------------------
+    # Cancel support
+    # ------------------------------------------------------------------
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # type: ignore[override]
+        if event.key() == Qt.Key.Key_Escape:
+            self.cancelled.emit()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        """Absorb all mouse clicks so nothing underneath is triggered."""
+        event.accept()
 
     # ------------------------------------------------------------------
     # Animation
@@ -290,6 +308,17 @@ class AILoadingModal(QWidget):
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
                 prog_text,
             )
+
+        # 7. Cancel hint
+        hint_font = QFont("Segoe UI", 9)
+        painter.setFont(hint_font)
+        painter.setPen(QPen(QColor(120, 120, 120)))
+        hint_rect = QRectF(cx + 16, cy + card_h - 24, card_w - 32, 18)
+        painter.drawText(
+            hint_rect,
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+            "Press Esc to cancel",
+        )
 
         painter.end()
 

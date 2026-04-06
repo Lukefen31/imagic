@@ -226,14 +226,15 @@ class AccountStore:
 
     def _get_user_auth_row(self, email: str) -> Optional[sqlite3.Row]:
         clean_email = _normalise_email(email)
-        conn = self._connect()
-        try:
-            return conn.execute(
-                "SELECT id, email, password_hash, credit_balance, created_at FROM users WHERE email = ?",
-                (clean_email,),
-            ).fetchone()
-        finally:
-            conn.close()
+        with self._lock:
+            conn = self._connect()
+            try:
+                return conn.execute(
+                    "SELECT id, email, password_hash, credit_balance, created_at FROM users WHERE email = ?",
+                    (clean_email,),
+                ).fetchone()
+            finally:
+                conn.close()
 
     def authenticate_user(self, email: str, password: str) -> Optional[dict]:
         row = self._get_user_auth_row(email)
@@ -383,18 +384,13 @@ class AccountStore:
         with self._lock:
             conn = self._connect()
             try:
-                row = conn.execute(
-                    "SELECT credit_balance FROM users WHERE id = ?",
-                    (user_id,),
-                ).fetchone()
-                if row is None or int(row["credit_balance"]) < count:
-                    return False
-                conn.execute(
-                    "UPDATE users SET credit_balance = credit_balance - ? WHERE id = ?",
-                    (count, user_id),
+                # Atomic: only debit if balance is sufficient (avoids TOCTOU race)
+                cur = conn.execute(
+                    "UPDATE users SET credit_balance = credit_balance - ? WHERE id = ? AND credit_balance >= ?",
+                    (count, user_id, count),
                 )
                 conn.commit()
-                return True
+                return cur.rowcount > 0
             finally:
                 conn.close()
 

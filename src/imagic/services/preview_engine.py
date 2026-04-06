@@ -220,13 +220,20 @@ class PreviewEngine:
             t = np.clip(t, 0.2, 1.0)
             img = (img - atmo * (1 - t[:, :, np.newaxis])) / np.maximum(t[:, :, np.newaxis], 0.2)
 
-        # -- Texture (fine-frequency detail enhancement) --
+        # -- Shared luminance for texture / vibrance / saturation --
+        # Computed once after dehaze (which is the last transform that
+        # invalidates the earlier luminance).
         texture = params.get("texture", 0) / 100.0
+        saturation = params.get("saturation", 0) / 100.0
+        _need_lum2 = texture != 0 or saturation != 0
+        if _need_lum2:
+            _lum2 = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
+
+        # -- Texture (fine-frequency detail enhancement) --
         if texture != 0:
-            lum_t = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
-            k_t = max(3, int(min(lum_t.shape) * 0.008)) | 1  # smaller radius than clarity
-            blurred_t = _cv2_blur(lum_t, k_t)
-            detail_t = lum_t - blurred_t
+            k_t = max(3, int(min(_lum2.shape) * 0.008)) | 1  # smaller radius than clarity
+            blurred_t = _cv2_blur(_lum2, k_t)
+            detail_t = _lum2 - blurred_t
             img += (detail_t * texture * 1.2)[:, :, np.newaxis]
 
         # -- Vibrance (boost low-sat pixels more) --
@@ -240,10 +247,8 @@ class PreviewEngine:
             img = img + (img - mean_c) * boost[:, :, np.newaxis]
 
         # -- Saturation --
-        saturation = params.get("saturation", 0) / 100.0
         if saturation != 0:
-            lum = (0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2])
-            img = lum[:, :, np.newaxis] + (img - lum[:, :, np.newaxis]) * (1.0 + saturation)
+            img = _lum2[:, :, np.newaxis] + (img - _lum2[:, :, np.newaxis]) * (1.0 + saturation)
 
         # -- HSL adjustments --
         _apply_hsl(img, params)

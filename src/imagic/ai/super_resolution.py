@@ -59,13 +59,21 @@ def enhance_resolution(
 def _try_realesrgan(img: np.ndarray, scale: int) -> Optional[SuperResResult]:
     """Try Real-ESRGAN for super resolution."""
     try:
+        from pathlib import Path as _Path
         from basicsr.archs.rrdbnet_arch import RRDBNet
         from realesrgan import RealESRGANer
+
+        # Locate pretrained model weights
+        model_dir = _Path.home() / ".imagic" / "models"
+        model_path = model_dir / f"RealESRGAN_x{scale}plus.pth"
+        if not model_path.is_file():
+            logger.debug("Real-ESRGAN model not found at %s", model_path)
+            return None
 
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=scale)
         upsampler = RealESRGANer(
             scale=scale,
-            model_path=None,  # Uses default pretrained
+            model_path=str(model_path),
             model=model,
             half=False,
         )

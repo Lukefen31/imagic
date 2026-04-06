@@ -127,7 +127,7 @@ class _BatchOptimizeWorker(QThread):
 
     # (index, suggestions_dict, rgb_array)
     photo_optimized = pyqtSignal(int, dict, object)
-    finished_all = pyqtSignal()
+    finished_all = pyqtSignal(int)  # number of errors
 
     def __init__(self, photos: List[dict], rgb_cache: Dict[int, np.ndarray],
                  user_style: Optional[dict] = None, parent=None):
@@ -139,6 +139,7 @@ class _BatchOptimizeWorker(QThread):
     def run(self) -> None:
         import rawpy
 
+        error_count = 0
         for i, p in enumerate(self._photos):
             try:
                 # Use cache if available, otherwise decode
@@ -212,9 +213,10 @@ class _BatchOptimizeWorker(QThread):
 
                 self.photo_optimized.emit(i, suggestions, rgb)
             except Exception as exc:
-                logger.debug("Batch optimize failed for %s: %s", p.get("file_name", "?"), exc)
+                error_count += 1
+                logger.warning("Batch optimize failed for %s: %s", p.get("file_name", "?"), exc)
 
-        self.finished_all.emit()
+        self.finished_all.emit(error_count)
 
 
 class _AITaskWorker(QThread):
@@ -983,10 +985,16 @@ class _PreviewCanvas(QWidget):
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         delta = event.angleDelta().y()
+        # When in fit mode (_zoom == 0), start zooming from 1.0 (100%)
+        base = self._zoom if self._zoom > 0 else 1.0
         if delta > 0:
-            new_zoom = min(4.0, (self._zoom or 0.5) * 1.15)
+            new_zoom = min(4.0, base * 1.15)
         else:
-            new_zoom = max(0.1, (self._zoom or 0.5) / 1.15)
+            new_zoom = base / 1.15
+            if new_zoom < 0.15:
+                # Snap back to fit mode and reset pan offset
+                new_zoom = 0
+                self._pan_offset = QPoint(0, 0)
         self._zoom = new_zoom
         self.update()
         self.zoom_changed.emit()
@@ -3069,7 +3077,7 @@ class PhotoEditorWidget(QWidget):
             self._schedule_preview()
             self._commit_undo_state()
 
-    def _on_batch_finished(self) -> None:
+    def _on_batch_finished(self, error_count: int = 0) -> None:
         """All photos have been optimized."""
         self._optimize_btn.setEnabled(True)
         self._optimize_btn.setText("âš¡ AI Optimize All")
@@ -3077,6 +3085,13 @@ class PhotoEditorWidget(QWidget):
         if self._ai_modal:
             self._ai_modal.hide_modal()
         logger.info("Batch AI optimize complete for %d photos", len(self._photos))
+        if error_count > 0:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, "Batch Optimize",
+                f"Finished with {error_count} error(s). "
+                f"Some photos could not be optimized \u2014 check the log for details.",
+            )
 
     # ------------------------------------------------------------------
     # AI Tools

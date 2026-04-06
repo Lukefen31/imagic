@@ -28,8 +28,14 @@ class RateLimiter:
 
     def remaining(self, ip: str) -> int:
         limit = self.limit_for(ip)
+        today = self._today()
         with self._lock:
-            used = self._usage[ip].get(self._today(), 0)
+            # Inline cleanup: drop stale date keys for this IP
+            ip_data = self._usage[ip]
+            stale = [k for k in ip_data if k != today]
+            for k in stale:
+                del ip_data[k]
+            used = ip_data.get(today, 0)
             return max(0, limit - used)
 
     def consume(self, ip: str, count: int = 1) -> None:

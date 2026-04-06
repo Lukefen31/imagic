@@ -84,6 +84,11 @@ app.add_middleware(
 )
 _SESSION_SECRET = os.environ.get("IMAGIC_SESSION_SECRET", "change-me-in-production")
 if _SESSION_SECRET == "change-me-in-production":
+    if os.environ.get("FLY_APP_NAME"):
+        raise RuntimeError(
+            "IMAGIC_SESSION_SECRET must be set in production. "
+            "Run: fly secrets set IMAGIC_SESSION_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+        )
     logging.getLogger(__name__).warning(
         "IMAGIC_SESSION_SECRET is not set — using insecure default. "
         "Set the env var before deploying to production."
@@ -344,35 +349,44 @@ async def upload_photos(
     session_dir = UPLOAD_DIR / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
 
-    uploaded = []
-    for f in files:
-        _validate_file(f)
-
-        # Check Content-Length header before reading entire file
-        if f.size is not None and f.size > MAX_FILE_SIZE:
-            raise HTTPException(413, f"File '{f.filename}' exceeds 100 MB limit.")
-        content = await f.read()
-        if len(content) > MAX_FILE_SIZE:
-            raise HTTPException(413, f"File '{f.filename}' exceeds 100 MB limit.")
-
-        file_id = hashlib.sha256(content).hexdigest()[:16]
-        ext = Path(f.filename).suffix.lower()
-        dest = session_dir / f"{file_id}{ext}"
-        dest.write_bytes(content)
-
-        uploaded.append({
-            "file_id": file_id,
-            "filename": f.filename,
-            "size": len(content),
-        })
-
+    # Reserve credits BEFORE writing files to avoid orphaned uploads
     free_to_consume = min(len(files), free_remaining)
     paid_to_consume = max(0, len(files) - free_to_consume)
     if free_to_consume:
         rate_limiter.consume(ip, free_to_consume)
     if paid_to_consume:
         if not user or not account_store.consume_credits(user["id"], paid_to_consume):
+            shutil.rmtree(session_dir, ignore_errors=True)
             raise HTTPException(409, "Could not reserve paid credits for this upload.")
+
+    uploaded = []
+    try:
+        for f in files:
+            _validate_file(f)
+
+            # Check Content-Length header before reading entire file
+            if f.size is not None and f.size > MAX_FILE_SIZE:
+                raise HTTPException(413, f"File '{f.filename}' exceeds 100 MB limit.")
+            content = await f.read()
+            if len(content) > MAX_FILE_SIZE:
+                raise HTTPException(413, f"File '{f.filename}' exceeds 100 MB limit.")
+
+            file_id = hashlib.sha256(content).hexdigest()[:16]
+            ext = Path(f.filename).suffix.lower()
+            dest = session_dir / f"{file_id}{ext}"
+            dest.write_bytes(content)
+
+            uploaded.append({
+                "file_id": file_id,
+                "filename": f.filename,
+                "size": len(content),
+            })
+    except Exception:
+        # Roll back: remove partial uploads and refund paid credits
+        shutil.rmtree(session_dir, ignore_errors=True)
+        if paid_to_consume and user:
+            account_store.add_credits(user["id"], paid_to_consume)
+        raise
 
     return {
         "session_id": session_id,
@@ -791,8 +805,32 @@ async def issue_license(request: Request):
 
 
 # ---------------------------------------------------------------------------
-# Cleanup (scheduled separately or via middleware)
+# Cleanup — client-triggered + periodic background sweep
 # ---------------------------------------------------------------------------
+
+_UPLOAD_MAX_AGE_HOURS = 24
+
+
+async def _periodic_upload_cleanup() -> None:
+    """Background task: remove upload sessions older than _UPLOAD_MAX_AGE_HOURS."""
+    import asyncio
+    import time
+
+    while True:
+        try:
+            cutoff = time.time() - _UPLOAD_MAX_AGE_HOURS * 3600
+            for entry in UPLOAD_DIR.iterdir():
+                if entry.is_dir() and entry.stat().st_mtime < cutoff:
+                    shutil.rmtree(entry, ignore_errors=True)
+        except Exception:
+            logging.getLogger(__name__).debug("Upload cleanup sweep error", exc_info=True)
+        await asyncio.sleep(3600)  # run once per hour
+
+
+@app.on_event("startup")
+async def _start_cleanup_task() -> None:
+    import asyncio
+    asyncio.ensure_future(_periodic_upload_cleanup())
 
 
 @app.post("/api/cleanup/{session_id}")

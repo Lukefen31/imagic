@@ -112,6 +112,10 @@ DEFAULT_CREDIT_PACK_SIZE = 500
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_OAUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+GA4_MEASUREMENT_ID = os.environ.get("GA4_MEASUREMENT_ID", "")
+
+# Make GA4 ID available to all templates
+templates.env.globals["ga4_id"] = GA4_MEASUREMENT_ID
 
 # ---------------------------------------------------------------------------
 # Pages
@@ -774,6 +778,62 @@ async def admin_resend_email(request: Request):
         raise HTTPException(500, f"Failed to resend email: {exc}")
 
 
+@app.get("/api/admin/analytics")
+async def admin_analytics(request: Request):
+    """Return server-side page view analytics for the admin dashboard."""
+    if not _is_admin(request):
+        raise HTTPException(403, "Admin access required.")
+    days = int(request.query_params.get("days", "30"))
+    try:
+        conn = _analytics_connect()
+        # Summary stats
+        total = conn.execute(
+            "SELECT COUNT(*) FROM page_views WHERE ts >= date('now', ?)",
+            (f"-{days} days",),
+        ).fetchone()[0]
+        unique_visitors = conn.execute(
+            "SELECT COUNT(DISTINCT ip_hash) FROM page_views WHERE ts >= date('now', ?)",
+            (f"-{days} days",),
+        ).fetchone()[0]
+        # Page breakdown
+        pages = conn.execute(
+            "SELECT path, COUNT(*) as hits FROM page_views "
+            "WHERE ts >= date('now', ?) GROUP BY path ORDER BY hits DESC LIMIT 50",
+            (f"-{days} days",),
+        ).fetchall()
+        # Daily traffic
+        daily = conn.execute(
+            "SELECT date(ts) as day, COUNT(*) as hits, COUNT(DISTINCT ip_hash) as visitors "
+            "FROM page_views WHERE ts >= date('now', ?) GROUP BY day ORDER BY day",
+            (f"-{days} days",),
+        ).fetchall()
+        # Top referrers
+        referrers = conn.execute(
+            "SELECT referer, COUNT(*) as hits FROM page_views "
+            "WHERE ts >= date('now', ?) AND referer != '' "
+            "GROUP BY referer ORDER BY hits DESC LIMIT 20",
+            (f"-{days} days",),
+        ).fetchall()
+        # Top countries (via Fly.io header)
+        countries = conn.execute(
+            "SELECT country, COUNT(*) as hits FROM page_views "
+            "WHERE ts >= date('now', ?) AND country != '' "
+            "GROUP BY country ORDER BY hits DESC LIMIT 20",
+            (f"-{days} days",),
+        ).fetchall()
+        return {
+            "days": days,
+            "total_views": total,
+            "unique_visitors": unique_visitors,
+            "pages": [{"path": p, "hits": h} for p, h in pages],
+            "daily": [{"date": d, "hits": h, "visitors": v} for d, h, v in daily],
+            "referrers": [{"referer": r, "hits": h} for r, h in referrers],
+            "countries": [{"country": c, "hits": h} for c, h in countries],
+        }
+    except Exception as exc:
+        raise HTTPException(500, f"Analytics query failed: {exc}")
+
+
 @app.post("/api/admin/licenses/issue")
 async def issue_license(request: Request):
     if not _is_admin(request):
@@ -831,6 +891,77 @@ async def _periodic_upload_cleanup() -> None:
 async def _start_cleanup_task() -> None:
     import asyncio
     asyncio.ensure_future(_periodic_upload_cleanup())
+
+
+# ---------------------------------------------------------------------------
+# Server-side analytics middleware
+# ---------------------------------------------------------------------------
+
+_ANALYTICS_DB = Path(os.environ.get("IMAGIC_DATA_DIR", "/data")) / "analytics.db"
+_analytics_conn: "sqlite3.Connection | None" = None
+
+
+def _analytics_connect() -> "sqlite3.Connection":
+    import sqlite3
+    global _analytics_conn
+    if _analytics_conn is None:
+        _ANALYTICS_DB.parent.mkdir(parents=True, exist_ok=True)
+        _analytics_conn = sqlite3.connect(str(_ANALYTICS_DB), check_same_thread=False)
+        _analytics_conn.execute(
+            "CREATE TABLE IF NOT EXISTS page_views ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+            "  path TEXT NOT NULL,"
+            "  method TEXT NOT NULL,"
+            "  status INTEGER,"
+            "  referer TEXT,"
+            "  ua TEXT,"
+            "  country TEXT,"
+            "  ip_hash TEXT,"
+            "  duration_ms INTEGER"
+            ")"
+        )
+        _analytics_conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pv_ts ON page_views(ts)"
+        )
+        _analytics_conn.commit()
+    return _analytics_conn
+
+
+_SKIP_PREFIXES = ("/static/", "/api/", "/favicon.ico")
+
+
+@app.middleware("http")
+async def analytics_middleware(request: Request, call_next):
+    import time
+    path = request.url.path
+    if any(path.startswith(p) for p in _SKIP_PREFIXES):
+        return await call_next(request)
+    start = time.monotonic()
+    response = await call_next(request)
+    duration_ms = int((time.monotonic() - start) * 1000)
+    try:
+        ip_raw = request.client.host if request.client else ""
+        ip_hash = hashlib.sha256(ip_raw.encode()).hexdigest()[:16] if ip_raw else ""
+        conn = _analytics_connect()
+        conn.execute(
+            "INSERT INTO page_views (path, method, status, referer, ua, country, ip_hash, duration_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                path,
+                request.method,
+                response.status_code,
+                (request.headers.get("referer") or "")[:500],
+                (request.headers.get("user-agent") or "")[:300],
+                request.headers.get("fly-client-country", ""),
+                ip_hash,
+                duration_ms,
+            ),
+        )
+        conn.commit()
+    except Exception:
+        logging.getLogger(__name__).debug("Analytics write failed", exc_info=True)
+    return response
 
 
 @app.post("/api/cleanup/{session_id}")

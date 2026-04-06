@@ -176,6 +176,7 @@
         .blog-cta h3 { margin-bottom: 8px; }
         .blog-cta p { color: var(--text-muted); margin-bottom: 20px; }
     </style>
+    {% if ga4_id %}<script async src="https://www.googletagmanager.com/gtag/js?id={{ ga4_id }}"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga4_id }}');</script>{% endif %}
 </head>
 <body>
 

@@ -778,6 +778,98 @@ async def admin_resend_email(request: Request):
         raise HTTPException(500, f"Failed to resend email: {exc}")
 
 
+def _query_event_analytics(conn, days: int) -> dict:
+    """Build event analytics summary from the events table."""
+    d = f"-{days} days"
+    # Total events
+    total_events = conn.execute(
+        "SELECT COUNT(*) FROM events WHERE ts >= date('now', ?)", (d,)
+    ).fetchone()[0]
+    # Event type breakdown
+    event_types = conn.execute(
+        "SELECT event, COUNT(*) as cnt FROM events "
+        "WHERE ts >= date('now', ?) GROUP BY event ORDER BY cnt DESC",
+        (d,),
+    ).fetchall()
+    # Top clicked buttons / CTAs
+    top_clicks = conn.execute(
+        "SELECT label, page, section, COUNT(*) as cnt FROM events "
+        "WHERE ts >= date('now', ?) AND event='click' AND label != '' "
+        "GROUP BY label, page ORDER BY cnt DESC LIMIT 50",
+        (d,),
+    ).fetchall()
+    # Section views (which sections are actually seen)
+    section_views = conn.execute(
+        "SELECT section, COUNT(*) as cnt, COUNT(DISTINCT ip_hash) as visitors "
+        "FROM events WHERE ts >= date('now', ?) AND event='section_view' "
+        "GROUP BY section ORDER BY cnt DESC LIMIT 50",
+        (d,),
+    ).fetchall()
+    # Exit pages (page_exit events — where people leave)
+    exit_pages = conn.execute(
+        "SELECT page, COUNT(*) as cnt, "
+        "  ROUND(AVG(CAST(json_extract(detail, '$.engaged_s') AS REAL)), 1) as avg_engaged_s, "
+        "  ROUND(AVG(CAST(json_extract(detail, '$.max_scroll') AS REAL)), 0) as avg_scroll "
+        "FROM events WHERE ts >= date('now', ?) AND event='page_exit' "
+        "GROUP BY page ORDER BY cnt DESC LIMIT 30",
+        (d,),
+    ).fetchall()
+    # Scroll depth distribution
+    scroll_depth = conn.execute(
+        "SELECT json_extract(detail, '$.percent') as pct, COUNT(*) as cnt "
+        "FROM events WHERE ts >= date('now', ?) AND event='scroll_depth' "
+        "GROUP BY pct ORDER BY CAST(pct AS INTEGER)",
+        (d,),
+    ).fetchall()
+    # Outbound link clicks
+    outbound = conn.execute(
+        "SELECT json_extract(detail, '$.url') as url, label, COUNT(*) as cnt "
+        "FROM events WHERE ts >= date('now', ?) AND event='outbound_click' "
+        "GROUP BY url ORDER BY cnt DESC LIMIT 20",
+        (d,),
+    ).fetchall()
+    # FAQ toggles
+    faq_toggles = conn.execute(
+        "SELECT label, COUNT(*) as cnt FROM events "
+        "WHERE ts >= date('now', ?) AND event='faq_toggle' "
+        "GROUP BY label ORDER BY cnt DESC LIMIT 30",
+        (d,),
+    ).fetchall()
+    # Daily events
+    daily_events = conn.execute(
+        "SELECT date(ts) as day, COUNT(*) as cnt, "
+        "  SUM(CASE WHEN event='click' THEN 1 ELSE 0 END) as clicks, "
+        "  SUM(CASE WHEN event='page_exit' THEN 1 ELSE 0 END) as exits "
+        "FROM events WHERE ts >= date('now', ?) GROUP BY day ORDER BY day",
+        (d,),
+    ).fetchall()
+    return {
+        "total_events": total_events,
+        "event_types": [{"event": e, "count": c} for e, c in event_types],
+        "top_clicks": [
+            {"label": l, "page": p, "section": s, "count": c}
+            for l, p, s, c in top_clicks
+        ],
+        "section_views": [
+            {"section": s, "views": c, "visitors": v}
+            for s, c, v in section_views
+        ],
+        "exit_pages": [
+            {"page": p, "exits": c, "avg_engaged_s": e, "avg_scroll": s}
+            for p, c, e, s in exit_pages
+        ],
+        "scroll_depth": [{"percent": p, "count": c} for p, c in scroll_depth],
+        "outbound_clicks": [
+            {"url": u, "label": l, "count": c} for u, l, c in outbound
+        ],
+        "faq_toggles": [{"label": l, "count": c} for l, c in faq_toggles],
+        "daily_events": [
+            {"date": d, "total": t, "clicks": cl, "exits": ex}
+            for d, t, cl, ex in daily_events
+        ],
+    }
+
+
 @app.get("/api/admin/analytics")
 async def admin_analytics(request: Request):
     """Return server-side page view analytics for the admin dashboard."""
@@ -829,6 +921,7 @@ async def admin_analytics(request: Request):
             "daily": [{"date": d, "hits": h, "visitors": v} for d, h, v in daily],
             "referrers": [{"referer": r, "hits": h} for r, h in referrers],
             "countries": [{"country": c, "hits": h} for c, h in countries],
+            "events": _query_event_analytics(conn, days),
         }
     except Exception as exc:
         raise HTTPException(500, f"Analytics query failed: {exc}")
@@ -924,6 +1017,27 @@ def _analytics_connect() -> "sqlite3.Connection":
         _analytics_conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_pv_ts ON page_views(ts)"
         )
+        # Client-side behavioural events (clicks, scroll, exits, etc.)
+        _analytics_conn.execute(
+            "CREATE TABLE IF NOT EXISTS events ("
+            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),"
+            "  event TEXT NOT NULL,"
+            "  page TEXT NOT NULL,"
+            "  label TEXT,"
+            "  section TEXT,"
+            "  detail TEXT,"
+            "  ip_hash TEXT,"
+            "  country TEXT,"
+            "  ua TEXT"
+            ")"
+        )
+        _analytics_conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ev_ts ON events(ts)"
+        )
+        _analytics_conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ev_event ON events(event)"
+        )
         _analytics_conn.commit()
     return _analytics_conn
 
@@ -962,6 +1076,59 @@ async def analytics_middleware(request: Request, call_next):
     except Exception:
         logging.getLogger(__name__).debug("Analytics write failed", exc_info=True)
     return response
+
+
+# Allowed event names (whitelist to prevent abuse / junk data)
+_ALLOWED_EVENTS = frozenset({
+    "page_enter", "page_exit", "click", "outbound_click", "scroll_depth",
+    "heartbeat", "faq_toggle", "section_view", "form_submit", "field_focus",
+    "copy", "file_upload",
+})
+
+
+@app.post("/api/e")
+async def ingest_event(request: Request):
+    """Ingest a client-side behavioural event from analytics.js."""
+    try:
+        import json as _json
+        raw = await request.body()
+        if len(raw) > 4096:
+            return Response(status_code=204)
+        body = _json.loads(raw)
+    except Exception:
+        return Response(status_code=204)  # silently drop malformed payloads
+
+    event = str(body.get("event", ""))[:50]
+    if event not in _ALLOWED_EVENTS:
+        return Response(status_code=204)
+
+    page = str(body.get("page", ""))[:200]
+    label_val = str(body.get("label", ""))[:200]
+    section = str(body.get("section", ""))[:100]
+
+    # Pack remaining fields into a single JSON detail column
+    detail_keys = {
+        k: v for k, v in body.items()
+        if k not in ("event", "page", "ts", "label", "section") and v is not None
+    }
+    detail_json = _json.dumps(detail_keys, default=str)[:1000] if detail_keys else None
+
+    ip_raw = request.client.host if request.client else ""
+    ip_hash = hashlib.sha256(ip_raw.encode()).hexdigest()[:16] if ip_raw else ""
+    country = request.headers.get("fly-client-country", "")
+    ua = (request.headers.get("user-agent") or "")[:300]
+
+    try:
+        conn = _analytics_connect()
+        conn.execute(
+            "INSERT INTO events (event, page, label, section, detail, ip_hash, country, ua) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (event, page, label_val, section, detail_json, ip_hash, country, ua),
+        )
+        conn.commit()
+    except Exception:
+        logging.getLogger(__name__).debug("Event write failed", exc_info=True)
+    return Response(status_code=204)
 
 
 @app.post("/api/cleanup/{session_id}")

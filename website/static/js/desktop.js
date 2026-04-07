@@ -82,10 +82,12 @@ async function startDesktopCheckout() {
     }
 
     try {
+        const params = new URLSearchParams(window.location.search);
+        const ref = params.get('ref') || '';
         const res = await fetch('/api/desktop/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email }),
+            body: JSON.stringify({ email, ref }),
         });
         const data = await res.json();
         if (!res.ok) {

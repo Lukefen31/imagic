@@ -159,6 +159,32 @@ class AccountStore:
                         revoked INTEGER NOT NULL DEFAULT 0,
                         FOREIGN KEY(license_id) REFERENCES licenses(id) ON DELETE CASCADE
                     );
+
+                    CREATE TABLE IF NOT EXISTS partner_applications (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        platform TEXT NOT NULL,
+                        profile_url TEXT NOT NULL,
+                        audience_size TEXT NOT NULL,
+                        message TEXT,
+                        status TEXT NOT NULL DEFAULT 'pending',
+                        ref_code TEXT UNIQUE,
+                        license_key TEXT,
+                        created_at TEXT NOT NULL,
+                        reviewed_at TEXT
+                    );
+
+                    CREATE TABLE IF NOT EXISTS affiliate_referrals (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ref_code TEXT NOT NULL,
+                        stripe_session_id TEXT NOT NULL UNIQUE,
+                        sale_amount_cents INTEGER NOT NULL DEFAULT 0,
+                        commission_cents INTEGER NOT NULL DEFAULT 0,
+                        status TEXT NOT NULL DEFAULT 'pending',
+                        created_at TEXT NOT NULL,
+                        paid_at TEXT
+                    );
                     """
                 )
                 existing = {
@@ -819,6 +845,177 @@ class AccountStore:
             "sales_by_day": [dict(r) for r in sales_by_day],
             "variant_stats": [dict(r) for r in variant_stats],
         }
+
+    # ------------------------------------------------------------------
+    # Partner / affiliate programme
+    # ------------------------------------------------------------------
+
+    def create_partner_application(
+        self,
+        name: str,
+        email: str,
+        platform: str,
+        profile_url: str,
+        audience_size: str,
+        message: str,
+    ) -> dict:
+        clean_email = _normalise_email(email)
+        with self._lock:
+            conn = self._connect()
+            try:
+                # Reject duplicate applications from same email
+                existing = conn.execute(
+                    "SELECT id FROM partner_applications WHERE email = ? AND status IN ('pending','approved')",
+                    (clean_email,),
+                ).fetchone()
+                if existing:
+                    raise ValueError("An application for this email is already on file.")
+                conn.execute(
+                    """
+                    INSERT INTO partner_applications
+                        (name, email, platform, profile_url, audience_size, message, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+                    """,
+                    (name, clean_email, platform, profile_url, audience_size, message, _now_iso()),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        return {"ok": True}
+
+    def get_partner_applications(self, status: str = "") -> list[dict]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                if status:
+                    rows = conn.execute(
+                        "SELECT * FROM partner_applications WHERE status = ? ORDER BY created_at DESC",
+                        (status,),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT * FROM partner_applications ORDER BY created_at DESC"
+                    ).fetchall()
+            finally:
+                conn.close()
+        return [dict(r) for r in rows]
+
+    def approve_partner(self, application_id: int) -> dict:
+        """Approve a partner application: generate ref code & free license key."""
+        with self._lock:
+            conn = self._connect()
+            try:
+                app_row = conn.execute(
+                    "SELECT * FROM partner_applications WHERE id = ?",
+                    (application_id,),
+                ).fetchone()
+                if not app_row:
+                    raise ValueError("Application not found.")
+                if app_row["status"] == "approved":
+                    return dict(app_row)
+
+                # Generate a short ref code from their name
+                base = "".join(c for c in app_row["name"].lower() if c.isalnum())[:12]
+                ref_code = base or "partner"
+                # Ensure uniqueness
+                suffix = 0
+                candidate = ref_code
+                while conn.execute(
+                    "SELECT 1 FROM partner_applications WHERE ref_code = ?", (candidate,)
+                ).fetchone():
+                    suffix += 1
+                    candidate = f"{ref_code}{suffix}"
+                ref_code = candidate
+
+                # Issue a free desktop license
+                license_key = _generate_license_key("DESK")
+                conn.execute(
+                    """
+                    INSERT INTO licenses (license_key, product_type, credits_total, status, created_at)
+                    VALUES (?, 'desktop', 0, 'active', ?)
+                    """,
+                    (license_key, _now_iso()),
+                )
+
+                conn.execute(
+                    """
+                    UPDATE partner_applications
+                    SET status = 'approved', ref_code = ?, license_key = ?, reviewed_at = ?
+                    WHERE id = ?
+                    """,
+                    (ref_code, license_key, _now_iso(), application_id),
+                )
+                conn.commit()
+                result = conn.execute(
+                    "SELECT * FROM partner_applications WHERE id = ?",
+                    (application_id,),
+                ).fetchone()
+            finally:
+                conn.close()
+        return dict(result)
+
+    def reject_partner(self, application_id: int) -> None:
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "UPDATE partner_applications SET status = 'rejected', reviewed_at = ? WHERE id = ?",
+                    (_now_iso(), application_id),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def get_partner_by_ref_code(self, ref_code: str) -> dict | None:
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM partner_applications WHERE ref_code = ? AND status = 'approved'",
+                    (ref_code,),
+                ).fetchone()
+            finally:
+                conn.close()
+        return dict(row) if row else None
+
+    def record_affiliate_referral(
+        self, ref_code: str, stripe_session_id: str, sale_amount_cents: int
+    ) -> None:
+        commission_cents = int(sale_amount_cents * 0.15)
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO affiliate_referrals
+                        (ref_code, stripe_session_id, sale_amount_cents, commission_cents, status, created_at)
+                    VALUES (?, ?, ?, ?, 'pending', ?)
+                    """,
+                    (ref_code, stripe_session_id, sale_amount_cents, commission_cents, _now_iso()),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+    def get_affiliate_stats(self, ref_code: str) -> dict:
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    """
+                    SELECT
+                        COUNT(*) as total_referrals,
+                        COALESCE(SUM(sale_amount_cents), 0) as total_sales_cents,
+                        COALESCE(SUM(commission_cents), 0) as total_commission_cents,
+                        COALESCE(SUM(CASE WHEN status = 'pending' THEN commission_cents ELSE 0 END), 0) as unpaid_cents,
+                        COALESCE(SUM(CASE WHEN status = 'paid' THEN commission_cents ELSE 0 END), 0) as paid_cents
+                    FROM affiliate_referrals WHERE ref_code = ?
+                    """,
+                    (ref_code,),
+                ).fetchone()
+            finally:
+                conn.close()
+        return dict(row) if row else {}
 
 
 account_store = AccountStore()

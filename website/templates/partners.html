@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner Program - imagic | Influencers, Creators &amp; Affiliates</title>
+    <meta name="description" content="Join the imagic partner program. Get a free license key to review, earn 15% commission on every sale you refer, and help photographers discover a better editing workflow.">
+    <link rel="canonical" href="https://imagic.ink/partners">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://imagic.ink/partners">
+    <meta property="og:title" content="Partner Program - imagic">
+    <meta property="og:description" content="Free license key for creators. 15% affiliate commission on every sale you bring in.">
+    <meta property="og:site_name" content="imagic">
+
+    <link rel="icon" type="image/svg+xml" href="/static/img/imagic-app-icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <style>
+        .partners-hero {
+            padding: 80px 0 48px;
+            background: var(--bg-secondary);
+            text-align: center;
+        }
+        .partners-hero h1 { font-size: clamp(2rem, 5vw, 3rem); margin-bottom: 16px; }
+        .partners-hero p { color: var(--text-muted); font-size: 1.1rem; max-width: 640px; margin: 0 auto; line-height: 1.7; }
+
+        .partners-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 28px;
+            margin-top: 48px;
+        }
+        .partner-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 36px 28px;
+            text-align: center;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+        .partner-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+        }
+        .partner-card .card-icon {
+            width: 56px;
+            height: 56px;
+            background: rgba(99,102,241,0.1);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 1.5rem;
+            color: var(--accent);
+        }
+        .partner-card h3 { font-size: 1.2rem; margin-bottom: 10px; }
+        .partner-card p { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .how-it-works {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        .how-step {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 36px;
+            align-items: flex-start;
+        }
+        .how-step .step-num {
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: #fff;
+        }
+        .how-step h4 { font-size: 1.05rem; margin-bottom: 4px; }
+        .how-step p { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; margin: 0; }
+
+        .commission-highlight {
+            text-align: center;
+            padding: 40px 28px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(168,85,247,0.08));
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 20px;
+            margin: 48px 0;
+        }
+        .commission-highlight .big-pct {
+            font-size: clamp(3rem, 8vw, 4.5rem);
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+        .commission-highlight p { color: var(--text-secondary); font-size: 1.05rem; margin-top: 12px; max-width: 500px; margin-left: auto; margin-right: auto; }
+
+        .apply-section { text-align: center; }
+        .apply-form {
+            max-width: 560px;
+            margin: 32px auto 0;
+            text-align: left;
+        }
+        .apply-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+        .apply-field label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .apply-field input,
+        .apply-field select,
+        .apply-field textarea {
+            background: var(--bg-primary, #0d0d0d);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            padding: 10px 14px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .apply-field input:focus,
+        .apply-field select:focus,
+        .apply-field textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .apply-field textarea { resize: vertical; min-height: 90px; }
+        .apply-field select { cursor: pointer; }
+        .apply-submit { width: 100%; margin-top: 8px; padding: 12px; }
+        .apply-msg {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 0.9rem;
+            min-height: 1.4em;
+        }
+        .apply-msg.success { color: #22c55e; }
+        .apply-msg.error { color: #ef4444; }
+
+        .faq-list { max-width: 720px; margin: 0 auto; }
+        .faq-item {
+            border-bottom: 1px solid var(--border);
+            padding: 20px 0;
+        }
+        .faq-item:last-child { border-bottom: none; }
+        .faq-item h4 { font-size: 1rem; margin-bottom: 8px; }
+        .faq-item p { color: var(--text-secondary); font-size: 0.93rem; line-height: 1.6; margin: 0; }
+    </style>
+    {% if ga4_id %}<script async src="https://www.googletagmanager.com/gtag/js?id={{ ga4_id }}"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga4_id }}');</script>{% endif %}
+</head>
+<body>
+
+<nav class="navbar" id="navbar">
+    <div class="container">
+        <a href="/" class="navbar-brand navbar-brand-wide">
+            <img src="/static/img/imagic-wide-white.svg" alt="imagic" class="brand-logo-wide">
+        </a>
+        <ul class="navbar-links" id="nav-links">
+            <li><a href="/#why-switch">Why Switch</a></li>
+            <li><a href="/#showcase">How It Works</a></li>
+            <li><a href="/#pricing">Pricing</a></li>
+            <li><a href="/blog">Blog</a></li>
+            <li><a href="/about">About</a></li>
+        </ul>
+        <div class="navbar-actions">
+            <a href="/desktop" class="btn btn-primary btn-sm">Download Desktop</a>
+            <button class="hamburger" id="hamburger" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+</nav>
+
+<!-- Hero -->
+<div class="partners-hero">
+    <div class="container">
+        <h1><i class="fa-solid fa-handshake"></i> <span class="gradient-text">Partner Program</span></h1>
+        <p>
+            Are you a photographer, content creator, influencer, or educator?
+            Get a <strong>free license key</strong> to review imagic and earn
+            <strong>15% commission</strong> on every sale you refer.
+        </p>
+    </div>
+</div>
+
+<!-- What you get -->
+<section class="section">
+    <div class="container">
+        <div class="section-header" style="text-align:center; margin-bottom: 8px;">
+            <h2>What You Get</h2>
+        </div>
+        <div class="partners-grid">
+            <div class="partner-card">
+                <div class="card-icon"><i class="fa-solid fa-key"></i></div>
+                <h3>Free License Key</h3>
+                <p>Receive a complimentary desktop license to explore every feature. No strings attached &mdash; keep it forever.</p>
+            </div>
+            <div class="partner-card">
+                <div class="card-icon"><i class="fa-solid fa-percent"></i></div>
+                <h3>15% Commission</h3>
+                <p>Earn 15% of every sale that comes through your unique referral link. Paid out monthly with full transparency.</p>
+            </div>
+            <div class="partner-card">
+                <div class="card-icon"><i class="fa-solid fa-bullhorn"></i></div>
+                <h3>Early Access</h3>
+                <p>Be the first to try new features and updates before they go public. Your feedback shapes what we build next.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Commission highlight -->
+<section class="section" style="padding-top: 0;">
+    <div class="container">
+        <div class="commission-highlight">
+            <div class="big-pct">15%</div>
+            <h3 style="margin-top: 8px;">On Every Sale You Refer</h3>
+            <p>Every time someone purchases imagic through your unique link, you earn 15% of the sale. It's that simple &mdash; no caps, no limits.</p>
+        </div>
+    </div>
+</section>
+
+<!-- How it works -->
+<section class="section" style="padding-top: 0;">
+    <div class="container">
+        <div class="section-header" style="text-align:center; margin-bottom: 32px;">
+            <h2>How It Works</h2>
+        </div>
+        <div class="how-it-works">
+            <div class="how-step">
+                <div class="step-num">1</div>
+                <div>
+                    <h4>Apply Below</h4>
+                    <p>Fill out the short form &mdash; tell us who you are and where your audience lives. We review applications within 48 hours.</p>
+                </div>
+            </div>
+            <div class="how-step">
+                <div class="step-num">2</div>
+                <div>
+                    <h4>Get Your Key &amp; Link</h4>
+                    <p>Once approved, we'll email you a free license key and your unique referral link with a personal tracking code.</p>
+                </div>
+            </div>
+            <div class="how-step">
+                <div class="step-num">3</div>
+                <div>
+                    <h4>Share &amp; Create</h4>
+                    <p>Review imagic, create content, share your link. Whether it's a YouTube video, Instagram story, blog post, or tweet &mdash; anything goes.</p>
+                </div>
+            </div>
+            <div class="how-step">
+                <div class="step-num">4</div>
+                <div>
+                    <h4>Earn Commission</h4>
+                    <p>Every purchase through your link earns you 15%. Track your referrals and earnings in real time. Payouts are monthly via PayPal or bank transfer.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Who we're looking for -->
+<section class="section" style="padding-top: 0;">
+    <div class="container">
+        <div class="section-header" style="text-align:center; margin-bottom: 8px;">
+            <h2>Who We're Looking For</h2>
+        </div>
+        <div class="partners-grid">
+            <div class="partner-card">
+                <div class="card-icon"><i class="fa-solid fa-camera"></i></div>
+                <h3>Photographers</h3>
+                <p>Wedding, portrait, landscape, street &mdash; if you shoot and edit, you're exactly who imagic is built for.</p>
+            </div>
+            <div class="partner-card">
+                <div class="card-icon"><i class="fa-solid fa-video"></i></div>
+                <h3>YouTubers &amp; Creators</h3>
+                <p>Make tutorials, reviews, or workflow videos? We'd love your honest take on imagic for your audience.</p>
+            </div>
+            <div class="partner-card">
+                <div class="card-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                <h3>Educators &amp; Bloggers</h3>
+                <p>Teach photography or photo editing? Recommend a tool your students will actually enjoy using.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Application form -->
+<section class="section" id="apply">
+    <div class="container">
+        <div class="apply-section">
+            <div class="section-divider"></div>
+            <h2>Apply to the Partner Program</h2>
+            <p style="color: var(--text-muted); max-width: 540px; margin: 8px auto 0; line-height: 1.6;">
+                It only takes a minute. We'll review your application and get back to you within 48 hours.
+            </p>
+
+            <form class="apply-form" id="partnerForm" onsubmit="submitPartnerApp(event)">
+                <div class="apply-field">
+                    <label for="partner-name">Your Name</label>
+                    <input type="text" id="partner-name" placeholder="Full name" required maxlength="100">
+                </div>
+                <div class="apply-field">
+                    <label for="partner-email">Email Address</label>
+                    <input type="email" id="partner-email" placeholder="you@example.com" required>
+                </div>
+                <div class="apply-field">
+                    <label for="partner-platform">Primary Platform</label>
+                    <select id="partner-platform" required>
+                        <option value="" disabled selected>Select your main platform</option>
+                        <option value="youtube">YouTube</option>
+                        <option value="instagram">Instagram</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="blog">Blog / Website</option>
+                        <option value="twitter">X / Twitter</option>
+                        <option value="facebook">Facebook</option>
+                        <option value="podcast">Podcast</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="apply-field">
+                    <label for="partner-url">Profile or Channel URL</label>
+                    <input type="url" id="partner-url" placeholder="https://youtube.com/@yourchannel" required>
+                </div>
+                <div class="apply-field">
+                    <label for="partner-audience">Estimated Audience Size</label>
+                    <select id="partner-audience" required>
+                        <option value="" disabled selected>Select range</option>
+                        <option value="under-1k">Under 1,000</option>
+                        <option value="1k-10k">1,000 &ndash; 10,000</option>
+                        <option value="10k-50k">10,000 &ndash; 50,000</option>
+                        <option value="50k-100k">50,000 &ndash; 100,000</option>
+                        <option value="100k+">100,000+</option>
+                    </select>
+                </div>
+                <div class="apply-field">
+                    <label for="partner-message">Why You're Interested (optional)</label>
+                    <textarea id="partner-message" placeholder="Tell us a bit about your content and why you'd like to partner with imagic." maxlength="2000"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary apply-submit" id="partner-submit-btn">
+                    <i class="fa-solid fa-paper-plane"></i> Submit Application
+                </button>
+                <div class="apply-msg" id="partnerMsg"></div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section class="section" style="padding-top: 0;">
+    <div class="container">
+        <div class="section-header" style="text-align:center; margin-bottom: 32px;">
+            <h2>Frequently Asked Questions</h2>
+        </div>
+        <div class="faq-list">
+            <div class="faq-item">
+                <h4>Do I need a large audience to apply?</h4>
+                <p>Not at all. We welcome creators of all sizes. Quality of content matters more than follower count. Even micro-influencers with a dedicated photography audience are a great fit.</p>
+            </div>
+            <div class="faq-item">
+                <h4>How do I track my referrals?</h4>
+                <p>Once approved, you'll receive a unique referral code (e.g. <code>?ref=yourname</code>). Any purchase made through that link is automatically attributed to you. We'll provide a dashboard with real-time stats.</p>
+            </div>
+            <div class="faq-item">
+                <h4>When do I get paid?</h4>
+                <p>Commissions are calculated monthly and paid out by the 15th of the following month. Minimum payout threshold is $20. We support PayPal and bank transfer.</p>
+            </div>
+            <div class="faq-item">
+                <h4>Is there a limit on how much I can earn?</h4>
+                <p>No caps, no limits. The more sales you refer, the more you earn. It's uncapped and ongoing for as long as your referral link is active.</p>
+            </div>
+            <div class="faq-item">
+                <h4>Can I review honestly?</h4>
+                <p>Absolutely. We want genuine, honest reviews. imagic is in active beta and we know it's not perfect yet &mdash; candid feedback helps us improve. We never ask for scripted or misleading content.</p>
+            </div>
+            <div class="faq-item">
+                <h4>What if I'm not a photographer?</h4>
+                <p>If your audience includes photographers or creative professionals, you're welcome to apply. We're open to tech reviewers, productivity creators, and anyone in the visual content space.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="container">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <a href="/" class="navbar-brand navbar-brand-wide">
+                    <img src="/static/img/imagic-wide-white.svg" alt="imagic" class="brand-logo-wide">
+                </a>
+                <p>AI-powered photo culling and batch processing, shaped by photographer feedback and a fast-moving product roadmap.</p>
+                <div class="footer-social">
+                    <a href="https://github.com/Lukefen31/imagic" target="_blank" rel="noopener" aria-label="GitHub"><i class="fa-brands fa-github"></i></a>
+                    <a href="mailto:snap@imagic.ink" aria-label="Email"><i class="fa-solid fa-envelope"></i></a>
+                </div>
+            </div>
+            <div class="footer-col">
+                <h4>Product</h4>
+                <ul>
+                    <li><a href="/#why-switch">Why Switch</a></li>
+                    <li><a href="/#ai-assistant">AI Assistant</a></li>
+                    <li><a href="/#versions">Versions</a></li>
+                    <li><a href="/#pricing">Pricing</a></li>
+                    <li><a href="/desktop">Desktop Download</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h4>Resources</h4>
+                <ul>
+                    <li><a href="/blog">Blog</a></li>
+                    <li><a href="/about">About</a></li>
+                    <li><a href="/changelog">Changelog</a></li>
+                    <li><a href="/community">Community</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h4>Support</h4>
+                <ul>
+                    <li><a href="https://ko-fi.com/imagic" target="_blank" rel="noopener"><i class="fa-solid fa-mug-hot"></i> Buy Us a Coffee</a></li>
+                    <li><a href="/partners"><i class="fa-solid fa-handshake"></i> Partner Program</a></li>
+                    <li><a href="/contact">Contact</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <span>&copy; 2026 imagic. Built by Photographers For Photographers.</span>
+            <span>Shaped for Efficiency, Built with Attention to Detail</span>
+        </div>
+    </div>
+</footer>
+
+<script>
+document.getElementById('hamburger')?.addEventListener('click', () => {
+    document.getElementById('nav-links')?.classList.toggle('active');
+});
+
+async function submitPartnerApp(e) {
+    e.preventDefault();
+    const btn = document.getElementById('partner-submit-btn');
+    const msg = document.getElementById('partnerMsg');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+    msg.textContent = '';
+    msg.className = 'apply-msg';
+    try {
+        const res = await fetch('/api/partners/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: document.getElementById('partner-name').value.trim(),
+                email: document.getElementById('partner-email').value.trim(),
+                platform: document.getElementById('partner-platform').value,
+                profile_url: document.getElementById('partner-url').value.trim(),
+                audience_size: document.getElementById('partner-audience').value,
+                message: document.getElementById('partner-message').value.trim()
+            })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            msg.textContent = 'Application received! We\'ll review it and get back to you within 48 hours.';
+            msg.className = 'apply-msg success';
+            document.getElementById('partnerForm').reset();
+        } else {
+            msg.textContent = data.detail || 'Something went wrong. Please try again.';
+            msg.className = 'apply-msg error';
+        }
+    } catch {
+        msg.textContent = 'Network error. Please try again.';
+        msg.className = 'apply-msg error';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Application';
+    }
+}
+</script>
+
+<script src="/static/js/analytics.js"></script>
+</body>
+</html>

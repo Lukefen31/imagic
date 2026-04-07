@@ -198,6 +198,11 @@ async def contact_page(request: Request):
     return templates.TemplateResponse(request, "contact.html")
 
 
+@app.get("/partners", response_class=HTMLResponse)
+async def partners_page(request: Request):
+    return templates.TemplateResponse(request, "partners.html")
+
+
 @app.get("/sitemap.xml")
 async def sitemap():
     posts = get_published_posts()
@@ -208,6 +213,7 @@ async def sitemap():
         "<url><loc>https://imagic.ink/about</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>",
         "<url><loc>https://imagic.ink/changelog</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>",
         "<url><loc>https://imagic.ink/community</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>",
+        "<url><loc>https://imagic.ink/partners</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>",
         "<url><loc>https://imagic.ink/contact</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>",
     ]
     for post in posts:
@@ -1168,8 +1174,9 @@ async def desktop_checkout(request: Request):
     email = str(body.get("email", "")).strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "A valid delivery email is required.")
+    ref_code = str(body.get("ref", "")).strip()[:50]
     try:
-        url = create_desktop_checkout_session(_client_ip(request), email)
+        url = create_desktop_checkout_session(_client_ip(request), email, ref_code=ref_code)
         return {"checkout_url": url}
     except Exception as exc:
         raise HTTPException(500, f"Could not create desktop checkout session: {exc}")
@@ -1330,6 +1337,120 @@ async def submit_feedback(request: Request):
     except Exception:
         raise HTTPException(502, "Failed to send report. Please email snap@imagic.ink directly.")
 
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Partner / affiliate programme
+# ---------------------------------------------------------------------------
+
+_partner_limiter = RateLimiter(free_limit=3)  # 3 applications per IP per day
+
+
+@app.post("/api/partners/apply")
+async def partner_apply(request: Request):
+    """Accept a partner programme application."""
+    client_ip = _client_ip(request)
+    if _partner_limiter.remaining(client_ip) <= 0:
+        raise HTTPException(429, "Too many submissions. Please try again tomorrow.")
+    _partner_limiter.consume(client_ip)
+
+    body = await request.json()
+    name = str(body.get("name", "")).strip()[:100]
+    email = str(body.get("email", "")).strip()[:200]
+    platform = str(body.get("platform", "")).strip()[:50]
+    profile_url = str(body.get("profile_url", "")).strip()[:500]
+    audience_size = str(body.get("audience_size", "")).strip()[:20]
+    message = str(body.get("message", "")).strip()[:2000]
+
+    if not name:
+        raise HTTPException(400, "Name is required.")
+    if not email or "@" not in email:
+        raise HTTPException(400, "A valid email is required.")
+    if not platform:
+        raise HTTPException(400, "Platform is required.")
+    if not profile_url:
+        raise HTTPException(400, "Profile URL is required.")
+    if not audience_size:
+        raise HTTPException(400, "Audience size is required.")
+
+    try:
+        result = account_store.create_partner_application(
+            name=name, email=email, platform=platform,
+            profile_url=profile_url, audience_size=audience_size, message=message,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    # Notify via email
+    import smtplib
+    from email.message import EmailMessage as _EmailMessage
+
+    smtp_host = os.environ.get("IMAGIC_SMTP_HOST", "")
+    smtp_user = os.environ.get("IMAGIC_SMTP_USERNAME", "")
+    smtp_pass = os.environ.get("IMAGIC_SMTP_PASSWORD", "")
+    smtp_port = int(os.environ.get("IMAGIC_SMTP_PORT", "587"))
+    from_email = os.environ.get("IMAGIC_SMTP_FROM_EMAIL", smtp_user)
+
+    if all([smtp_host, smtp_user, smtp_pass]):
+        msg = _EmailMessage()
+        msg["Subject"] = f"[imagic Partner Application] {name}"
+        msg["From"] = from_email
+        msg["To"] = from_email
+        msg["Reply-To"] = email
+        msg.set_content(
+            f"Name: {name}\n"
+            f"Email: {email}\n"
+            f"Platform: {platform}\n"
+            f"Profile: {profile_url}\n"
+            f"Audience: {audience_size}\n"
+            f"IP: {client_ip}\n"
+            f"\n---\n\n{message or '(no message)'}"
+        )
+        try:
+            use_ssl = os.environ.get("IMAGIC_SMTP_USE_SSL", "false").lower() == "true"
+            if use_ssl:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+            else:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+                if os.environ.get("IMAGIC_SMTP_USE_TLS", "true").lower() == "true":
+                    server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+            server.quit()
+        except Exception:
+            pass  # Don't fail the application if email fails
+
+    return {"ok": True}
+
+
+@app.get("/api/admin/partners")
+async def admin_list_partners(request: Request):
+    """List partner applications (admin only)."""
+    if not _is_admin(request):
+        raise HTTPException(403, "Admin access required.")
+    status_filter = request.query_params.get("status", "")
+    return account_store.get_partner_applications(status_filter)
+
+
+@app.post("/api/admin/partners/{app_id}/approve")
+async def admin_approve_partner(request: Request, app_id: int):
+    """Approve a partner and generate their ref code + free key."""
+    if not _is_admin(request):
+        raise HTTPException(403, "Admin access required.")
+    try:
+        result = account_store.approve_partner(app_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return result
+
+
+@app.post("/api/admin/partners/{app_id}/reject")
+async def admin_reject_partner(request: Request, app_id: int):
+    """Reject a partner application."""
+    if not _is_admin(request):
+        raise HTTPException(403, "Admin access required.")
+    account_store.reject_partner(app_id)
     return {"ok": True}
 
 

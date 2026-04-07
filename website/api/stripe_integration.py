@@ -86,7 +86,7 @@ def create_checkout_session(client_ip: str, user_id: int) -> str:
     return session.url
 
 
-def create_desktop_checkout_session(client_ip: str, email: str) -> str:
+def create_desktop_checkout_session(client_ip: str, email: str, ref_code: str = "") -> str:
     """Create a Stripe Checkout session for an imagic Desktop purchase."""
     if not desktop_is_configured():
         raise RuntimeError(
@@ -97,17 +97,21 @@ def create_desktop_checkout_session(client_ip: str, email: str) -> str:
     if not clean_email or "@" not in clean_email:
         raise RuntimeError("A valid delivery email is required.")
 
+    checkout_metadata = {
+        "client_ip": client_ip,
+        "purchase_type": "desktop",
+        "delivery_email": clean_email,
+    }
+    if ref_code:
+        checkout_metadata["ref_code"] = ref_code
+
     session = stripe.checkout.Session.create(
         mode="payment",
         line_items=[{"price": DESKTOP_PRICE_ID, "quantity": 1}],
         success_url=f"{BASE_URL}/desktop/thanks?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{BASE_URL}/desktop?cancelled=1",
         customer_email=clean_email,
-        metadata={
-            "client_ip": client_ip,
-            "purchase_type": "desktop",
-            "delivery_email": clean_email,
-        },
+        metadata=checkout_metadata,
     )
     return session.url
 
@@ -223,6 +227,16 @@ def _handle_desktop_checkout_completed(session: dict) -> None:
         )
         account_store.mark_desktop_purchase_email_result(session_id, sent=True)
         logger.info("Desktop purchase fulfilled for %s", delivery_email)
+
+        # Track affiliate referral if applicable
+        ref_code = metadata.get("ref_code", "")
+        if ref_code:
+            amount_total = session.get("amount_total", 0)  # in cents
+            try:
+                account_store.record_affiliate_referral(ref_code, session_id, amount_total)
+                logger.info("Affiliate referral recorded: ref=%s session=%s amount=%s", ref_code, session_id, amount_total)
+            except Exception as exc:
+                logger.warning("Failed to record affiliate referral: %s", exc)
     except Exception as exc:
         account_store.mark_desktop_purchase_email_result(
             session_id,

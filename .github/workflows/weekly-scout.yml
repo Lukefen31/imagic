@@ -40,23 +40,29 @@ jobs:
           # Competitors and their release/changelog/what's-new pages
           COMPETITORS = {
               "Adobe Lightroom": [
-                  "https://helpx.adobe.com/lightroom-cc/using/whats-new.html",
-                  "https://helpx.adobe.com/lightroom-classic/using/whats-new.html",
+                  "https://www.adobe.com/products/photoshop-lightroom/features.html",
+                  "https://www.adobe.com/products/photoshop-lightroom-classic/features.html",
+                  "https://blog.adobe.com/en/topics/photography",
               ],
               "Capture One": [
                   "https://www.captureone.com/en/whats-new",
+                  "https://www.captureone.com/en/features",
               ],
               "DxO PhotoLab": [
                   "https://www.dxo.com/dxo-photolab/whats-new/",
+                  "https://www.dxo.com/dxo-photolab/features/",
               ],
               "Luminar Neo": [
-                  "https://skylum.com/luminar/whats-new",
+                  "https://skylum.com/luminar/features",
+                  "https://skylum.com/blog",
               ],
               "ON1 Photo RAW": [
                   "https://www.on1.com/products/photo-raw/whats-new/",
+                  "https://www.on1.com/products/photo-raw/features/",
               ],
               "darktable": [
                   "https://www.darktable.org/blog/",
+                  "https://www.darktable.org/about/features/",
               ],
           }
 

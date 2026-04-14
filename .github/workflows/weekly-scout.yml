@@ -1,0 +1,286 @@
+name: Weekly Competitive Intel
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC (1 hour after audit)
+  workflow_dispatch:        # Manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scout:
+    name: Competitive Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install --quiet requests beautifulsoup4
+
+      - name: Fetch competitor updates
+        id: fetch
+        run: |
+          python3 << 'PYEOF'
+          import json, re, sys, os
+          from datetime import datetime, timedelta
+          import requests
+          from bs4 import BeautifulSoup
+
+          HEADERS = {
+              "User-Agent": "Mozilla/5.0 (compatible; imagic-scout/1.0; competitive-analysis)"
+          }
+          TIMEOUT = 15
+
+          # Competitors and their release/changelog/what's-new pages
+          COMPETITORS = {
+              "Adobe Lightroom": [
+                  "https://helpx.adobe.com/lightroom-cc/using/whats-new.html",
+                  "https://helpx.adobe.com/lightroom-classic/using/whats-new.html",
+              ],
+              "Capture One": [
+                  "https://www.captureone.com/en/whats-new",
+              ],
+              "DxO PhotoLab": [
+                  "https://www.dxo.com/dxo-photolab/whats-new/",
+              ],
+              "Luminar Neo": [
+                  "https://skylum.com/luminar/whats-new",
+              ],
+              "ON1 Photo RAW": [
+                  "https://www.on1.com/products/photo-raw/whats-new/",
+              ],
+              "darktable": [
+                  "https://www.darktable.org/blog/",
+              ],
+          }
+
+          results = {}
+
+          for name, urls in COMPETITORS.items():
+              snippets = []
+              for url in urls:
+                  try:
+                      resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+                      resp.raise_for_status()
+                      soup = BeautifulSoup(resp.text, "html.parser")
+
+                      # Remove nav, footer, script, style
+                      for tag in soup(["nav", "footer", "script", "style", "header"]):
+                          tag.decompose()
+
+                      text = soup.get_text(separator="\n", strip=True)
+                      # Take first 3000 chars of meaningful content
+                      lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 20]
+                      snippet = "\n".join(lines[:80])
+                      if snippet:
+                          snippets.append({"url": url, "content": snippet[:3000]})
+                  except Exception as e:
+                      snippets.append({"url": url, "error": str(e)})
+
+              results[name] = snippets
+
+          # Write results for next step
+          output_path = os.environ.get("GITHUB_OUTPUT", "/dev/null")
+
+          with open("competitor_data.json", "w") as f:
+              json.dump(results, f, indent=2)
+
+          # Build summary
+          summary = []
+          for name, snippets in results.items():
+              ok = sum(1 for s in snippets if "content" in s)
+              err = sum(1 for s in snippets if "error" in s)
+              summary.append(f"- **{name}**: {ok} pages fetched, {err} errors")
+
+          summary_text = "\n".join(summary)
+          print(summary_text)
+
+          with open(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null"), "a") as f:
+              f.write("## Competitor Pages Fetched\n\n")
+              f.write(summary_text + "\n")
+          PYEOF
+
+      - name: Analyse and build report
+        id: report
+        run: |
+          python3 << 'PYEOF'
+          import json, os
+
+          with open("competitor_data.json") as f:
+              data = json.load(f)
+
+          # imagic's key features for comparison
+          IMAGIC_FEATURES = {
+              "AI culling / quality scoring",
+              "AI auto-enhance",
+              "AI auto white balance",
+              "Duplicate detection (perceptual hash)",
+              "Burst detection",
+              "Scene detection",
+              "CLIP content tagging",
+              "Subject/sky segmentation",
+              "Depth estimation",
+              "Super-resolution upscaling",
+              "Face detection",
+              "Crop tool",
+              "Manual masking (brush & lasso)",
+              "Before/after comparison",
+              "Live RGB histogram",
+              "Tonal controls (exposure, contrast, highlights, shadows, etc.)",
+              "Colour grading (temperature, tint, vibrance, saturation)",
+              "Colour grade presets (8 built-in)",
+              "Scene presets (5 built-in)",
+              "Sharpening & noise reduction",
+              "Vignette & grain",
+              "Batch export (JPEG, PNG, TIFF)",
+              "RawTherapee CLI integration",
+              "PP3 profile generation",
+              "XMP sidecar metadata",
+              "11+ RAW format support",
+              "100% local processing",
+              "One-time purchase ($10)",
+              "No subscription",
+              "Auto-update checker",
+              "SQLite photo library",
+              "Feedback learner (adaptive culling)",
+              "Variation engine",
+          }
+
+          # Keywords that signal features imagic might be missing
+          FEATURE_KEYWORDS = {
+              "AI denoise": ["ai denoise", "deepprimeai denoise", "deepprime", "ai noise reduction", "nonoise ai"],
+              "AI sky replacement": ["sky replacement", "sky ai", "replace sky", "sky swap"],
+              "AI object removal": ["generative remove", "content-aware remove", "generative erase", "generase", "object removal"],
+              "AI portrait enhancement": ["portrait bokeh", "face ai", "skin ai", "body ai", "portrait relight"],
+              "Lens correction profiles": ["lens correction", "lens profile", "optical correction", "distortion correction"],
+              "Tethered capture": ["tethered", "tethering", "live view", "capture from camera"],
+              "Cloud sync": ["cloud sync", "sync across devices", "cross-device", "cloud storage"],
+              "Mobile app": ["mobile app", "iphone", "ipad", "android app"],
+              "Keyword/tagging DAM": ["keyword", "keywording", "digital asset management", "smart album", "smart collection"],
+              "Watermarking": ["watermark"],
+              "Panorama stitching": ["panorama", "photo merge", "pano stitch"],
+              "HDR merge": ["hdr merge", "hdr photo", "merge to hdr"],
+              "Focus stacking": ["focus stacking", "focus merge"],
+              "Tone curve / curves": ["tone curve", "curves adjustment", "point curve", "parametric curve"],
+              "HSL colour mixer": ["hsl", "hue saturation luminance", "color mixer", "colour mixer"],
+              "Split toning": ["split toning", "color grading shadows highlights", "split tone"],
+              "Radial/graduated filters": ["radial filter", "graduated filter", "radial gradient", "linear gradient"],
+              "Healing/clone tool": ["healing brush", "clone stamp", "spot removal", "heal tool"],
+              "Soft proofing": ["soft proof", "color management", "print preview"],
+              "Map/GPS view": ["map view", "gps", "geolocation", "geotagging"],
+              "Facial recognition": ["facial recognition", "face recognition", "people tagging", "face tagging"],
+              "Video support": ["video editing", "video clip", "video support"],
+              "Plugin/extension system": ["plugin", "extension", "marketplace", "add-on"],
+              "Colour calibration (ColorChecker)": ["colorchecker", "color calibration", "camera calibration"],
+          }
+
+          report_lines = ["# Weekly Competitive Intelligence Report\n"]
+          report_lines.append(f"*Auto-generated on {os.popen('date -u +%Y-%m-%d').read().strip()}*\n")
+
+          detected_features = {}
+
+          for competitor, snippets in data.items():
+              report_lines.append(f"\n## {competitor}\n")
+
+              content_all = " ".join(
+                  s.get("content", "").lower() for s in snippets
+              )
+
+              if not content_all.strip():
+                  report_lines.append("*Could not fetch content — pages may be dynamic/JS-rendered.*\n")
+                  continue
+
+              found = []
+              for feature, keywords in FEATURE_KEYWORDS.items():
+                  for kw in keywords:
+                      if kw in content_all:
+                          found.append(feature)
+                          if feature not in detected_features:
+                              detected_features[feature] = []
+                          detected_features[feature].append(competitor)
+                          break
+
+              if found:
+                  report_lines.append("**Features detected that imagic may lack:**\n")
+                  for f in sorted(set(found)):
+                      report_lines.append(f"- {f}")
+              else:
+                  report_lines.append("*No new feature gaps detected from page content.*")
+
+              # Source URLs
+              sources = [s["url"] for s in snippets if "content" in s]
+              if sources:
+                  report_lines.append(f"\nSources: {', '.join(sources)}")
+
+          # Summary section
+          report_lines.append("\n\n---\n## Summary: Feature Gaps Across Competitors\n")
+          if detected_features:
+              report_lines.append("| Missing Feature | Competitors That Have It |")
+              report_lines.append("|----------------|------------------------|")
+              for feature, comps in sorted(detected_features.items(), key=lambda x: -len(x[1])):
+                  report_lines.append(f"| {feature} | {', '.join(sorted(set(comps)))} |")
+          else:
+              report_lines.append("*No feature gaps detected this week. Pages may need manual review.*")
+
+          report_lines.append("\n\n---\n## imagic's Competitive Advantages\n")
+          report_lines.append("These features give imagic an edge — emphasise in marketing:\n")
+          advantages = [
+              "**AI Culling with 5-metric scoring** — No competitor offers automated quality-based photo culling at this depth",
+              "**$10 one-time purchase** — vs $120+/year for Lightroom, $300 for Capture One",
+              "**100% local processing** — No cloud dependency, full privacy",
+              "**Feedback learner** — Adapts to user preferences over time",
+              "**Integrated 5-step workflow** — Import → Analyse → Review → Edit → Export in one window",
+              "**Burst detection + duplicate grouping** — Automated best-shot selection from burst groups",
+          ]
+          for a in advantages:
+              report_lines.append(f"- {a}")
+
+          report_lines.append("\n\n---\n*Review this report and invoke `@cto` to prioritise and implement missing features.*")
+
+          report_text = "\n".join(report_lines)
+
+          with open("scout_report.md", "w") as f:
+              f.write(report_text)
+
+          # Save for issue creation
+          # Truncate if too long for GitHub issue body (65536 char limit)
+          if len(report_text) > 60000:
+              report_text = report_text[:60000] + "\n\n*...report truncated...*"
+
+          with open(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null"), "a") as f:
+              f.write("\n" + report_text)
+
+          # Write report as output
+          with open("report_body.txt", "w") as f:
+              f.write(report_text)
+
+          # Check if there are any gaps worth reporting
+          has_gaps = "true" if detected_features else "false"
+          with open(os.environ.get("GITHUB_OUTPUT", "/dev/null"), "a") as f:
+              f.write(f"has_gaps={has_gaps}\n")
+              f.write(f"gap_count={len(detected_features)}\n")
+
+          print(f"Found {len(detected_features)} potential feature gaps across {len(data)} competitors.")
+          PYEOF
+
+      - name: Create issue with report
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('report_body.txt', 'utf8');
+            const date = new Date().toISOString().slice(0, 10);
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔍 Competitive Intel Report — ${date}`,
+              body: body,
+              labels: ['competitive-intel', 'automated']
+            });

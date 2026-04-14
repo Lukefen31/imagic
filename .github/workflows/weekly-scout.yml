@@ -126,24 +126,30 @@ jobs:
               "AI culling / quality scoring",
               "AI auto-enhance",
               "AI auto white balance",
+              "AI denoise (button + NR sliders)",
+              "AI smart sharpen",
+              "AI super-resolution upscaling",
+              "AI enhance details",
               "Duplicate detection (perceptual hash)",
               "Burst detection",
               "Scene detection",
               "CLIP content tagging",
-              "Subject/sky segmentation",
-              "Depth estimation",
-              "Super-resolution upscaling",
-              "Face detection",
+              "Subject/sky/people/background segmentation (rembg)",
+              "Depth estimation (MiDaS)",
+              "Face detection (OpenCV Haar)",
               "Crop tool",
               "Manual masking (brush & lasso)",
               "Before/after comparison",
               "Live RGB histogram",
               "Tonal controls (exposure, contrast, highlights, shadows, etc.)",
-              "Colour grading (temperature, tint, vibrance, saturation)",
+              "Tone curve (per-channel R/G/B/Luminance)",
+              "HSL colour mixer (8-channel)",
+              "Colour grading / split toning (shadow/highlight hue+sat+balance)",
               "Colour grade presets (8 built-in)",
               "Scene presets (5 built-in)",
-              "Sharpening & noise reduction",
+              "Sharpening & noise reduction (luminance + colour NR)",
               "Vignette & grain",
+              "Lens correction (distortion, CA, perspective)",
               "Batch export (JPEG, PNG, TIFF)",
               "RawTherapee CLI integration",
               "PP3 profile generation",
@@ -158,32 +164,36 @@ jobs:
               "Variation engine",
           }
 
-          # Keywords that signal features imagic might be missing
+          # Keywords that signal features imagic is genuinely missing.
+          # EXCLUDED (imagic already has these):
+          #   - AI denoise (photo_editor.py L2079, L3316 + NR sliders)
+          #   - Lens correction profiles (preview_engine.py L342, distortion/CA/perspective sliders)
+          #   - Tone curve / curves (photo_editor.py L1971, per-channel R/G/B)
+          #   - HSL colour mixer (photo_editor.py L1880-1911, 8-channel H/S/L)
+          #   - Split toning (photo_editor.py L1935-1950, shadow/highlight hue+sat+balance)
+          #   - Face detection (ai/face_detection.py)
+          #   - AI auto WB, AI sharpen, AI super-res, AI enhance details
+          #   - Subject/sky segmentation (ai/masking.py)
+          #   - Depth estimation (ai/depth.py)
           FEATURE_KEYWORDS = {
-              "AI denoise": ["ai denoise", "deepprimeai denoise", "deepprime", "ai noise reduction", "nonoise ai"],
-              "AI sky replacement": ["sky replacement", "sky ai", "replace sky", "sky swap"],
-              "AI object removal": ["generative remove", "content-aware remove", "generative erase", "generase", "object removal"],
-              "AI portrait enhancement": ["portrait bokeh", "face ai", "skin ai", "body ai", "portrait relight"],
-              "Lens correction profiles": ["lens correction", "lens profile", "optical correction", "distortion correction"],
-              "Tethered capture": ["tethered", "tethering", "live view", "capture from camera"],
-              "Cloud sync": ["cloud sync", "sync across devices", "cross-device", "cloud storage"],
-              "Mobile app": ["mobile app", "iphone", "ipad", "android app"],
-              "Keyword/tagging DAM": ["keyword", "keywording", "digital asset management", "smart album", "smart collection"],
+              "AI generative sky replacement": ["sky replacement", "sky swap", "replace sky"],
+              "AI generative object removal": ["generative remove", "content-aware remove", "generative erase", "generase", "content-aware fill"],
+              "AI portrait beautification": ["portrait relight", "skin smoothing", "body ai", "face retouch"],
+              "Tethered capture": ["tethered", "tethering", "capture from camera"],
+              "Cloud sync": ["cloud sync", "sync across devices", "cross-device sync", "cloud storage"],
+              "Mobile app": ["mobile app", "iphone app", "ipad app", "android app"],
               "Watermarking": ["watermark"],
-              "Panorama stitching": ["panorama", "photo merge", "pano stitch"],
-              "HDR merge": ["hdr merge", "hdr photo", "merge to hdr"],
+              "Panorama stitching": ["panorama", "photo merge panorama", "pano stitch"],
+              "HDR merge": ["hdr merge", "merge to hdr", "hdr bracketing"],
               "Focus stacking": ["focus stacking", "focus merge"],
-              "Tone curve / curves": ["tone curve", "curves adjustment", "point curve", "parametric curve"],
-              "HSL colour mixer": ["hsl", "hue saturation luminance", "color mixer", "colour mixer"],
-              "Split toning": ["split toning", "color grading shadows highlights", "split tone"],
-              "Radial/graduated filters": ["radial filter", "graduated filter", "radial gradient", "linear gradient"],
+              "Radial/graduated filters": ["radial filter", "graduated filter"],
               "Healing/clone tool": ["healing brush", "clone stamp", "spot removal", "heal tool"],
-              "Soft proofing": ["soft proof", "color management", "print preview"],
-              "Map/GPS view": ["map view", "gps", "geolocation", "geotagging"],
-              "Facial recognition": ["facial recognition", "face recognition", "people tagging", "face tagging"],
+              "Soft proofing": ["soft proof", "soft proofing"],
+              "Map/GPS view": ["map view", "geotagging", "geolocation view"],
+              "Facial recognition / people tagging": ["facial recognition", "face recognition", "people tagging", "face tagging"],
               "Video support": ["video editing", "video clip", "video support"],
-              "Plugin/extension system": ["plugin", "extension", "marketplace", "add-on"],
-              "Colour calibration (ColorChecker)": ["colorchecker", "color calibration", "camera calibration"],
+              "Plugin/extension system": ["plugin system", "extension marketplace", "add-on marketplace"],
+              "Colour calibration (ColorChecker)": ["colorchecker", "color calibration profile"],
           }
 
           report_lines = ["# Weekly Competitive Intelligence Report\n"]

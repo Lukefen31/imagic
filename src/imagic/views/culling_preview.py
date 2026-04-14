@@ -164,6 +164,7 @@ class _RawDecodeWorker(QThread):
     """Decode a RAW file to a full-resolution QPixmap in the background."""
 
     decoded = pyqtSignal(int, QPixmap)  # index, pixmap
+    decode_failed = pyqtSignal(int, str)  # index, error message
 
     def __init__(self, index: int, file_path: str, parent=None):
         super().__init__(parent)
@@ -172,8 +173,16 @@ class _RawDecodeWorker(QThread):
 
     def run(self) -> None:
         try:
-            import rawpy
             import numpy as np
+
+            suffix = Path(self._file_path).suffix.lower()
+            if suffix in (".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"):
+                pix = QPixmap(self._file_path)
+                if not pix.isNull():
+                    self.decoded.emit(self._index, pix)
+                    return
+
+            import rawpy
 
             with rawpy.imread(self._file_path) as raw:
                 rgb = raw.postprocess(
@@ -189,8 +198,11 @@ class _RawDecodeWorker(QThread):
             pix = QPixmap.fromImage(qimg)
             if not pix.isNull():
                 self.decoded.emit(self._index, pix)
+            else:
+                self.decode_failed.emit(self._index, "QPixmap conversion returned null")
         except Exception as exc:
-            logger.debug("RAW decode failed for gallery (%s): %s", self._file_path, exc)
+            logger.warning("RAW decode failed for gallery (%s): %s", self._file_path, exc)
+            self.decode_failed.emit(self._index, str(exc))
 
 
 # ======================================================================
@@ -448,7 +460,14 @@ class _CullingGalleryDialog(QDialog):
             # Let old thread finish on its own — no blocking wait.
         self._decode_worker = _RawDecodeWorker(index, file_path, self)
         self._decode_worker.decoded.connect(self._on_raw_decoded)
+        self._decode_worker.decode_failed.connect(self._on_raw_decode_failed)
         self._decode_worker.start()
+
+    def _on_raw_decode_failed(self, index: int, error: str) -> None:
+        """Slot called when background RAW decode fails."""
+        logger.warning("RAW decode failed for gallery index %d: %s", index, error)
+        if index == self._index:
+            self._loading_overlay.hide()
 
     def _on_raw_decoded(self, index: int, pix: QPixmap) -> None:
         """Slot called when background RAW decode finishes."""

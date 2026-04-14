@@ -149,15 +149,21 @@ class _BatchOptimizeWorker(QThread):
                     file_path = p.get("file_path", "")
                     if not file_path or not Path(file_path).is_file():
                         continue
-                    with rawpy.imread(file_path) as raw:
-                        rgb = raw.postprocess(
-                            use_camera_wb=True,
-                            no_auto_bright=True,
-                            output_bps=8,
-                            half_size=False,
-                            demosaic_algorithm=rawpy.DemosaicAlgorithm.AHD,
-                            output_color=rawpy.ColorSpace.sRGB,
-                        )
+                    suffix = Path(file_path).suffix.lower()
+                    if suffix in (".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"):
+                        from PIL import Image
+                        img = Image.open(file_path).convert("RGB")
+                        rgb = np.asarray(img, dtype=np.uint8)
+                    else:
+                        with rawpy.imread(file_path) as raw:
+                            rgb = raw.postprocess(
+                                use_camera_wb=True,
+                                no_auto_bright=True,
+                                output_bps=8,
+                                half_size=True,
+                                demosaic_algorithm=rawpy.DemosaicAlgorithm.DHT,
+                                output_color=rawpy.ColorSpace.sRGB,
+                            )
 
                 # Compute suggestions (same logic as _ai_optimize_all)
                 img = rgb.astype(np.float32) / 255.0
@@ -243,6 +249,7 @@ class _RawDecodeWorker(QThread):
     """Decode a RAW file to a numpy RGB array in the background."""
 
     decoded = pyqtSignal(int, object)  # index, numpy array (H, W, 3) uint8
+    decode_failed = pyqtSignal(int, str)  # index, error message
 
     def __init__(self, index: int, file_path: str, half_size: bool = True, parent=None):
         super().__init__(parent)
@@ -252,6 +259,15 @@ class _RawDecodeWorker(QThread):
 
     def run(self) -> None:
         try:
+            suffix = Path(self._file_path).suffix.lower()
+            # Non-RAW files — load with Pillow instead of rawpy
+            if suffix in (".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"):
+                from PIL import Image
+                img = Image.open(self._file_path).convert("RGB")
+                rgb = np.asarray(img, dtype=np.uint8)
+                self.decoded.emit(self._index, rgb)
+                return
+
             import rawpy
             with rawpy.imread(self._file_path) as raw:
                 rgb = raw.postprocess(
@@ -265,7 +281,8 @@ class _RawDecodeWorker(QThread):
                 )
             self.decoded.emit(self._index, rgb)
         except Exception as exc:
-            logger.debug("RAW decode failed: %s", exc)
+            logger.warning("RAW decode failed for %s: %s", self._file_path, exc)
+            self.decode_failed.emit(self._index, str(exc))
 
 
 class _ThumbDecodeWorker(QThread):
@@ -2336,6 +2353,7 @@ class PhotoEditorWidget(QWidget):
             if file_path and Path(file_path).is_file():
                 self._decode_worker = _RawDecodeWorker(index, file_path, half_size=True, parent=self)
                 self._decode_worker.decoded.connect(self._on_raw_decoded)
+                self._decode_worker.decode_failed.connect(self._on_raw_decode_failed)
                 self._decode_worker.start()
 
     @staticmethod
@@ -2355,6 +2373,15 @@ class PhotoEditorWidget(QWidget):
             pil = Image.fromarray(rgb)
             pil = pil.resize((new_w, new_h), Image.LANCZOS)
             return np.array(pil)
+
+    def _on_raw_decode_failed(self, index: int, error: str) -> None:
+        """RAW decode failed — dismiss overlay so the UI isn't stuck."""
+        logger.warning("RAW decode failed for index %d: %s", index, error)
+        if index == self._index:
+            self._optimize_btn.setEnabled(False)
+            self._optimize_btn.setText("⚠ Decode failed")
+            if self._ai_modal and not self._batch_worker:
+                self._ai_modal.hide_modal()
 
     def _on_raw_decoded(self, index: int, rgb: np.ndarray) -> None:
         """RAW decode complete — cache and show preview."""

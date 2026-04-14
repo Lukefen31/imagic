@@ -132,6 +132,7 @@ class _RawDecodeWorker(QThread):
     """Decode a RAW file to a QPixmap in the background."""
 
     decoded = pyqtSignal(QPixmap)
+    decode_failed = pyqtSignal(str)  # error message
 
     def __init__(self, file_path: str, parent=None):
         super().__init__(parent)
@@ -139,6 +140,13 @@ class _RawDecodeWorker(QThread):
 
     def run(self) -> None:
         try:
+            suffix = Path(self._file_path).suffix.lower()
+            if suffix in (".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"):
+                pix = QPixmap(self._file_path)
+                if not pix.isNull():
+                    self.decoded.emit(pix)
+                    return
+
             import rawpy
 
             with rawpy.imread(self._file_path) as raw:
@@ -157,8 +165,11 @@ class _RawDecodeWorker(QThread):
             pix = QPixmap.fromImage(qimg)
             if not pix.isNull():
                 self.decoded.emit(pix)
+            else:
+                self.decode_failed.emit("QPixmap conversion returned null")
         except Exception as exc:
-            logger.debug("RAW decode failed (%s): %s", self._file_path, exc)
+            logger.warning("RAW decode failed (%s): %s", self._file_path, exc)
+            self.decode_failed.emit(str(exc))
 
 
 class _FullPreviewDialog(QDialog):

@@ -42,6 +42,7 @@ class _RawDecodeWorker(QThread):
     """Decode a RAW file to a QPixmap in the background."""
 
     decoded = pyqtSignal(int, QPixmap)  # index, pixmap
+    decode_failed = pyqtSignal(int, str)  # index, error message
 
     def __init__(self, index: int, file_path: str, parent=None):
         super().__init__(parent)
@@ -50,6 +51,13 @@ class _RawDecodeWorker(QThread):
 
     def run(self) -> None:
         try:
+            suffix = Path(self._file_path).suffix.lower()
+            if suffix in (".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"):
+                pix = QPixmap(self._file_path)
+                if not pix.isNull():
+                    self.decoded.emit(self._index, pix)
+                    return
+
             import rawpy
 
             with rawpy.imread(self._file_path) as raw:
@@ -68,8 +76,11 @@ class _RawDecodeWorker(QThread):
             pix = QPixmap.fromImage(qimg)
             if not pix.isNull():
                 self.decoded.emit(self._index, pix)
+            else:
+                self.decode_failed.emit(self._index, "QPixmap conversion returned null")
         except Exception as exc:
-            logger.debug("RAW decode failed for viewer (%s): %s", self._file_path, exc)
+            logger.warning("RAW decode failed for viewer (%s): %s", self._file_path, exc)
+            self.decode_failed.emit(self._index, str(exc))
 
 
 # ======================================================================
@@ -454,7 +465,15 @@ class ImageViewerDialog(QDialog):
         idx = self._index
         self._decode_worker = _RawDecodeWorker(idx, file_path, self)
         self._decode_worker.decoded.connect(self._on_raw_decoded)
+        self._decode_worker.decode_failed.connect(self._on_raw_decode_failed)
         self._decode_worker.start()
+
+    def _on_raw_decode_failed(self, index: int, error: str) -> None:
+        """Slot: background decode failed — show message instead of hanging."""
+        logger.warning("RAW decode failed for viewer index %d: %s", index, error)
+        if index == self._index:
+            self._before_label.setText("⚠ Could not decode RAW")
+            self._before_label.setStyleSheet("background: #111; color: #c62828;")
 
     def _on_raw_decoded(self, index: int, pix: QPixmap) -> None:
         """Slot: background decode finished — cache and display."""

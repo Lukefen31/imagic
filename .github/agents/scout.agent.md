@@ -38,39 +38,80 @@ You are **imagic's Competitive Intelligence Analyst**. Your job is to research c
 
 **AI & Culling (our differentiator):**
 - 5-metric quality scoring (sharpness, exposure, noise, composition, detail)
-- Face quality detection (OpenCV Haar-based)
-- Perceptual hash duplicate detection + burst clustering
+- Face quality detection (OpenCV Haar-based, size/framing/sharpness/eye scoring)
+- Perceptual hash duplicate detection + burst clustering (EXIF timestamp)
 - Scene type detection (Portrait, Landscape, Night, Indoor, Macro)
 - CLIP-based content tagging (zero-shot semantic classification)
-- Subject/sky/people segmentation (rembg U2-Net)
+- Subject/sky/people/background segmentation (rembg U2-Net)
 - Depth estimation (MiDaS monocular)
 - Super-resolution (Real-ESRGAN / OpenCV DNN 2x/4x)
-- Feedback learner (improves auto-pick from user decisions)
+- Feedback learner (learns from user decisions to improve auto-pick)
+- Adaptive presets (auto-select PP3 profile per scene)
+- AI Visual Refinement (post-adjustment validation — prevents blown highlights, crushed blacks, etc.)
+- AI Variation engine (6 curated flavour offsets + seeded jitter)
+- AI Crop suggestion (automatic crop)
+- AI B&W conversion
 
 **Editing:**
 - Full tonal control (exposure, contrast, highlights, shadows, whites, blacks, clarity, dehaze)
-- Colour grading (temperature, tint, vibrance, saturation)
-- 8 colour grade presets + 5 scene presets
-- Detail (sharpening, luminance NR, colour NR, vignette, grain)
-- AI Auto-Enhance, Auto White Balance, Visual Refinement
-- Variation engine (6 curated flavour offsets)
-- Crop tool with aspect ratio lock + rule-of-thirds overlay
-- Manual masking (brush & lasso)
-- Before/After comparison
-- Live RGB histogram
+- Tone curve (interactive, per-channel R/G/B/Luminance)
+- HSL colour mixer (8-channel: Red, Orange, Yellow, Green, Aqua, Blue, Purple, Magenta)
+- Colour grading / split toning (shadow/highlight hue+sat+balance)
+- 3-way colour wheels (shadow/midtone/highlight + luminance sliders)
+- Temperature, tint, vibrance, saturation
+- 8 colour grade presets + intensity slider + batch apply
+- 5 scene presets (balanced, bright outdoor, high contrast, low light, portrait)
+- Texture slider, local contrast (radius + lightness), micro contrast
+- Sharpening (amount + radius) + luminance NR + colour NR
+- Vignette (amount + midpoint) + grain/film simulation + soft light
+- Lens correction (distortion, chromatic aberration, perspective H/V)
+- AI Auto-Enhance, Auto White Balance, Smart Sharpen, Denoise (button + sliders), Enhance Details
+- Crop tool with aspect ratio lock (1:1, 3:2, 4:3, 16:9) + rule-of-thirds overlay
+- Manual masking (brush & lasso with feathered blend)
+- Before/After comparison (side-by-side + vertical modes)
+- Live RGB histogram (luminance + per-channel)
+- Undo/redo (full edit history, Ctrl+Z/Y)
+- Copy/paste edits (clipboard for parameters across photos)
+- Custom preset save/load
+- Expert mode toggle (advanced RawTherapee controls)
+- Reset all edits (one-button)
+- Double-click slider to reset to default
+- Zoom controls (Fit, 50%, 100%, 200%, scroll wheel up to 400%)
+- Pan/drag when zoomed
+- Film strip (horizontal scrollable thumbnails)
+- Photo navigation (Prev/Next + keyboard arrows)
+- Photo info display (dimensions, ISO, shutter, etc.)
+- 14 keyboard shortcuts
+
+**Import & Organisation:**
+- Multi-format RAW (CR2, CR3, NEF, ARW, DNG, ORF, RW2, RAF, PEF, SRW, X3F, 3FR, IIQ, RWL, MRW + JPEG/PNG/TIFF/WebP)
+- Recursive folder scanning with symlink support
+- Already-imported file skip (deduplication on import)
+- Auto thumbnail generation
+- Import resume capability (crash-resilient)
+- Filter bar (status and score range filters)
+- Thumbnail grid with zoom (1-10 columns, Ctrl+Scroll)
+- Keep/Trash/Review status system with culling preview
+- SQLite library with crash-resilient status tracking
 
 **Export:**
-- RawTherapee CLI pipeline + native Python fallback
-- JPEG/PNG/TIFF with quality slider
-- Batch export with multi-threaded workers
+- RawTherapee CLI pipeline + native Python RAW fallback
+- JPEG/PNG/TIFF with format selection + quality slider (1-100)
+- Max file size enforcement (binary search quality optimisation)
+- ICC profile preservation
+- Batch export with multi-threaded worker pool
 - PP3 profile generation per photo
 - XMP sidecar metadata
+- Re-export failed photos
 
-**Other:**
+**Workflow & Platform:**
+- 5-step linear workflow (Import → Analyse → Review → Edit → Export)
+- Auto-advance between steps
+- Processing view (task status table with duration tracking)
 - One-time $10 purchase (no subscription)
 - 100% local processing (no cloud)
-- Auto-update checker
-- 5-step linear workflow (Import → Analyse → Review → Edit → Export)
+- Auto-update checker (background version detection)
+- License activation dialog
 
 ## Analysis Framework
 

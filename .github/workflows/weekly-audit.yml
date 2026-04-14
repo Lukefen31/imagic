@@ -1,0 +1,185 @@
+name: Weekly Code Audit
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Every Monday at 08:00 UTC
+  workflow_dispatch:        # Manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    name: Code Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1 libegl1 >/dev/null 2>&1 || true
+          pip install --quiet -r requirements.txt
+
+      - name: Compile check — all source files
+        id: compile
+        run: |
+          echo "## Compile Check" > $GITHUB_STEP_SUMMARY
+          errors=""
+          count=0
+          for f in $(find src/imagic -name '*.py'); do
+            if ! python -m py_compile "$f" 2>/tmp/pyc_err.txt; then
+              errors+="- ❌ \`$f\`: $(cat /tmp/pyc_err.txt)"$'\n'
+              count=$((count + 1))
+            fi
+          done
+          if [ $count -gt 0 ]; then
+            echo "$errors" >> $GITHUB_STEP_SUMMARY
+            echo "compile_errors<<EOF" >> $GITHUB_OUTPUT
+            echo "$errors" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "has_compile_errors=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ All source files compile clean." >> $GITHUB_STEP_SUMMARY
+            echo "has_compile_errors=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run test suite
+        id: tests
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          if python -m pytest tests/ -v --tb=short 2>&1 | tee /tmp/test_output.txt; then
+            echo "✅ All tests passed." >> $GITHUB_STEP_SUMMARY
+            echo "tests_passed=true" >> $GITHUB_OUTPUT
+          else
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -40 /tmp/test_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "test_failures<<EOF" >> $GITHUB_OUTPUT
+            grep -E "^FAILED|^ERROR" /tmp/test_output.txt >> $GITHUB_OUTPUT || true
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "tests_passed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Scan for silent exception swallowing
+        id: silent
+        run: |
+          echo "## Silent Exception Scan" >> $GITHUB_STEP_SUMMARY
+          # Find except blocks that only log at debug level or pass
+          hits=$(grep -rn -A2 'except.*:' src/imagic/ \
+            | grep -B1 -E '^\s*(pass|logger\.debug)' \
+            | grep -E 'except' \
+            | grep -v '__pycache__' || true)
+          if [ -n "$hits" ]; then
+            count=$(echo "$hits" | wc -l)
+            echo "⚠️ Found **$count** potentially silent exception handlers:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$hits" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "silent_count=$count" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No silent exception swallowing detected." >> $GITHUB_STEP_SUMMARY
+            echo "silent_count=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Scan for QThread workers missing error signals
+        id: qthread
+        run: |
+          echo "## QThread Worker Signal Check" >> $GITHUB_STEP_SUMMARY
+          # Find QThread subclasses and check if they have both success and failure signals
+          workers=$(grep -rln 'class.*QThread' src/imagic/ | grep -v '__pycache__' || true)
+          issues=""
+          for f in $workers; do
+            classes=$(grep -oP 'class \K\w+(?=.*QThread)' "$f" || true)
+            for cls in $classes; do
+              if ! grep -q 'decode_failed\|error\|failed\|failure' "$f" 2>/dev/null; then
+                issues+="- ⚠️ \`$f\` — class \`$cls\` may lack a failure signal"$'\n'
+              fi
+            done
+          done
+          if [ -n "$issues" ]; then
+            echo "$issues" >> $GITHUB_STEP_SUMMARY
+            echo "qthread_issues<<EOF" >> $GITHUB_OUTPUT
+            echo "$issues" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "✅ All QThread workers appear to have error signals." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check version consistency
+        id: version
+        run: |
+          echo "## Version Consistency" >> $GITHUB_STEP_SUMMARY
+          init_ver=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/imagic/__init__.py)
+          toml_ver=$(grep -oP '^version\s*=\s*"\K[^"]+' pyproject.toml)
+          if [ "$init_ver" = "$toml_ver" ]; then
+            echo "✅ Version \`$init_ver\` matches across \`__init__.py\` and \`pyproject.toml\`." >> $GITHUB_STEP_SUMMARY
+            echo "version=$init_ver" >> $GITHUB_OUTPUT
+            echo "version_mismatch=false" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Version mismatch: \`__init__.py\`=\`$init_ver\`, \`pyproject.toml\`=\`$toml_ver\`" >> $GITHUB_STEP_SUMMARY
+            echo "version_mismatch=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Security scan — hardcoded secrets
+        id: secrets
+        run: |
+          echo "## Security Scan" >> $GITHUB_STEP_SUMMARY
+          # Check for hardcoded API keys, tokens, passwords (excluding test files and .env examples)
+          hits=$(grep -rInE '(api_key|secret_key|password|token)\s*=\s*["\x27][^"\x27]{8,}' src/ website/ \
+            | grep -v '__pycache__' \
+            | grep -v 'os\.environ' \
+            | grep -v '\.get\(' \
+            | grep -v 'example\|placeholder\|changeme\|xxx\|test' || true)
+          if [ -n "$hits" ]; then
+            echo "⚠️ Possible hardcoded secrets:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$hits" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "has_secrets=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ No hardcoded secrets detected." >> $GITHUB_STEP_SUMMARY
+            echo "has_secrets=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create issue if problems found
+        if: |
+          steps.compile.outputs.has_compile_errors == 'true' ||
+          steps.tests.outputs.tests_passed == 'false' ||
+          steps.version.outputs.version_mismatch == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const lines = ['## Weekly Audit Report — ' + new Date().toISOString().slice(0, 10), ''];
+
+            if ('${{ steps.compile.outputs.has_compile_errors }}' === 'true') {
+              lines.push('### ❌ Compile Errors');
+              lines.push('${{ steps.compile.outputs.compile_errors }}'.replace(/\\n/g, '\n'));
+              lines.push('');
+            }
+            if ('${{ steps.tests.outputs.tests_passed }}' === 'false') {
+              lines.push('### ❌ Test Failures');
+              lines.push('```');
+              lines.push('${{ steps.tests.outputs.test_failures }}'.replace(/\\n/g, '\n'));
+              lines.push('```');
+              lines.push('');
+            }
+            if ('${{ steps.version.outputs.version_mismatch }}' === 'true') {
+              lines.push('### ❌ Version Mismatch');
+              lines.push('`__init__.py` and `pyproject.toml` have different version strings.');
+              lines.push('');
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔍 Weekly Audit: issues found (${new Date().toISOString().slice(0, 10)})`,
+              body: lines.join('\n'),
+              labels: ['audit', 'automated']
+            });

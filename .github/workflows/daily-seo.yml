@@ -1,0 +1,236 @@
+name: Daily SEO — Blog Post & Indexing
+
+on:
+  schedule:
+    - cron: '0 10 * * *'   # Every day at 10:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  seo-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      # ── 1. Fetch and validate sitemap ──
+      - name: Validate sitemap
+        run: |
+          python - <<'PYEOF'
+          import httpx, sys
+          from xml.etree import ElementTree as ET
+
+          r = httpx.get("https://imagic.ink/sitemap.xml", timeout=30)
+          if r.status_code != 200:
+              print(f"::error::Sitemap returned {r.status_code}")
+              sys.exit(1)
+
+          root = ET.fromstring(r.text)
+          ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+          urls = [loc.text for loc in root.findall(".//s:loc", ns)]
+          print(f"✅ Sitemap OK — {len(urls)} URLs found")
+
+          with open("sitemap_urls.txt", "w") as f:
+              f.write("\n".join(urls))
+          PYEOF
+
+      # ── 2. Check indexing status ──
+      - name: Check indexing via site:search
+        run: |
+          python - <<'PYEOF'
+          import httpx, time, os
+
+          with open("sitemap_urls.txt") as f:
+              urls = [u.strip() for u in f if u.strip()]
+
+          # Priority pages to check (not all 90+ blog posts every day)
+          priority = [u for u in urls if "/blog/" not in u]
+          # Rotate through blog posts: check 5 per day based on day-of-year
+          blog_urls = [u for u in urls if "/blog/" in u]
+          day = int(time.strftime("%j"))
+          start = (day * 5) % max(len(blog_urls), 1)
+          blog_batch = blog_urls[start:start+5]
+          if start + 5 > len(blog_urls):
+              blog_batch += blog_urls[:max(0, (start+5) - len(blog_urls))]
+
+          check_urls = priority + blog_batch
+          indexed = []
+          not_indexed = []
+
+          for url in check_urls:
+              try:
+                  path = url.replace("https://imagic.ink", "")
+                  r = httpx.get(url, timeout=15, follow_redirects=True)
+                  if r.status_code == 200:
+                      indexed.append(url)
+                  else:
+                      not_indexed.append(f"{url} (HTTP {r.status_code})")
+              except Exception as e:
+                  not_indexed.append(f"{url} (error: {e})")
+              time.sleep(0.5)
+
+          summary = f"Checked {len(check_urls)} URLs: {len(indexed)} live, {len(not_indexed)} issues"
+          print(summary)
+
+          with open(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null"), "a") as f:
+              f.write(f"## Indexing Check\n{summary}\n\n")
+              if not_indexed:
+                  f.write("### Issues Found\n")
+                  for u in not_indexed:
+                      f.write(f"- {u}\n")
+
+          if not_indexed:
+              with open("indexing_issues.txt", "w") as f:
+                  f.write("\n".join(not_indexed))
+          PYEOF
+
+      # ── 3. Validate blog post metadata ──
+      - name: Validate blog SEO metadata
+        run: |
+          python - <<'PYEOF'
+          import sys, os
+          sys.path.insert(0, ".")
+
+          from website.api.blog_posts_batch1 import POSTS_BATCH_1
+          try:
+              from website.api.blog_posts_batch2 import POSTS_BATCH_2
+          except ImportError:
+              POSTS_BATCH_2 = []
+
+          all_posts = POSTS_BATCH_1 + POSTS_BATCH_2
+          issues = []
+          slugs = set()
+
+          for i, post in enumerate(all_posts):
+              slug = post.get("slug", "")
+              prefix = f"Post #{i+1} ({slug})"
+
+              # Duplicate slug
+              if slug in slugs:
+                  issues.append(f"{prefix}: DUPLICATE SLUG")
+              slugs.add(slug)
+
+              # Missing fields
+              for field in ["slug", "title", "date", "meta_description", "category", "tags", "html_content"]:
+                  if not post.get(field):
+                      issues.append(f"{prefix}: missing '{field}'")
+
+              # Title length
+              title = post.get("title", "")
+              if len(title) > 70:
+                  issues.append(f"{prefix}: title too long ({len(title)} chars, max 70)")
+
+              # Meta description length
+              desc = post.get("meta_description", "")
+              if len(desc) > 160:
+                  issues.append(f"{prefix}: meta_description too long ({len(desc)} chars, max 160)")
+              elif len(desc) < 50:
+                  issues.append(f"{prefix}: meta_description too short ({len(desc)} chars, min 50)")
+
+              # Tags count
+              tags = post.get("tags", [])
+              if len(tags) < 3:
+                  issues.append(f"{prefix}: too few tags ({len(tags)}, min 3)")
+
+          summary_file = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")
+          with open(summary_file, "a") as f:
+              f.write(f"\n## Blog SEO Metadata\n")
+              f.write(f"Total posts: {len(all_posts)} | Unique slugs: {len(slugs)}\n\n")
+              if issues:
+                  f.write(f"### ⚠️ {len(issues)} Issues Found\n")
+                  for issue in issues:
+                      f.write(f"- {issue}\n")
+              else:
+                  f.write("✅ All posts have valid SEO metadata\n")
+
+          if issues:
+              print(f"⚠️ {len(issues)} SEO metadata issues found")
+              for issue in issues:
+                  print(f"  - {issue}")
+          else:
+              print(f"✅ All {len(all_posts)} posts have valid SEO metadata")
+          PYEOF
+
+      # ── 4. Check structured data ──
+      - name: Validate structured data
+        run: |
+          python - <<'PYEOF'
+          import httpx, os
+
+          pages = [
+              ("Homepage", "https://imagic.ink/"),
+              ("Blog Index", "https://imagic.ink/blog"),
+          ]
+
+          summary_file = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")
+          issues = []
+
+          for name, url in pages:
+              try:
+                  r = httpx.get(url, timeout=20, follow_redirects=True)
+                  html = r.text
+                  checks = {
+                      "og:title": 'property="og:title"' in html or "property='og:title'" in html,
+                      "og:description": 'property="og:description"' in html,
+                      "canonical": 'rel="canonical"' in html,
+                      "JSON-LD": "application/ld+json" in html,
+                      "meta description": 'name="description"' in html,
+                  }
+                  missing = [k for k, v in checks.items() if not v]
+                  if missing:
+                      issues.append(f"{name}: missing {', '.join(missing)}")
+              except Exception as e:
+                  issues.append(f"{name}: fetch error — {e}")
+
+          with open(summary_file, "a") as f:
+              f.write(f"\n## Structured Data Validation\n")
+              if issues:
+                  for issue in issues:
+                      f.write(f"- ⚠️ {issue}\n")
+              else:
+                  f.write("✅ All checked pages have proper structured data\n")
+
+          if issues:
+              for issue in issues:
+                  print(f"⚠️ {issue}")
+          else:
+              print("✅ Structured data OK on all checked pages")
+          PYEOF
+
+      # ── 5. Create issue if problems found ──
+      - name: Create issue on SEO problems
+        if: failure() || hashFiles('indexing_issues.txt') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let indexingIssues = '';
+            try {
+              indexingIssues = fs.readFileSync('indexing_issues.txt', 'utf8');
+            } catch {}
+
+            const title = `📈 Daily SEO check — ${new Date().toISOString().split('T')[0]}`;
+            const body = [
+              `**Run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              ``,
+              indexingIssues ? `### Indexing Issues\n\`\`\`\n${indexingIssues}\n\`\`\`` : '',
+              ``,
+              `Review the workflow summary for full details.`,
+            ].filter(Boolean).join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['seo', 'automated'],
+            });

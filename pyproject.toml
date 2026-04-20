@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "imagic"
-version = "0.4.3"
+version = "0.4.4"
 description = "Professional-grade photo editing orchestrator with AI-powered culling"
 readme = "README.md"
 license = {text = "MIT"}

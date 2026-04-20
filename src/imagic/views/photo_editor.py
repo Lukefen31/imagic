@@ -13,9 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from PyQt6.QtCore import (
@@ -30,7 +28,6 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QColor,
     QCursor,
-    QFont,
     QImage,
     QKeyEvent,
     QMouseEvent,
@@ -41,12 +38,9 @@ from PyQt6.QtGui import (
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
-    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
-    QFileDialog,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QInputDialog,
@@ -59,6 +53,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSlider,
     QSplitter,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -99,23 +94,30 @@ _SLIDER_STYLE = (
 )
 
 _GRADES = [
-    "natural", "film_warm", "film_cool", "moody",
-    "vibrant", "cinematic", "faded", "bw_classic",
+    "natural",
+    "film_warm",
+    "film_cool",
+    "moody",
+    "vibrant",
+    "cinematic",
+    "faded",
+    "bw_classic",
 ]
 
 # -- Colour-grade engine (shared with native export) ----------------------
+from imagic.services.editor_style_presets import get_editor_style_overrides
 from imagic.services.preview_engine import (
     GRADE_LUT as _GRADE_LUT,
-    GRADE_NULL as _GRADE_NULL,
+)
+from imagic.services.preview_engine import (
     PreviewEngine,
+)
+from imagic.services.preview_engine import (
     apply_color_grade as _apply_color_grade,
 )
-from imagic.services.editor_style_presets import get_editor_style_overrides
 from imagic.views.widgets.ai_loading_modal import AILoadingModal
-from imagic.views.widgets.tone_curve import ToneCurveWidget
 from imagic.views.widgets.color_wheels import ColorWheelsWidget
-
-
+from imagic.views.widgets.tone_curve import ToneCurveWidget
 
 # ======================================================================
 # Background RAW decoder
@@ -129,8 +131,13 @@ class _BatchOptimizeWorker(QThread):
     photo_optimized = pyqtSignal(int, dict, object)
     finished_all = pyqtSignal(int)  # number of errors
 
-    def __init__(self, photos: List[dict], rgb_cache: Dict[int, np.ndarray],
-                 user_style: Optional[dict] = None, parent=None):
+    def __init__(
+        self,
+        photos: list[dict],
+        rgb_cache: dict[int, np.ndarray],
+        user_style: dict | None = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._photos = photos
         self._rgb_cache = rgb_cache
@@ -152,6 +159,7 @@ class _BatchOptimizeWorker(QThread):
                     suffix = Path(file_path).suffix.lower()
                     if suffix in (".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"):
                         from PIL import Image
+
                         img = Image.open(file_path).convert("RGB")
                         rgb = np.asarray(img, dtype=np.uint8)
                     else:
@@ -189,6 +197,7 @@ class _BatchOptimizeWorker(QThread):
                 if mean_lum > 0.12:
                     try:
                         from scipy.ndimage import laplace
+
                         gray = np.mean(img, axis=2)
                         lap_var = float(np.var(laplace(gray)))
                         if lap_var < 0.0003:
@@ -263,12 +272,14 @@ class _RawDecodeWorker(QThread):
             # Non-RAW files — load with Pillow instead of rawpy
             if suffix in (".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"):
                 from PIL import Image
+
                 img = Image.open(self._file_path).convert("RGB")
                 rgb = np.asarray(img, dtype=np.uint8)
                 self.decoded.emit(self._index, rgb)
                 return
 
             import rawpy
+
             with rawpy.imread(self._file_path) as raw:
                 rgb = raw.postprocess(
                     use_camera_wb=True,
@@ -276,7 +287,9 @@ class _RawDecodeWorker(QThread):
                     output_bps=8,
                     half_size=self._half_size,
                     # DHT is faster than AHD with near-identical quality for preview
-                    demosaic_algorithm=rawpy.DemosaicAlgorithm.DHT if self._half_size else rawpy.DemosaicAlgorithm.AHD,
+                    demosaic_algorithm=rawpy.DemosaicAlgorithm.DHT
+                    if self._half_size
+                    else rawpy.DemosaicAlgorithm.AHD,
                     output_color=rawpy.ColorSpace.sRGB,
                 )
             self.decoded.emit(self._index, rgb)
@@ -290,7 +303,7 @@ class _ThumbDecodeWorker(QThread):
 
     thumb_ready = pyqtSignal(int, QPixmap)  # index, pixmap
 
-    def __init__(self, items: List[Tuple[int, str]], size: int = 80, parent=None):
+    def __init__(self, items: list[tuple[int, str]], size: int = 80, parent=None):
         super().__init__(parent)
         self._items = items
         self._size = size
@@ -310,10 +323,10 @@ class _ThumbDecodeWorker(QThread):
                 pass
 
 
-
 # ======================================================================
 # AI Auto-Enhance
 # ======================================================================
+
 
 def ai_auto_enhance(rgb: np.ndarray) -> dict:
     """Analyse the image and return suggested adjustment parameters."""
@@ -323,8 +336,8 @@ def ai_auto_enhance(rgb: np.ndarray) -> dict:
     lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
     mean_lum = float(np.mean(lum))
     std_lum = float(np.std(lum))
-    median_lum = float(np.median(lum))
-    p99 = float(np.percentile(lum, 99))
+    float(np.median(lum))
+    float(np.percentile(lum, 99))
 
     # Any image with mean luminance below 0.25 is "dark" — be conservative.
     # Most intentional dark scenes (clubs, concerts, night) fall here.
@@ -441,12 +454,12 @@ _VARIATION_RANGES: dict[str, int] = {
 # Curated "flavour" offsets — the first re-run picks flavour 0, second
 # picks flavour 1, etc.  After exhausting flavours, seeded jitter is used.
 _FLAVOURS: list[dict[str, int]] = [
-    {"contrast": 8, "clarity": 6, "vibrance": 5, "shadows": 5},      # punchier
-    {"contrast": -6, "exposure": 4, "highlights": -8, "dehaze": 6},   # softer / lifted
-    {"vibrance": 12, "saturation": 6, "temperature": -5},             # cooler & vivid
-    {"temperature": 6, "tint": 3, "vibrance": -5, "contrast": 5},     # warmer & muted
+    {"contrast": 8, "clarity": 6, "vibrance": 5, "shadows": 5},  # punchier
+    {"contrast": -6, "exposure": 4, "highlights": -8, "dehaze": 6},  # softer / lifted
+    {"vibrance": 12, "saturation": 6, "temperature": -5},  # cooler & vivid
+    {"temperature": 6, "tint": 3, "vibrance": -5, "contrast": 5},  # warmer & muted
     {"clarity": -10, "contrast": -4, "shadows": 10, "grain_amount": 8},  # dreamy / film
-    {"dehaze": 12, "contrast": 6, "blacks": -6, "clarity": 8},        # crisp & bold
+    {"dehaze": 12, "contrast": 6, "blacks": -6, "clarity": 8},  # crisp & bold
 ]
 
 
@@ -470,6 +483,7 @@ def vary_suggestions(base: dict, run: int, slider_ranges: dict[str, tuple] | Non
         return dict(base)
 
     import random
+
     result = dict(base)
 
     if run <= len(_FLAVOURS):
@@ -511,6 +525,7 @@ def ai_visual_refine(rgb: np.ndarray, suggestions: dict) -> dict:
         sh, sw = int(h * scale), int(w * scale)
         try:
             import cv2
+
             small = cv2.resize(rgb, (sw, sh), interpolation=cv2.INTER_AREA)
         except ImportError:
             # stride-based downsample
@@ -615,6 +630,7 @@ def ai_visual_refine(rgb: np.ndarray, suggestions: dict) -> dict:
     # --- Check 7: Over-sharpened / noisy detail ---
     try:
         from scipy.ndimage import laplace
+
         orig_gray = np.mean(orig, axis=2)
         opt_gray = np.mean(opt, axis=2)
         orig_lap = float(np.var(laplace(orig_gray)))
@@ -639,6 +655,7 @@ def ai_visual_refine(rgb: np.ndarray, suggestions: dict) -> dict:
 # Custom widgets
 # ======================================================================
 
+
 class _SliderRow(QWidget):
     """A labeled slider with value display. Emits value_changed(int)."""
 
@@ -646,8 +663,13 @@ class _SliderRow(QWidget):
     released = pyqtSignal()  # emitted when user finishes dragging
 
     def __init__(
-        self, label: str, lo: int, hi: int, default: int = 0,
-        suffix: str = "", parent: QWidget | None = None,
+        self,
+        label: str,
+        lo: int,
+        hi: int,
+        default: int = 0,
+        suffix: str = "",
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._default = default
@@ -670,7 +692,9 @@ class _SliderRow(QWidget):
         self._val = QLabel(str(default))
         self._val.setFixedWidth(32)
         self._val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._val.setStyleSheet(f"color: {_TEXT_MUTED}; font-size: 10px; font-family: 'Consolas', 'SF Mono', monospace;")
+        self._val.setStyleSheet(
+            f"color: {_TEXT_MUTED}; font-size: 10px; font-family: 'Consolas', 'SF Mono', monospace;"
+        )
         layout.addWidget(self._val)
 
         self._slider.valueChanged.connect(self._on_changed)
@@ -756,7 +780,7 @@ class _HistogramWidget(QWidget):
         super().__init__(parent)
         self.setFixedHeight(100)
         self.setMinimumWidth(180)
-        self._data: Optional[np.ndarray] = None
+        self._data: np.ndarray | None = None
 
     def update_histogram(self, rgb: np.ndarray) -> None:
         """Compute histogram from the RGB array."""
@@ -778,7 +802,11 @@ class _HistogramWidget(QWidget):
             return
 
         w, h = self.width(), self.height()
-        colors = [(QColor(220, 60, 60, 100), 0), (QColor(60, 180, 60, 100), 1), (QColor(60, 100, 220, 100), 2)]
+        colors = [
+            (QColor(220, 60, 60, 100), 0),
+            (QColor(60, 180, 60, 100), 1),
+            (QColor(60, 100, 220, 100), 2),
+        ]
 
         max_val = 1
         hists = []
@@ -787,7 +815,7 @@ class _HistogramWidget(QWidget):
             hists.append(hist)
             max_val = max(max_val, hist.max())
 
-        for (color, _), hist in zip(colors, hists):
+        for (color, _), hist in zip(colors, hists, strict=False):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(color)
             bin_w = w / 128
@@ -797,7 +825,11 @@ class _HistogramWidget(QWidget):
                 p.drawRect(x, h - bar_h, max(1, int(bin_w)), bar_h)
 
         # Luminance overlay
-        lum = (0.2126 * self._data[:, :, 0] + 0.7152 * self._data[:, :, 1] + 0.0722 * self._data[:, :, 2]).ravel()
+        lum = (
+            0.2126 * self._data[:, :, 0]
+            + 0.7152 * self._data[:, :, 1]
+            + 0.0722 * self._data[:, :, 2]
+        ).ravel()
         hist_l, _ = np.histogram(lum, bins=128, range=(0, 255))
         p.setPen(QPen(QColor(200, 200, 200, 140), 1))
         points = []
@@ -816,6 +848,8 @@ class _PreviewCanvas(QWidget):
 
     crop_changed = pyqtSignal(QRect)  # emitted when crop rect finalised
     zoom_changed = pyqtSignal()  # emitted on scroll-wheel zoom
+    rotation_changed = pyqtSignal(float)  # emitted during right-drag rotation
+    rotation_released = pyqtSignal()  # emitted when rotation drag ends
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -823,28 +857,33 @@ class _PreviewCanvas(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setStyleSheet(f"background: {_BG};")
 
-        self._pixmap: Optional[QPixmap] = None
+        self._pixmap: QPixmap | None = None
         self._zoom: float = 0  # 0 = fit
         self._pan_offset = QPoint(0, 0)
-        self._pan_start: Optional[QPoint] = None
+        self._pan_start: QPoint | None = None
         self._pan_start_offset = QPoint(0, 0)
 
         # Crop state
         self._crop_mode = False
-        self._crop_rect: Optional[QRect] = None  # in image coordinates
+        self._crop_rect: QRect | None = None  # in image coordinates
         self._crop_dragging = False
-        self._crop_start: Optional[QPoint] = None
+        self._crop_start: QPoint | None = None
         self._crop_forced_ratio: float = 0  # 0 = free crop
+        self._crop_rotate_mode = False
+        self._crop_rotate_start: QPoint | None = None
+        self._crop_rotation_base: float = 0.0
+        self._rotation_value: float = 0.0
+        self._rotate_sensitivity: float = 0.35  # degrees per pixel drag
 
         # Mask painting state
         self._mask_paint_mode = False
         self._mask_brush_size = 40  # pixels in image space
         self._mask_feather = 10  # feather radius in image space
         self._mask_erasing = False  # right-click erases
-        self._mask_canvas: Optional[np.ndarray] = None  # float32 H×W [0,1]
+        self._mask_canvas: np.ndarray | None = None  # float32 H×W [0,1]
         self._mask_strokes: list = []  # list of (x, y) tuples in image coords
         self._mask_lasso_points: list = []  # for lasso mode
-        self._mask_tool = "brush"  # "brush" | "lasso" 
+        self._mask_tool = "brush"  # "brush" | "lasso"
 
     def set_pixmap(self, pix: QPixmap) -> None:
         self._pixmap = pix
@@ -865,7 +904,7 @@ class _PreviewCanvas(QWidget):
         self.setCursor(Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor)
         self.update()
 
-    def get_crop_rect(self) -> Optional[QRect]:
+    def get_crop_rect(self) -> QRect | None:
         return self._crop_rect
 
     def clear_crop(self) -> None:
@@ -880,6 +919,10 @@ class _PreviewCanvas(QWidget):
     def set_crop_aspect_ratio(self, ratio: float) -> None:
         """Set the forced aspect ratio for crop dragging. 0 = free."""
         self._crop_forced_ratio = ratio
+
+    def set_rotation_value(self, angle: float) -> None:
+        """Keep the current rotation state in sync with the editor slider."""
+        self._rotation_value = float(angle)
 
     # -- Mask painting API --
 
@@ -898,6 +941,7 @@ class _PreviewCanvas(QWidget):
     def init_mask_canvas(self, h: int, w: int) -> None:
         """Create a blank mask canvas of given dimensions."""
         import numpy as np
+
         self._mask_canvas = np.zeros((h, w), dtype=np.float32)
         self._mask_lasso_points = []
         self._mask_strokes = []
@@ -915,7 +959,7 @@ class _PreviewCanvas(QWidget):
     def _paint_brush_stroke(self, img_pos, erase: bool = False) -> None:
         """Paint or erase a brush stroke at the given image position."""
         import cv2
-        import numpy as np
+
         if self._mask_canvas is None:
             return
         x, y = img_pos.x(), img_pos.y()
@@ -943,6 +987,7 @@ class _PreviewCanvas(QWidget):
         """Fill the lasso polygon and commit to mask canvas."""
         import cv2
         import numpy as np
+
         if self._mask_canvas is None or len(self._mask_lasso_points) < 3:
             self._mask_lasso_points = []
             return
@@ -1042,9 +1087,14 @@ class _PreviewCanvas(QWidget):
                 rgba = np.zeros((h, w, 4), dtype=np.uint8)
                 rgba[..., 0] = 255  # Red channel
                 rgba[..., 3] = (mc * 120).clip(0, 255).astype(np.uint8)  # Alpha from mask
-                mask_img = QImage(rgba.data, w, h, w * 4, QImage.Format.Format_RGBA8888)
-                mask_pix = QPixmap.fromImage(mask_img.copy())
-                p.drawPixmap(r, mask_pix)
+                # Ensure the QImage data remains valid while constructing the pixmap.
+                buf = bytes(rgba)
+                mask_img = QImage(buf, w, h, w * 4, QImage.Format.Format_RGBA8888)
+                if not mask_img.isNull():
+                    mask_pix = QPixmap.fromImage(mask_img.copy())
+                    p.drawPixmap(r, mask_pix)
+                else:
+                    logger.warning("Mask overlay QImage creation failed")
             # Draw lasso path in progress
             if self._mask_lasso_points and len(self._mask_lasso_points) > 1:
                 p.setPen(QPen(QColor(255, 255, 0, 180), 2, Qt.PenStyle.DashLine))
@@ -1056,9 +1106,14 @@ class _PreviewCanvas(QWidget):
             # Draw brush cursor
             if self._mask_tool == "brush" and self.underMouse():
                 cursor_pos = self.mapFromGlobal(QCursor.pos())
-                brush_widget_radius = max(2, int(
-                    self._mask_brush_size * r.width() / (self._pixmap.width() if self._pixmap else 1)
-                ))
+                brush_widget_radius = max(
+                    2,
+                    int(
+                        self._mask_brush_size
+                        * r.width()
+                        / (self._pixmap.width() if self._pixmap else 1)
+                    ),
+                )
                 p.setPen(QPen(QColor(255, 255, 255, 160), 1))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawEllipse(cursor_pos, brush_widget_radius, brush_widget_radius)
@@ -1085,6 +1140,12 @@ class _PreviewCanvas(QWidget):
                 self._pan_start_offset = QPoint(self._pan_offset)
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
         elif event.button() == Qt.MouseButton.RightButton:
+            if self._crop_mode and not self._mask_paint_mode:
+                self._crop_rotate_mode = True
+                self._crop_rotate_start = event.pos()
+                self._crop_rotation_base = self._rotation_value
+                self.setCursor(Qt.CursorShape.SizeAllCursor)
+                return
             if self._mask_paint_mode and self._mask_tool == "brush":
                 img_pos = self._widget_to_image(event.pos())
                 self._mask_erasing = True
@@ -1105,6 +1166,13 @@ class _PreviewCanvas(QWidget):
                 if self._mask_tool == "brush":
                     self._paint_brush_stroke(img_pos, erase=True)
                     self.update()
+            return
+        if self._crop_rotate_mode and self._crop_rotate_start is not None:
+            dx = event.pos().x() - self._crop_rotate_start.x()
+            new_angle = self._crop_rotation_base + dx * self._rotate_sensitivity
+            new_angle = max(-45.0, min(45.0, new_angle))
+            self._rotation_value = new_angle
+            self.rotation_changed.emit(new_angle)
             return
         if self._crop_dragging and self._crop_start is not None:
             current = self._widget_to_image(event.pos())
@@ -1148,8 +1216,18 @@ class _PreviewCanvas(QWidget):
                 if self._crop_mode:
                     self.setCursor(Qt.CursorShape.CrossCursor)
                 else:
-                    self.setCursor(Qt.CursorShape.OpenHandCursor if self._zoom != 0 else Qt.CursorShape.ArrowCursor)
+                    self.setCursor(
+                        Qt.CursorShape.OpenHandCursor
+                        if self._zoom != 0
+                        else Qt.CursorShape.ArrowCursor
+                    )
         elif event.button() == Qt.MouseButton.RightButton:
+            if self._crop_rotate_mode:
+                self._crop_rotate_mode = False
+                self._crop_rotate_start = None
+                self.rotation_released.emit()
+                self.setCursor(Qt.CursorShape.CrossCursor if self._crop_mode else Qt.CursorShape.ArrowCursor)
+                return
             if self._mask_paint_mode and self._mask_erasing:
                 self._mask_erasing = False
                 self.mask_updated.emit()
@@ -1196,7 +1274,9 @@ class _FilmStripItem(QWidget):
         self._img_label = QLabel()
         self._img_label.setFixedSize(size, size)
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._img_label.setStyleSheet(f"background: {_PANEL_BG}; border: 1px solid {_BORDER}; border-radius: 4px;")
+        self._img_label.setStyleSheet(
+            f"background: {_PANEL_BG}; border: 1px solid {_BORDER}; border-radius: 4px;"
+        )
         layout.addWidget(self._img_label)
 
         short = file_name[:8] + "…" if len(file_name) > 9 else file_name
@@ -1221,6 +1301,19 @@ class _FilmStripItem(QWidget):
         self.clicked.emit(self._index)
 
 
+class _FilmStripScrollArea(QScrollArea):
+    """Scroll area that converts vertical wheel events to horizontal scrolling."""
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        delta = event.angleDelta().y()
+        if delta != 0:
+            bar = self.horizontalScrollBar()
+            bar.setValue(bar.value() - delta)
+            event.accept()
+        else:
+            super().wheelEvent(event)
+
+
 class _FilmStrip(QWidget):
     """Horizontal scrollable film strip for photo navigation."""
 
@@ -1228,39 +1321,43 @@ class _FilmStrip(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setFixedHeight(90)
+        self._thumb_size = 64
+        self._item_height = self._thumb_size + 20
+        self.setFixedHeight(self._item_height + 10)
         self.setStyleSheet(f"background: {_BG}; border-top: 1px solid {_BORDER};")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 4)
         layout.setSpacing(0)
 
-        self._scroll = QScrollArea()
+        self._scroll = _FilmStripScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._scroll.setStyleSheet(
             "QScrollArea { border: none; background: transparent; }"
             "QScrollBar:horizontal { height: 4px; background: transparent; }"
-            f"QScrollBar::handle:horizontal {{ background: rgba(100, 100, 100, 0.3); border-radius: 2px; min-width: 30px; }}"
-            f"QScrollBar::handle:horizontal:hover {{ background: rgba(100, 100, 100, 0.6); }}"
+            "QScrollBar::handle:horizontal { background: rgba(100, 100, 100, 0.3); border-radius: 2px; min-width: 30px; }"
+            "QScrollBar::handle:horizontal:hover { background: rgba(100, 100, 100, 0.6); }"
             "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }"
             "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
         )
         layout.addWidget(self._scroll)
 
         self._container = QWidget()
+        self._container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._container.setFixedHeight(self._item_height)
         self._strip_layout = QHBoxLayout(self._container)
         self._strip_layout.setContentsMargins(0, 0, 0, 0)
         self._strip_layout.setSpacing(3)
         self._strip_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self._scroll.setWidget(self._container)
 
-        self._items: List[_FilmStripItem] = []
+        self._items: list[_FilmStripItem] = []
         self._current = -1
-        self._thumb_worker: Optional[_ThumbDecodeWorker] = None
+        self._thumb_worker: _ThumbDecodeWorker | None = None
 
-    def set_photos(self, photos: List[dict]) -> None:
+    def set_photos(self, photos: list[dict]) -> None:
         """Populate the strip with photo list."""
         # Clear
         for item in self._items:
@@ -1268,7 +1365,7 @@ class _FilmStrip(QWidget):
             item.deleteLater()
         self._items.clear()
 
-        thumb_tasks: List[Tuple[int, str]] = []
+        thumb_tasks: list[tuple[int, str]] = []
         for i, p in enumerate(photos):
             item = _FilmStripItem(i, p.get("file_name", ""))
             item.clicked.connect(self._on_item_clicked)
@@ -1306,6 +1403,7 @@ class _FilmStrip(QWidget):
 # Main Photo Editor Dialog
 # ======================================================================
 
+
 class PhotoEditorWidget(QWidget):
     """Professional Lightroom-style photo editor with live preview.
 
@@ -1322,7 +1420,7 @@ class PhotoEditorWidget(QWidget):
 
     def __init__(
         self,
-        photo_list: List[dict] | None = None,
+        photo_list: list[dict] | None = None,
         current_index: int = 0,
         parent: QWidget | None = None,
     ) -> None:
@@ -1332,27 +1430,27 @@ class PhotoEditorWidget(QWidget):
 
         self._photos = photo_list or []
         self._index = current_index
-        self._raw_rgb: Optional[np.ndarray] = None  # full-res decoded RAW
-        self._raw_rgb_preview: Optional[np.ndarray] = None  # downscaled for fast preview
-        self._preview_pix: Optional[QPixmap] = None
+        self._raw_rgb: np.ndarray | None = None  # full-res decoded RAW
+        self._raw_rgb_preview: np.ndarray | None = None  # downscaled for fast preview
+        self._preview_pix: QPixmap | None = None
         self._show_before = False
-        self._decode_worker: Optional[_RawDecodeWorker] = None
-        self._rgb_cache: Dict[int, np.ndarray] = {}
+        self._decode_worker: _RawDecodeWorker | None = None
+        self._rgb_cache: dict[int, np.ndarray] = {}
         self._RGB_CACHE_LIMIT = 5  # Max decoded RAW arrays in memory
-        self._prefetch_worker: Optional[_RawDecodeWorker] = None
+        self._prefetch_worker: _RawDecodeWorker | None = None
 
-        self._crop_rect: Optional[QRect] = None
+        self._crop_rect: QRect | None = None
 
         # Crop aspect ratio setting
         self._crop_aspect_ratio: str = "Free"
 
         # Undo / Redo stacks
-        self._undo_stack: List[dict] = []
-        self._redo_stack: List[dict] = []
-        self._last_committed_params: Optional[dict] = None
+        self._undo_stack: list[dict] = []
+        self._redo_stack: list[dict] = []
+        self._last_committed_params: dict | None = None
 
         # Clipboard for copy/paste edits
-        self._clipboard_params: Optional[dict] = None
+        self._clipboard_params: dict | None = None
 
         # Presets directory
         self._presets_dir = Path.home() / ".imagic" / "presets"
@@ -1366,7 +1464,7 @@ class PhotoEditorWidget(QWidget):
 
         # Flag: user requested AI optimize while RAW was still decoding
         self._pending_ai_optimize = False
-        self._batch_worker: Optional[_BatchOptimizeWorker] = None
+        self._batch_worker: _BatchOptimizeWorker | None = None
 
         # Track how many times each AI tool has been run per photo so
         # re-runs produce varied results.  Key = (photo_index, tool_name).
@@ -1374,23 +1472,30 @@ class PhotoEditorWidget(QWidget):
         self._batch_optimize_run: int = 0
 
         # Active AI mask for selective editing
-        self._active_mask: Optional[np.ndarray] = None
+        self._active_mask: np.ndarray | None = None
         self._active_mask_type = None
 
+        # Mask segment tab state
+        self._mask_global_params: dict | None = None   # global slider snapshot
+        self._mask_area_params: dict = {}              # masked-area slider state
+        self._mask_active_tab: int = 0                 # 0=Global, 1=Masked Area
+        self._mask_tab_bar: QTabBar | None = None
+
         # Currently running AI task worker (prevent GC + allow cancellation)
-        self._ai_worker: Optional[_AITaskWorker] = None
+        self._ai_worker: _AITaskWorker | None = None
 
         # AI loading overlay (created after _build_ui so it sits on top)
-        self._ai_modal: Optional[AILoadingModal] = None
+        self._ai_modal: AILoadingModal | None = None
 
         self._build_ui()
 
         # Lazy-create the modal so it overlays the full widget
         self._ai_modal = AILoadingModal(parent=self)
+        self._ai_modal.cancelled.connect(self._abort_ai_task)
         if self._photos:
             self._load_photo(self._index)
 
-    def set_photos(self, photo_list: List[dict], current_index: int = 0) -> None:
+    def set_photos(self, photo_list: list[dict], current_index: int = 0) -> None:
         """Update the photo list (used when embedding in single-window workflow)."""
         self._photos = photo_list
         self._rgb_cache.clear()
@@ -1410,9 +1515,23 @@ class PhotoEditorWidget(QWidget):
     def _stop_ai_worker(self) -> None:
         """Safely stop any running AI worker thread."""
         if self._ai_worker is not None and self._ai_worker.isRunning():
+            self._ai_worker.requestInterruption()
             self._ai_worker.quit()
             self._ai_worker.wait(3000)
+            if self._ai_worker.isRunning():
+                self._ai_worker.terminate()
+                self._ai_worker.wait(2000)
         self._ai_worker = None
+
+    def _abort_ai_task(self) -> None:
+        """Abort a running AI task when the loading modal is cancelled."""
+        if self._ai_modal:
+            self._ai_modal.hide_modal()
+        if self._ai_worker is not None and self._ai_worker.isRunning():
+            self._ai_worker.terminate()
+            self._ai_worker.wait(2000)
+            self._ai_worker = None
+        QMessageBox.information(self, "AI Masking", "AI masking was cancelled.")
 
     def closeEvent(self, event) -> None:
         """Clean up threads before closing."""
@@ -1426,6 +1545,11 @@ class PhotoEditorWidget(QWidget):
         if self._batch_worker and self._batch_worker.isRunning():
             self._batch_worker.quit()
             self._batch_worker.wait(2000)
+
+        batch = self._collect_manual_edit_batch()
+        if batch:
+            self.edits_saved.emit(batch)
+
         super().closeEvent(event)
 
     # ------------------------------------------------------------------
@@ -1458,7 +1582,9 @@ class PhotoEditorWidget(QWidget):
 
         hist_label = QLabel("HISTOGRAM")
         hist_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hist_label.setStyleSheet(f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;")
+        hist_label.setStyleSheet(
+            f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;"
+        )
         left_layout.addWidget(hist_label)
 
         self._histogram = _HistogramWidget()
@@ -1474,7 +1600,9 @@ class PhotoEditorWidget(QWidget):
 
         # Zoom controls
         zoom_lbl = QLabel("ZOOM")
-        zoom_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;")
+        zoom_lbl.setStyleSheet(
+            f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;"
+        )
         zoom_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         left_layout.addWidget(zoom_lbl)
 
@@ -1501,7 +1629,9 @@ class PhotoEditorWidget(QWidget):
         # Keyboard shortcuts
         shortcuts_lbl = QLabel("SHORTCUTS")
         shortcuts_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        shortcuts_lbl.setStyleSheet(f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;")
+        shortcuts_lbl.setStyleSheet(
+            f"color: {_TEXT_DIM}; font-weight: 600; font-size: 9px; letter-spacing: 1.5px;"
+        )
         left_layout.addWidget(shortcuts_lbl)
 
         shortcuts_text = QLabel(
@@ -1511,6 +1641,7 @@ class PhotoEditorWidget(QWidget):
             "1     100% zoom\n"
             "2     200% zoom\n"
             "C     Toggle crop\n"
+            "Right-drag Rotate while cropping\n"
             "Enter Apply crop\n"
             "Del   Trash photo\n"
             "Ctrl+Z/Y  Undo/Redo\n"
@@ -1528,6 +1659,8 @@ class PhotoEditorWidget(QWidget):
         self._canvas = _PreviewCanvas()
         self._canvas.crop_changed.connect(self._on_crop_changed)
         self._canvas.zoom_changed.connect(self._on_zoom_changed)
+        self._canvas.rotation_changed.connect(self._on_rotate_changed)
+        self._canvas.rotation_released.connect(self._commit_undo_state)
         main_splitter.addWidget(self._canvas)
 
         # Right sidebar: editing panels (scrollable)
@@ -1542,10 +1675,10 @@ class PhotoEditorWidget(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet(
-            f"QScrollArea {{ border: none; background: transparent; }}"
+            "QScrollArea { border: none; background: transparent; }"
             "QScrollBar:vertical { width: 5px; background: transparent; margin: 2px 0; }"
-            f"QScrollBar::handle:vertical {{ background: rgba(100, 100, 100, 0.3); border-radius: 2px; min-height: 40px; }}"
-            f"QScrollBar::handle:vertical:hover {{ background: rgba(100, 100, 100, 0.6); }}"
+            "QScrollBar::handle:vertical { background: rgba(100, 100, 100, 0.3); border-radius: 2px; min-height: 40px; }"
+            "QScrollBar::handle:vertical:hover { background: rgba(100, 100, 100, 0.6); }"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
             "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
         )
@@ -1555,11 +1688,27 @@ class PhotoEditorWidget(QWidget):
         self._panels_layout.setContentsMargins(0, 0, 0, 0)
         self._panels_layout.setSpacing(0)
 
-        self._sliders: Dict[str, _SliderRow] = {}
+        self._sliders: dict[str, _SliderRow] = {}
         self._build_panels()
 
         self._panels_layout.addStretch()
         scroll.setWidget(panels_widget)
+
+        # Mask segment tab bar — hidden until a mask is set
+        self._mask_tab_bar = QTabBar()
+        self._mask_tab_bar.addTab("Global")
+        self._mask_tab_bar.addTab("✦ Masked Area")
+        self._mask_tab_bar.setStyleSheet(
+            f"QTabBar::tab {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+            f"padding: 7px 16px; border: 1px solid {_BORDER}; "
+            f"border-bottom: none; font-size: 10px; }}"
+            f"QTabBar::tab:selected {{ background: {_ACCENT}; color: #111; font-weight: 600; }}"
+            f"QTabBar::tab:hover:!selected {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
+        )
+        self._mask_tab_bar.hide()
+        self._mask_tab_bar.currentChanged.connect(self._on_mask_tab_changed)
+        right_layout.addWidget(self._mask_tab_bar)
+
         right_layout.addWidget(scroll)
 
         main_splitter.addWidget(right)
@@ -1576,9 +1725,7 @@ class PhotoEditorWidget(QWidget):
     def _build_toolbar(self) -> QWidget:
         toolbar = QWidget()
         toolbar.setFixedHeight(44)
-        toolbar.setStyleSheet(
-            f"background: {_PANEL_BG}; border-bottom: 1px solid {_BORDER};"
-        )
+        toolbar.setStyleSheet(f"background: {_PANEL_BG}; border-bottom: 1px solid {_BORDER};")
         layout = QHBoxLayout(toolbar)
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(6)
@@ -1650,9 +1797,9 @@ class PhotoEditorWidget(QWidget):
         # AI Suggest Crop button (hidden until crop mode enabled)
         self._ai_crop_btn = QPushButton("🤖 AI Crop")
         self._ai_crop_btn.setStyleSheet(
-            f"QPushButton {{ background: rgba(50, 40, 30, 0.6); color: #e8a050; font-weight: 600; "
-            f"border: 1px solid rgba(232, 149, 48, 0.3); border-radius: 5px; padding: 4px 12px; font-size: 10px; }}"
-            f"QPushButton:hover {{ background: rgba(60, 48, 30, 0.8); }}"
+            "QPushButton { background: rgba(50, 40, 30, 0.6); color: #e8a050; font-weight: 600; "
+            "border: 1px solid rgba(232, 149, 48, 0.3); border-radius: 5px; padding: 4px 12px; font-size: 10px; }"
+            "QPushButton:hover { background: rgba(60, 48, 30, 0.8); }"
         )
         self._ai_crop_btn.setToolTip("Let AI suggest the best crop for this photo")
         self._ai_crop_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -1662,9 +1809,9 @@ class PhotoEditorWidget(QWidget):
 
         # Aspect ratio combo (hidden until crop mode enabled)
         self._crop_ratio_combo = QComboBox()
-        self._crop_ratio_combo.addItems([
-            "Free", "Original", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"
-        ])
+        self._crop_ratio_combo.addItems(
+            ["Free", "Original", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"]
+        )
         self._crop_ratio_combo.setStyleSheet(
             f"QComboBox {{ background: {_BTN_BG}; color: {_TEXT}; "
             f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 3px 8px; font-size: 10px; }}"
@@ -1796,8 +1943,8 @@ class PhotoEditorWidget(QWidget):
         self._grade_grid_scroll.setWidgetResizable(True)
         self._grade_grid_scroll.setFixedHeight(220)
         self._grade_grid_scroll.setStyleSheet(
-            f"QScrollArea {{ border: none; background: transparent; }}"
-            f"QScrollArea > QWidget > QWidget {{ background: transparent; }}"
+            "QScrollArea { border: none; background: transparent; }"
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
         )
         self._grade_grid_widget = QWidget()
         self._grade_grid_layout = QGridLayout(self._grade_grid_widget)
@@ -1833,7 +1980,9 @@ class PhotoEditorWidget(QWidget):
             f"border: none; border-radius: 4px; padding: 4px 10px; font-size: 10px; font-weight: 600; }}"
             f"QPushButton:hover {{ background: {_GREEN_HOVER}; }}"
         )
-        self._grade_apply_all.setToolTip("Apply current color grade + intensity to all photos in batch")
+        self._grade_apply_all.setToolTip(
+            "Apply current color grade + intensity to all photos in batch"
+        )
         self._grade_apply_all.clicked.connect(self._grade_save_all)
         self._grade_apply_all.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         btn_row.addWidget(self._grade_apply_all)
@@ -1973,7 +2122,9 @@ class PhotoEditorWidget(QWidget):
         self._tone_curve_widget.curve_changed.connect(self._commit_undo_state)
         sec.add_widget(self._tone_curve_widget)
 
-        curve_info = QLabel("Click to add • Drag to move • Right-click to remove • Double-click to reset")
+        curve_info = QLabel(
+            "Click to add • Drag to move • Right-click to remove • Double-click to reset"
+        )
         curve_info.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 9px;")
         curve_info.setWordWrap(True)
         sec.add_widget(curve_info)
@@ -2036,6 +2187,7 @@ class PhotoEditorWidget(QWidget):
         # Rotation slider
         rot_s = _SliderRow("Rotation", -45, 45, 0)
         rot_s.value_changed.connect(self._schedule_preview)
+        rot_s.value_changed.connect(lambda slider=rot_s: self._canvas.set_rotation_value(float(slider.value())))
         rot_s.released.connect(self._commit_undo_state)
         sec.add_widget(rot_s)
         self._sliders["rotation"] = rot_s
@@ -2051,6 +2203,24 @@ class PhotoEditorWidget(QWidget):
             s.released.connect(self._commit_undo_state)
             sec.add_widget(s)
             self._sliders[key] = s
+        self._panels_layout.addWidget(sec)
+
+        # ═══════════ TOOLS ═══════════
+        sec = _CollapsibleSection("TOOLS")
+
+        tool_btn_style = (
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+            f"border: 1px solid {_BORDER}; border-radius: 5px; padding: 7px 12px; font-size: 10px; }}"
+            f"QPushButton:hover {{ background: {_ACCENT_DIM}; color: {_TEXT}; "
+            f"border-color: rgba(232, 149, 48, 0.25); }}"
+        )
+
+        manual_mask_btn = QPushButton("✏️ Manual Masking")
+        manual_mask_btn.setStyleSheet(tool_btn_style)
+        manual_mask_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        manual_mask_btn.clicked.connect(self._manual_masking)
+        sec.add_widget(manual_mask_btn)
+
         self._panels_layout.addWidget(sec)
 
         # ═══════════ AI TOOLS ═══════════
@@ -2105,12 +2275,6 @@ class PhotoEditorWidget(QWidget):
         ai_mask_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         ai_mask_btn.clicked.connect(self._ai_masking)
         sec.add_widget(ai_mask_btn)
-
-        manual_mask_btn = QPushButton("✏️ Manual Masking")
-        manual_mask_btn.setStyleSheet(ai_btn_style)
-        manual_mask_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        manual_mask_btn.clicked.connect(self._manual_masking)
-        sec.add_widget(manual_mask_btn)
 
         ai_blur_btn = QPushButton("📷 AI Lens Blur (Bokeh)")
         ai_blur_btn.setStyleSheet(ai_btn_style)
@@ -2248,7 +2412,9 @@ class PhotoEditorWidget(QWidget):
         wp_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 10px;")
         wp_row.addWidget(wp_lbl)
         self._working_profile_combo = QComboBox()
-        self._working_profile_combo.addItems(["ProPhoto", "sRGB", "Adobe RGB", "WideGamut", "BestRGB", "Rec2020"])
+        self._working_profile_combo.addItems(
+            ["ProPhoto", "sRGB", "Adobe RGB", "WideGamut", "BestRGB", "Rec2020"]
+        )
         self._working_profile_combo.setFixedHeight(26)
         self._working_profile_combo.setStyleSheet(combo_style)
         wp_row.addWidget(self._working_profile_combo)
@@ -2261,7 +2427,9 @@ class PhotoEditorWidget(QWidget):
         op_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 10px;")
         op_row.addWidget(op_lbl)
         self._output_profile_combo = QComboBox()
-        self._output_profile_combo.addItems(["RTv4_sRGB", "RTv4_AdobeRGB", "RTv4_ProPhoto", "RTv4_Rec2020", "RTv4_Large"])
+        self._output_profile_combo.addItems(
+            ["RTv4_sRGB", "RTv4_AdobeRGB", "RTv4_ProPhoto", "RTv4_Rec2020", "RTv4_Large"]
+        )
         self._output_profile_combo.setFixedHeight(26)
         self._output_profile_combo.setStyleSheet(combo_style)
         op_row.addWidget(self._output_profile_combo)
@@ -2351,7 +2519,9 @@ class PhotoEditorWidget(QWidget):
             # Start half-resolution decode (fast preview — full res not needed for editing)
             file_path = p.get("file_path", "")
             if file_path and Path(file_path).is_file():
-                self._decode_worker = _RawDecodeWorker(index, file_path, half_size=True, parent=self)
+                self._decode_worker = _RawDecodeWorker(
+                    index, file_path, half_size=True, parent=self
+                )
                 self._decode_worker.decoded.connect(self._on_raw_decoded)
                 self._decode_worker.decode_failed.connect(self._on_raw_decode_failed)
                 self._decode_worker.start()
@@ -2367,9 +2537,11 @@ class PhotoEditorWidget(QWidget):
         new_h = int(h * scale)
         try:
             import cv2
+
             return cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
         except ImportError:
             from PIL import Image
+
             pil = Image.fromarray(rgb)
             pil = pil.resize((new_w, new_h), Image.LANCZOS)
             return np.array(pil)
@@ -2413,7 +2585,10 @@ class PhotoEditorWidget(QWidget):
                 fpath = p.get("file_path", "")
                 if fpath and Path(fpath).is_file():
                     self._prefetch_worker = _RawDecodeWorker(
-                        candidate, fpath, half_size=True, parent=self,
+                        candidate,
+                        fpath,
+                        half_size=True,
+                        parent=self,
                     )
                     self._prefetch_worker.decoded.connect(self._on_prefetch_decoded)
                     self._prefetch_worker.start()
@@ -2451,9 +2626,11 @@ class PhotoEditorWidget(QWidget):
         thumb_h = max(int(h * scale), 50)
         try:
             import cv2
+
             tiny = cv2.resize(self._raw_rgb, (thumb_w, thumb_h), interpolation=cv2.INTER_AREA)
         except ImportError:
             from PIL import Image
+
             pil = Image.fromarray(self._raw_rgb)
             pil = pil.resize((thumb_w, thumb_h), Image.LANCZOS)
             tiny = np.array(pil)
@@ -2473,8 +2650,11 @@ class PhotoEditorWidget(QWidget):
 
             # Convert to QPixmap
             qimg = QImage(
-                rendered.data.tobytes(), thumb_w, thumb_h,
-                3 * thumb_w, QImage.Format.Format_RGB888,
+                rendered.data.tobytes(),
+                thumb_w,
+                thumb_h,
+                3 * thumb_w,
+                QImage.Format.Format_RGB888,
             )
             pix = QPixmap.fromImage(qimg)
 
@@ -2491,11 +2671,13 @@ class PhotoEditorWidget(QWidget):
             btn_layout.addWidget(img_label)
             name_label = QLabel(name.replace("_", " ").title())
             name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            name_label.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 8px; background: transparent;")
+            name_label.setStyleSheet(
+                f"color: {_TEXT_DIM}; font-size: 8px; background: transparent;"
+            )
             name_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
             btn_layout.addWidget(name_label)
 
-            is_selected = (name == current_grade)
+            is_selected = name == current_grade
             btn.setStyleSheet(self._grade_btn_style(is_selected))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -2599,6 +2781,10 @@ class PhotoEditorWidget(QWidget):
             else:
                 slider.reset()
 
+        # Make sure the canvas rotation baseline matches the restored slider value.
+        if self._canvas is not None and "rotation" in self._sliders:
+            self._canvas.set_rotation_value(float(self._sliders["rotation"].value()))
+
         grade = overrides.get("color_grade", "natural")
         idx = self._grade_combo.findText(grade)
         if idx >= 0:
@@ -2661,7 +2847,7 @@ class PhotoEditorWidget(QWidget):
     # Preview
     # ------------------------------------------------------------------
 
-    def _crop_scale_factors(self) -> Tuple[float, float]:
+    def _crop_scale_factors(self) -> tuple[float, float]:
         """Return (sx, sy) to convert preview-proxy crop coords to full-res."""
         if self._raw_rgb is None:
             return (1.0, 1.0)
@@ -2681,18 +2867,21 @@ class PhotoEditorWidget(QWidget):
         params["color_grade"] = self._grade_combo.currentText()
         params["color_grade_intensity"] = self._grade_intensity.value()
 
-        # Include crop data scaled to full-resolution coordinates
+        # Include crop data scaled to _raw_rgb coordinate space.
+        # Also store the source image dimensions so the exporter can scale
+        # the crop correctly regardless of how it decodes the RAW file.
         if self._crop_rect and self._crop_rect.width() > 0 and self._crop_rect.height() > 0:
             sx, sy = self._crop_scale_factors()
             params["crop_x"] = int(self._crop_rect.x() * sx)
             params["crop_y"] = int(self._crop_rect.y() * sy)
             params["crop_w"] = int(self._crop_rect.width() * sx)
             params["crop_h"] = int(self._crop_rect.height() * sy)
+            if self._raw_rgb is not None:
+                params["crop_src_w"] = int(self._raw_rgb.shape[1])
+                params["crop_src_h"] = int(self._raw_rgb.shape[0])
 
         # Tone curve data (always gathered — main panel)
-        self._curve_data[self._current_curve_channel] = list(
-            self._tone_curve_widget.get_points()
-        )
+        self._curve_data[self._current_curve_channel] = list(self._tone_curve_widget.get_points())
         for ch, pts in self._curve_data.items():
             if len(pts) > 2 or (len(pts) == 2 and (pts[0] != (0.0, 0.0) or pts[1] != (1.0, 1.0))):
                 params[f"tone_curve_{ch.lower()}"] = pts
@@ -2794,9 +2983,7 @@ class PhotoEditorWidget(QWidget):
             sx, sy = self._crop_scale_factors()
             isx = 1.0 / sx if sx > 0 else 1.0
             isy = 1.0 / sy if sy > 0 else 1.0
-            self._crop_rect = QRect(
-                int(cx * isx), int(cy * isy), int(cw * isx), int(ch_val * isy)
-            )
+            self._crop_rect = QRect(int(cx * isx), int(cy * isy), int(cw * isx), int(ch_val * isy))
             self._canvas.set_crop_rect(self._crop_rect)
         else:
             self._crop_rect = None
@@ -2815,7 +3002,30 @@ class PhotoEditorWidget(QWidget):
             result = source
         else:
             params = self._gather_params()
-            result = PreviewEngine.apply(source, params)
+
+            # Masked Area tab: composite global + masked-region edits
+            if (
+                self._mask_active_tab == 1
+                and self._active_mask is not None
+                and self._mask_global_params is not None
+            ):
+                import cv2
+
+                base = PreviewEngine.apply(source, self._mask_global_params)
+                masked = PreviewEngine.apply(source, params)
+                mask = self._active_mask
+                if mask.shape[:2] != base.shape[:2]:
+                    mask = cv2.resize(
+                        mask, (base.shape[1], base.shape[0]), interpolation=cv2.INTER_LINEAR
+                    )
+                m = np.clip(mask, 0.0, 1.0)[:, :, np.newaxis]
+                result = np.clip(
+                    base.astype(np.float32) * (1.0 - m) + masked.astype(np.float32) * m,
+                    0,
+                    255,
+                ).astype(np.uint8)
+            else:
+                result = PreviewEngine.apply(source, params)
 
             # Apply crop to preview when not in crop mode (crop already applied)
             crop_rect = self._crop_rect
@@ -2836,7 +3046,10 @@ class PhotoEditorWidget(QWidget):
         h, w = result.shape[:2]
         bytes_per_line = 3 * w
         qimg = QImage(
-            result.data, w, h, bytes_per_line,
+            result.data,
+            w,
+            h,
+            bytes_per_line,
             QImage.Format.Format_RGB888,
         )
         # Must keep a reference to the array so the buffer stays alive
@@ -2909,22 +3122,28 @@ class PhotoEditorWidget(QWidget):
         params["_editor_touched"] = True
         self._photos[self._index]["manual_overrides"] = json.dumps(params)
 
-    def _save_all_edits(self) -> None:
-        """Save all edits to the database without exporting."""
+    def _collect_manual_edit_batch(self) -> list[tuple[int, dict]]:
+        """Gather all edited photos that should be persisted to the database."""
         self._save_current_to_dict()
-        batch = []
+        batch: list[tuple[int, dict]] = []
         for p in self._photos:
             pid = p.get("id", 0)
             raw = p.get("manual_overrides", "")
-            if not raw:
+            if not pid or not raw:
                 continue
             try:
                 overrides = json.loads(raw) if isinstance(raw, str) else raw
             except (json.JSONDecodeError, TypeError):
                 continue
-            # Only save if user actually changed something
+            if not isinstance(overrides, dict):
+                continue
             if any(v != 0 for k, v in overrides.items() if k != "color_grade"):
                 batch.append((pid, overrides))
+        return batch
+
+    def _save_all_edits(self) -> None:
+        """Save all edits to the database without exporting."""
+        batch = self._collect_manual_edit_batch()
         if batch:
             self._save_btn.setEnabled(False)
             self._save_btn.setText("💾 Saving…")
@@ -3043,6 +3262,12 @@ class PhotoEditorWidget(QWidget):
         """Store crop rectangle for export."""
         self._crop_rect = rect
 
+    def _on_rotate_changed(self, angle: float) -> None:
+        """Update the rotation slider while the user drags in crop mode."""
+        if "rotation" in self._sliders:
+            self._sliders["rotation"].set_value(int(round(angle)))
+            self._schedule_preview()
+
     def _apply_crop(self) -> None:
         """Apply current crop, update preview, and exit crop mode."""
         if self._crop_btn.isChecked():
@@ -3064,8 +3289,15 @@ class PhotoEditorWidget(QWidget):
     def _on_crop_ratio_changed(self, text: str) -> None:
         """Update canvas crop constraint when aspect ratio changes."""
         self._crop_aspect_ratio = text
-        ratio_map = {"1:1": 1.0, "3:2": 3/2, "2:3": 2/3, "4:3": 4/3,
-                     "3:4": 3/4, "16:9": 16/9, "9:16": 9/16}
+        ratio_map = {
+            "1:1": 1.0,
+            "3:2": 3 / 2,
+            "2:3": 2 / 3,
+            "4:3": 4 / 3,
+            "3:4": 3 / 4,
+            "16:9": 16 / 9,
+            "9:16": 9 / 16,
+        }
         if text == "Original" and self._raw_rgb_preview is not None:
             h, w = self._raw_rgb_preview.shape[:2]
             forced = w / h if h > 0 else 0
@@ -3086,8 +3318,15 @@ class PhotoEditorWidget(QWidget):
             h, w = self._raw_rgb_preview.shape[:2]
             target = w / h if h > 0 else 1.0
         else:
-            ratio_map = {"1:1": 1.0, "3:2": 3/2, "2:3": 2/3, "4:3": 4/3,
-                         "3:4": 3/4, "16:9": 16/9, "9:16": 9/16}
+            ratio_map = {
+                "1:1": 1.0,
+                "3:2": 3 / 2,
+                "2:3": 2 / 3,
+                "4:3": 4 / 3,
+                "3:4": 3 / 4,
+                "16:9": 16 / 9,
+                "9:16": 9 / 16,
+            }
             target = ratio_map.get(ratio_text, 0)
             if target == 0:
                 return
@@ -3128,6 +3367,7 @@ class PhotoEditorWidget(QWidget):
 
         try:
             from imagic.services.auto_crop import analyze_crop
+
             result = analyze_crop(Path(image_path), target_ratio=target_ratio)
 
             if result.w > 0 and result.h > 0 and result.confidence > 0:
@@ -3141,8 +3381,10 @@ class PhotoEditorWidget(QWidget):
                 sx = pw / result.original_w if result.original_w > 0 else 1.0
                 sy = ph / result.original_h if result.original_h > 0 else 1.0
                 scaled_rect = QRect(
-                    int(result.x * sx), int(result.y * sy),
-                    int(result.w * sx), int(result.h * sy),
+                    int(result.x * sx),
+                    int(result.y * sy),
+                    int(result.w * sx),
+                    int(result.h * sy),
                 )
                 self._crop_rect = scaled_rect
                 self._canvas.set_crop_rect(scaled_rect)
@@ -3169,7 +3411,7 @@ class PhotoEditorWidget(QWidget):
     # AI Optimize-All
     # ------------------------------------------------------------------
 
-    def _compute_user_style(self) -> Optional[dict]:
+    def _compute_user_style(self) -> dict | None:
         """Average the slider values from the first 10 manually-edited photos."""
         edited = []
         for p in self._photos[:10]:
@@ -3275,8 +3517,10 @@ class PhotoEditorWidget(QWidget):
 
         if error_count > 0:
             from PyQt6.QtWidgets import QMessageBox
+
             QMessageBox.warning(
-                self, "Batch Optimize",
+                self,
+                "Batch Optimize",
                 f"Finished with {error_count} error(s). "
                 f"Some photos could not be optimized \u2014 check the log for details.",
             )
@@ -3340,6 +3584,7 @@ class PhotoEditorWidget(QWidget):
         # Analyze sharpness
         try:
             from scipy.ndimage import laplace
+
             gray = np.mean(self._raw_rgb.astype(np.float32) / 255.0, axis=2)
             lap_var = float(np.var(laplace(gray)))
             if lap_var < 0.0003:
@@ -3383,18 +3628,37 @@ class PhotoEditorWidget(QWidget):
             return
         items = ["Subject", "Sky", "People", "Background"]
         choice, ok = QInputDialog.getItem(
-            self, "AI Masking", "Select mask target:", items, 0, False,
+            self,
+            "AI Masking",
+            "Select mask target:",
+            items,
+            0,
+            False,
         )
         if not ok:
             return
+        from imagic.ai.masking import _ensure_rembg
+
+        if choice in ("Subject", "People", "Background") and not _ensure_rembg():
+            QMessageBox.information(
+                self,
+                "AI Masking",
+                "rembg is installed without a runtime backend, so masking will use fallback "
+                "algorithms. Install rembg[cpu] for faster, higher-quality results.",
+            )
+
         if self._ai_modal:
             self._ai_modal.show_message("AI Masking", f"Generating {choice.lower()} mask…")
 
         def _do_masking(rgb, target):
             from imagic.ai.masking import (
-                MaskType, generate_subject_mask, generate_sky_mask,
-                generate_people_mask, generate_background_mask,
+                MaskType,
+                generate_background_mask,
+                generate_people_mask,
+                generate_sky_mask,
+                generate_subject_mask,
             )
+
             mask_map = {
                 "Subject": (MaskType.SUBJECT, generate_subject_mask),
                 "Sky": (MaskType.SKY, generate_sky_mask),
@@ -3413,10 +3677,18 @@ class PhotoEditorWidget(QWidget):
             mask_3ch = np.stack([result.mask] * 3, axis=2)
             tint = np.zeros_like(overlay, dtype=np.float32)
             tint[:, :, 0] = 255  # red tint
-            overlay = (overlay.astype(np.float32) * (1 - mask_3ch * 0.4)
-                       + tint * mask_3ch * 0.4).clip(0, 255).astype(np.uint8)
-            return {"mask": result.mask, "mask_type": mask_type,
-                    "overlay": overlay, "confidence": result.confidence, "target": target}
+            overlay = (
+                (overlay.astype(np.float32) * (1 - mask_3ch * 0.4) + tint * mask_3ch * 0.4)
+                .clip(0, 255)
+                .astype(np.uint8)
+            )
+            return {
+                "mask": result.mask,
+                "mask_type": mask_type,
+                "overlay": overlay,
+                "confidence": result.confidence,
+                "target": target,
+            }
 
         def _on_masking_done(result_data):
             self._active_mask = result_data["mask"]
@@ -3428,11 +3700,13 @@ class PhotoEditorWidget(QWidget):
             self._canvas.set_pixmap(pixmap)
             if self._ai_modal:
                 self._ai_modal.hide_modal()
+            self._show_mask_tabs()
             QMessageBox.information(
-                self, "AI Masking",
+                self,
+                "AI Masking",
                 f"{result_data['target']} mask generated (confidence: {result_data['confidence']:.0%}).\n"
                 f"The red overlay shows the selected area.\n"
-                f"Press any edit slider to apply adjustments to the masked area.",
+                f"Use the 'Masked Area' tab in the sidebar to edit the selected region.",
             )
 
         def _on_masking_error(msg):
@@ -3457,12 +3731,21 @@ class PhotoEditorWidget(QWidget):
         if self._raw_rgb is None:
             return
 
+        if not self._ensure_opencv_available("Manual Masking"):
+            return
+
         # If already in mask paint mode, exit it
         if self._canvas._mask_paint_mode:
             self._finish_manual_masking()
             return
 
-        h, w = self._raw_rgb.shape[:2]
+        # Use preview pixmap dimensions so widget↔image coordinate conversions
+        # map correctly onto the mask canvas (raw image may be 4-8× larger).
+        pix = self._canvas._pixmap
+        if pix is not None and not pix.isNull():
+            h, w = pix.height(), pix.width()
+        else:
+            h, w = self._raw_rgb.shape[:2]
         self._canvas.init_mask_canvas(h, w)
         self._canvas.set_mask_paint_mode(True, "brush")
         self._canvas.mask_updated.connect(self._on_manual_mask_updated)
@@ -3518,7 +3801,7 @@ class PhotoEditorWidget(QWidget):
         size_slider.setRange(2, 200)
         size_slider.setValue(self._canvas._mask_brush_size)
         size_slider.setFixedWidth(80)
-        size_slider.valueChanged.connect(lambda v: setattr(self._canvas, '_mask_brush_size', v))
+        size_slider.valueChanged.connect(lambda v: setattr(self._canvas, "_mask_brush_size", v))
         tb_layout.addWidget(size_slider)
 
         # Feather
@@ -3529,7 +3812,7 @@ class PhotoEditorWidget(QWidget):
         feather_slider.setRange(0, 50)
         feather_slider.setValue(self._canvas._mask_feather)
         feather_slider.setFixedWidth(60)
-        feather_slider.valueChanged.connect(lambda v: setattr(self._canvas, '_mask_feather', v))
+        feather_slider.valueChanged.connect(lambda v: setattr(self._canvas, "_mask_feather", v))
         tb_layout.addWidget(feather_slider)
 
         # Separator
@@ -3576,7 +3859,8 @@ class PhotoEditorWidget(QWidget):
             self._active_mask = mask.copy()
             self._active_mask_type = "manual"
             QMessageBox.information(
-                self, "Manual Masking",
+                self,
+                "Manual Masking",
                 "Mask applied. Use any edit slider to adjust the masked area.\n"
                 "Right-click was eraser. The red overlay shows the selected region.",
             )
@@ -3585,10 +3869,12 @@ class PhotoEditorWidget(QWidget):
             self._canvas.mask_updated.disconnect(self._on_manual_mask_updated)
         except TypeError:
             pass
-        if hasattr(self, '_mask_toolbar') and self._mask_toolbar:
+        if hasattr(self, "_mask_toolbar") and self._mask_toolbar:
             self._mask_toolbar.hide()
             self._mask_toolbar.deleteLater()
             self._mask_toolbar = None
+        if self._active_mask is not None:
+            self._show_mask_tabs()
         # Refresh preview to remove overlay
         self._update_preview()
 
@@ -3600,17 +3886,63 @@ class PhotoEditorWidget(QWidget):
             self._canvas.mask_updated.disconnect(self._on_manual_mask_updated)
         except TypeError:
             pass
-        if hasattr(self, '_mask_toolbar') and self._mask_toolbar:
+        if hasattr(self, "_mask_toolbar") and self._mask_toolbar:
             self._mask_toolbar.hide()
             self._mask_toolbar.deleteLater()
             self._mask_toolbar = None
         self._update_preview()
 
+    # ------------------------------------------------------------------
+    # Mask segment tabs
+    # ------------------------------------------------------------------
+
+    def _show_mask_tabs(self) -> None:
+        """Show the Global / Masked-Area tab bar when a mask becomes active."""
+        if self._mask_tab_bar is None:
+            return
+        self._mask_global_params = self._gather_params()
+        self._mask_area_params = {}
+        self._mask_active_tab = 0
+        self._mask_tab_bar.blockSignals(True)
+        self._mask_tab_bar.setCurrentIndex(0)
+        self._mask_tab_bar.blockSignals(False)
+        self._mask_tab_bar.show()
+
+    def _hide_mask_tabs(self) -> None:
+        """Hide the tab bar and clear mask state."""
+        if self._mask_tab_bar is not None:
+            self._mask_tab_bar.hide()
+        self._mask_global_params = None
+        self._mask_area_params = {}
+        self._mask_active_tab = 0
+
+    def _on_mask_tab_changed(self, idx: int) -> None:
+        """Switch between Global and Masked-Area edit contexts."""
+        prev = self._mask_active_tab
+        self._mask_active_tab = idx
+        if prev == 0 and idx == 1:
+            # Entering Masked Area — snapshot global params, load mask-area params
+            self._mask_global_params = self._gather_params()
+            if self._mask_area_params:
+                self._apply_params(self._mask_area_params)
+            else:
+                for slider in self._sliders.values():
+                    slider.reset()
+        elif prev == 1 and idx == 0:
+            # Returning to Global — snapshot mask-area params, restore global
+            self._mask_area_params = self._gather_params()
+            if self._mask_global_params:
+                self._apply_params(self._mask_global_params)
+        self._schedule_preview()
+
     def _auto_detect_mask(self) -> None:
         """Use GrabCut for auto-detect masking."""
         if self._raw_rgb is None:
             return
+        if not self._ensure_opencv_available("Auto-Detect"):
+            return
         import cv2
+
         h, w = self._raw_rgb.shape[:2]
         mask = np.zeros((h, w), np.uint8)
         # Use a margin-based rect (exclude 5% borders)
@@ -3624,9 +3956,15 @@ class PhotoEditorWidget(QWidget):
             QMessageBox.warning(self, "Auto-Detect", f"GrabCut failed: {e}")
             return
         # Convert GrabCut mask to float: foreground/probable foreground = 1
-        result_mask = np.where(
-            (mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 1.0, 0.0
-        ).astype(np.float32)
+        result_mask = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 1.0, 0.0).astype(
+            np.float32
+        )
+        # Scale result to pixmap dimensions so it aligns with the canvas
+        pix = self._canvas._pixmap
+        if pix is not None and not pix.isNull():
+            result_mask = cv2.resize(
+                result_mask, (pix.width(), pix.height()), interpolation=cv2.INTER_LINEAR
+            )
         # Apply to canvas if in mask paint mode
         if self._canvas._mask_paint_mode:
             self._canvas._mask_canvas = result_mask
@@ -3635,13 +3973,19 @@ class PhotoEditorWidget(QWidget):
         else:
             self._active_mask = result_mask
             self._active_mask_type = "auto_detect"
+            self._show_mask_tabs()
 
     def _ai_lens_blur(self) -> None:
         """AI lens blur / bokeh effect."""
         if self._raw_rgb is None:
             return
         amount, ok = QInputDialog.getInt(
-            self, "AI Lens Blur", "Blur amount (1-100):", 50, 1, 100,
+            self,
+            "AI Lens Blur",
+            "Blur amount (1-100):",
+            50,
+            1,
+            100,
         )
         if not ok:
             return
@@ -3650,6 +3994,7 @@ class PhotoEditorWidget(QWidget):
 
         def _do_blur(rgb, blur_amount):
             from imagic.ai.lens_blur import apply_lens_blur
+
             return apply_lens_blur(rgb, blur_amount=blur_amount)
 
         def _on_blur_done(result):
@@ -3672,15 +4017,43 @@ class PhotoEditorWidget(QWidget):
         self._ai_worker = worker
         worker.start()
 
+    def _ensure_opencv_available(self, feature: str) -> bool:
+        try:
+            import cv2  # noqa: F401
+            return True
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                feature,
+                "OpenCV is required for this feature. Install opencv-python and restart imagic.",
+            )
+            return False
+
+    def _ensure_face_detection_available(self) -> bool:
+        from imagic.ai.face_detection import is_face_detection_available
+
+        if is_face_detection_available():
+            return True
+        QMessageBox.warning(
+            self,
+            "Face Detection",
+            "Face detection is unavailable. Install opencv-python and ensure OpenCV can "
+            "access its Haar cascade files.",
+        )
+        return False
+
     def _ai_face_detect(self) -> None:
         """Detect faces and draw bounding boxes."""
         if self._raw_rgb is None:
+            return
+        if not self._ensure_face_detection_available():
             return
         if self._ai_modal:
             self._ai_modal.show_message("AI Face Detection", "Scanning for faces…")
 
         def _do_detect(rgb):
             from imagic.ai.face_detection import detect_faces
+
             result = detect_faces(rgb)
             if not result.faces:
                 return {"faces": [], "overlay": None}
@@ -3691,10 +4064,10 @@ class PhotoEditorWidget(QWidget):
                 y1, y2 = max(0, y), min(rgb.shape[0], y + fh)
                 x1, x2 = max(0, x), min(rgb.shape[1], x + fw)
                 if y2 - y1 > 4 and x2 - x1 > 4:
-                    overlay[y1:y1+2, x1:x2] = [0, 255, 0]
-                    overlay[y2-2:y2, x1:x2] = [0, 255, 0]
-                    overlay[y1:y2, x1:x1+2] = [0, 255, 0]
-                    overlay[y1:y2, x2-2:x2] = [0, 255, 0]
+                    overlay[y1 : y1 + 2, x1:x2] = [0, 255, 0]
+                    overlay[y2 - 2 : y2, x1:x2] = [0, 255, 0]
+                    overlay[y1:y2, x1 : x1 + 2] = [0, 255, 0]
+                    overlay[y1:y2, x2 - 2 : x2] = [0, 255, 0]
             return {"faces": result.faces, "overlay": overlay}
 
         def _on_detect_done(result_data):
@@ -3709,7 +4082,8 @@ class PhotoEditorWidget(QWidget):
             pixmap = QPixmap.fromImage(qimg)
             self._canvas.set_pixmap(pixmap)
             QMessageBox.information(
-                self, "Face Detection",
+                self,
+                "Face Detection",
                 f"Detected {len(result_data['faces'])} face(s) — highlighted in green.",
             )
 
@@ -3731,8 +4105,12 @@ class PhotoEditorWidget(QWidget):
         if self._raw_rgb is None:
             return
         scale, ok = QInputDialog.getItem(
-            self, "AI Super Resolution", "Upscale factor:",
-            ["2x", "4x"], 0, False,
+            self,
+            "AI Super Resolution",
+            "Upscale factor:",
+            ["2x", "4x"],
+            0,
+            False,
         )
         if not ok:
             return
@@ -3742,6 +4120,7 @@ class PhotoEditorWidget(QWidget):
 
         def _do_sr(rgb, scale_factor):
             from imagic.ai.super_resolution import enhance_resolution
+
             return enhance_resolution(rgb, scale=scale_factor)
 
         def _on_sr_done(result):
@@ -3751,7 +4130,8 @@ class PhotoEditorWidget(QWidget):
             if self._ai_modal:
                 self._ai_modal.hide_modal()
             QMessageBox.information(
-                self, "Super Resolution",
+                self,
+                "Super Resolution",
                 f"Upscaled {factor}x using {result.method}.\n"
                 f"New size: {result.image.shape[1]}×{result.image.shape[0]}",
             )
@@ -3778,6 +4158,7 @@ class PhotoEditorWidget(QWidget):
 
         def _do_enhance(rgb):
             from imagic.ai.super_resolution import enhance_details
+
             return enhance_details(rgb)
 
         def _on_enhance_done(result):
@@ -3809,6 +4190,7 @@ class PhotoEditorWidget(QWidget):
 
         def _do_adaptive(rgb):
             from imagic.ai.adaptive_presets import detect_scene, get_adaptive_preset
+
             scene = detect_scene(rgb)
             preset = get_adaptive_preset(scene)
             return {"preset": preset, "scene": scene}
@@ -3820,10 +4202,9 @@ class PhotoEditorWidget(QWidget):
             if self._ai_modal:
                 self._ai_modal.hide_modal()
             QMessageBox.information(
-                self, "Adaptive Preset",
-                f"Applied: {preset.name}\n"
-                f"Scene detected: {scene.value}\n\n"
-                f"{preset.description}",
+                self,
+                "Adaptive Preset",
+                f"Applied: {preset.name}\nScene detected: {scene.value}\n\n{preset.description}",
             )
 
         def _on_adaptive_error(msg):
@@ -3841,10 +4222,7 @@ class PhotoEditorWidget(QWidget):
 
     def _get_slider_bounds(self) -> dict[str, tuple]:
         """Return {key: (min, max)} for every registered slider."""
-        return {
-            key: (s._slider.minimum(), s._slider.maximum())
-            for key, s in self._sliders.items()
-        }
+        return {key: (s._slider.minimum(), s._slider.maximum()) for key, s in self._sliders.items()}
 
     def _next_ai_run(self, tool: str) -> int:
         """Increment and return the run counter for *tool* on the current photo."""
@@ -3914,14 +4292,14 @@ class PhotoEditorWidget(QWidget):
                 act = del_menu.addAction(name)
                 act.triggered.connect(lambda checked, path=p: self._delete_preset(path))
 
-        menu.exec(self._preset_btn.mapToGlobal(
-            QPoint(0, self._preset_btn.height())
-        ))
+        menu.exec(self._preset_btn.mapToGlobal(QPoint(0, self._preset_btn.height())))
 
     def _save_preset(self) -> None:
         """Save current edit parameters as a named preset."""
         name, ok = QInputDialog.getText(
-            self, "Save Preset", "Preset name:",
+            self,
+            "Save Preset",
+            "Preset name:",
         )
         if not ok or not name.strip():
             return
@@ -4016,7 +4394,7 @@ class PhotoEditorWidget(QWidget):
         if self._index in self._rgb_cache:
             del self._rgb_cache[self._index]
         # Re-key cache for indices after removed one
-        new_cache: Dict[int, np.ndarray] = {}
+        new_cache: dict[int, np.ndarray] = {}
         for k, v in self._rgb_cache.items():
             if k > self._index:
                 new_cache[k - 1] = v
@@ -4043,4 +4421,6 @@ class PhotoEditorWidget(QWidget):
             self._canvas.set_pixmap(self._preview_pix)
 
     # PhotoEditorDialog kept as a thin wrapper for backward compatibility
+
+
 PhotoEditorDialog = PhotoEditorWidget

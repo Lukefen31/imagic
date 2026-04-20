@@ -102,6 +102,7 @@ class AILoadingModal(QWidget):
             self.setGeometry(self.parent().rect())
         self.show()
         self.raise_()
+        self.grabKeyboard()
         self.setFocus()
         self._timer.start()
         self._dot_timer.start()
@@ -128,6 +129,7 @@ class AILoadingModal(QWidget):
         """Gracefully dismiss the overlay."""
         self._timer.stop()
         self._dot_timer.stop()
+        self.releaseKeyboard()
         self.hide()
 
     # ------------------------------------------------------------------
@@ -200,8 +202,12 @@ class AILoadingModal(QWidget):
         glow_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(glow_pen)
         painter.drawEllipse(
-            QRectF(spinner_cx - spinner_r - 2, spinner_cy - spinner_r - 2,
-                   (spinner_r + 2) * 2, (spinner_r + 2) * 2)
+            QRectF(
+                spinner_cx - spinner_r - 2,
+                spinner_cy - spinner_r - 2,
+                (spinner_r + 2) * 2,
+                (spinner_r + 2) * 2,
+            )
         )
 
         # Background track
@@ -209,14 +215,15 @@ class AILoadingModal(QWidget):
         track_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(track_pen)
         painter.drawEllipse(
-            QRectF(spinner_cx - spinner_r, spinner_cy - spinner_r,
-                   spinner_r * 2, spinner_r * 2)
+            QRectF(spinner_cx - spinner_r, spinner_cy - spinner_r, spinner_r * 2, spinner_r * 2)
         )
 
         # Spinning arc — conical gradient for smooth tail
         arc_rect = QRectF(
-            spinner_cx - spinner_r, spinner_cy - spinner_r,
-            spinner_r * 2, spinner_r * 2,
+            spinner_cx - spinner_r,
+            spinner_cy - spinner_r,
+            spinner_r * 2,
+            spinner_r * 2,
         )
 
         grad = QConicalGradient(spinner_cx, spinner_cy, -self._angle)
@@ -248,7 +255,8 @@ class AILoadingModal(QWidget):
         painter.setPen(QPen(_TEXT_COLOR))
         title_rect = QRectF(cx + 16, spinner_cy + spinner_r + 16, card_w - 32, 28)
         painter.drawText(
-            title_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+            title_rect,
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
             f"{self._title}{dots}",
         )
 
@@ -259,7 +267,8 @@ class AILoadingModal(QWidget):
             painter.setPen(QPen(_SUB_COLOR))
             sub_rect = QRectF(cx + 16, spinner_cy + spinner_r + 46, card_w - 32, 22)
             painter.drawText(
-                sub_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
+                sub_rect,
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
                 self._subtitle,
             )
 

@@ -13,17 +13,17 @@ with optional SAM (Segment Anything) for precision.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import logging
-from enum import Enum
-from pathlib import Path
-from typing import Optional, Tuple
+from enum import StrEnum
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-class MaskType(str, Enum):
+class MaskType(StrEnum):
     SUBJECT = "subject"
     SKY = "sky"
     PEOPLE = "people"
@@ -41,20 +41,31 @@ class MaskResult:
         self.confidence = confidence
 
 
-_rembg_available: Optional[bool] = None
+_rembg_available: bool | None = None
 _rembg_session = None  # cached rembg session (~170 MB model)
 
 
 def _ensure_rembg():
-    """Lazy-import rembg, install hint if missing."""
+    """Lazy-import rembg and verify the runtime backend is available."""
     global _rembg_available
     if _rembg_available is not None:
         return _rembg_available
     try:
-        import rembg  # noqa: F401
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            import rembg  # noqa: F401
+            import onnxruntime  # noqa: F401
         _rembg_available = True
-    except ImportError:
-        logger.warning("rembg not installed — AI masking unavailable. pip install rembg")
+    except SystemExit as exc:
+        logger.warning(
+            "rembg backend import exited — AI masking will use fallback algorithms. %s",
+            exc,
+        )
+        _rembg_available = False
+    except Exception as exc:
+        logger.warning(
+            "rembg backend unavailable — AI masking will use fallback algorithms. %s",
+            exc,
+        )
         _rembg_available = False
     return _rembg_available
 
@@ -63,12 +74,62 @@ def _get_rembg_session():
     """Return a cached rembg U2-Net session."""
     global _rembg_session
     if _rembg_session is None:
-        from rembg import new_session
-        _rembg_session = new_session("u2net")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                from rembg import new_session
+
+                _rembg_session = new_session("u2net")
+        except SystemExit as exc:
+            logger.warning(
+                "rembg session import exited — using fallback mask generation. %s",
+                exc,
+            )
+            _rembg_available = False
+            return None
+        except Exception as exc:
+            logger.warning(
+                "Failed to initialize rembg session — using fallback mask generation. %s",
+                exc,
+            )
+            _rembg_available = False
+            return None
     return _rembg_session
 
 
-def generate_subject_mask(img: np.ndarray) -> Optional[MaskResult]:
+def _generate_subject_mask_fallback(img: np.ndarray) -> MaskResult | None:
+    """Generate a fallback subject mask when rembg is unavailable."""
+    try:
+        import cv2
+
+        h, w = img.shape[:2]
+        mask = np.zeros((h, w), np.uint8)
+        rect = (
+            max(0, w // 10),
+            max(0, h // 10),
+            max(2, w - 2 * (w // 10)),
+            max(2, h - 2 * (h // 10)),
+        )
+        bgd_model = np.zeros((1, 65), np.float64)
+        fgd_model = np.zeros((1, 65), np.float64)
+        cv2.grabCut(img, mask, rect, bgd_model, fgd_model, 5, cv2.GC_INIT_WITH_RECT)
+        mask_arr = np.where(
+            (mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD),
+            1.0,
+            0.0,
+        ).astype(np.float32)
+        if mask_arr.max() > 0:
+            mask_arr = cv2.GaussianBlur(mask_arr, (21, 21), 0).astype(np.float32)
+            mask_arr = np.clip(mask_arr, 0.0, 1.0)
+        confidence = float(np.mean(mask_arr > 0.5))
+        return MaskResult(mask_arr, MaskType.SUBJECT, confidence)
+    except ImportError:
+        return None
+    except Exception:
+        logger.exception("Fallback subject mask generation failed")
+        return None
+
+
+def generate_subject_mask(img: np.ndarray) -> MaskResult | None:
     """Generate a subject/foreground mask using rembg (U2-Net).
 
     Args:
@@ -78,14 +139,16 @@ def generate_subject_mask(img: np.ndarray) -> Optional[MaskResult]:
         MaskResult with float32 mask, or None if model unavailable.
     """
     if not _ensure_rembg():
-        return None
+        return _generate_subject_mask_fallback(img)
 
     try:
-        from rembg import remove
         from PIL import Image
-        import io
+        from rembg import remove
 
         session = _get_rembg_session()
+        if session is None:
+            raise RuntimeError("rembg session unavailable")
+
         pil_img = Image.fromarray(img)
         # Get RGBA output — alpha channel IS the mask
         result = remove(pil_img, session=session, only_mask=True)
@@ -99,11 +162,11 @@ def generate_subject_mask(img: np.ndarray) -> Optional[MaskResult]:
         return MaskResult(mask_arr, MaskType.SUBJECT, confidence)
 
     except Exception:
-        logger.exception("Subject mask generation failed")
-        return None
+        logger.exception("Subject mask generation failed — falling back to GrabCut")
+        return _generate_subject_mask_fallback(img)
 
 
-def generate_sky_mask(img: np.ndarray) -> Optional[MaskResult]:
+def generate_sky_mask(img: np.ndarray) -> MaskResult | None:
     """Generate a sky mask using color/brightness heuristics + edge detection.
 
     Works without ML models — uses the observation that sky regions are
@@ -129,6 +192,7 @@ def generate_sky_mask(img: np.ndarray) -> Optional[MaskResult]:
         # Smoothness: sky has low local variance
         try:
             import cv2
+
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY).astype(np.float32)
             laplacian = np.abs(cv2.Laplacian(gray, cv2.CV_32F))
             smooth_score = np.clip(1.0 - laplacian / 30.0, 0, 1)
@@ -150,7 +214,7 @@ def generate_sky_mask(img: np.ndarray) -> Optional[MaskResult]:
         return None
 
 
-def generate_people_mask(img: np.ndarray) -> Optional[MaskResult]:
+def generate_people_mask(img: np.ndarray) -> MaskResult | None:
     """Generate a people/portrait mask.
 
     Uses rembg subject detection with portrait-optimized settings.
@@ -169,15 +233,19 @@ def generate_people_mask(img: np.ndarray) -> Optional[MaskResult]:
 
         # Skin tone range in RGB space
         skin_mask = (
-            (r > 0.35) & (g > 0.2) & (b > 0.15) &
-            (r > g) & (r > b) &
-            (np.abs(r - g) > 0.05) &
-            (r - b > 0.1)
+            (r > 0.35)
+            & (g > 0.2)
+            & (b > 0.15)
+            & (r > g)
+            & (r > b)
+            & (np.abs(r - g) > 0.05)
+            & (r - b > 0.1)
         ).astype(np.float32)
 
         # Smooth the mask
         try:
             import cv2
+
             kernel = np.ones((9, 9), np.float32) / 81
             skin_mask = cv2.filter2D(skin_mask, -1, kernel)
         except ImportError:
@@ -191,7 +259,7 @@ def generate_people_mask(img: np.ndarray) -> Optional[MaskResult]:
         return None
 
 
-def generate_background_mask(img: np.ndarray) -> Optional[MaskResult]:
+def generate_background_mask(img: np.ndarray) -> MaskResult | None:
     """Generate a background mask (inverse of subject mask)."""
     result = generate_subject_mask(img)
     if result is None:

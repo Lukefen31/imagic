@@ -492,6 +492,11 @@ img {
     align-items: stretch;
 }
 
+.pricing-layout.pricing-layout-single {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 820px;
+}
+
 .pricing-primary-card,
 .pricing-side-card {
     background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));

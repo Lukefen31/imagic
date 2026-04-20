@@ -255,6 +255,23 @@
 
             <div class="changelog-entry">
                 <div class="changelog-version">
+                    <h2>v0.4.4</h2>
+                    <span class="changelog-date">April 2026</span>
+                    <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.4.4" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
+                </div>
+                <span class="changelog-tag tag-fixed">Fixed</span>
+                <span class="changelog-tag tag-improved">Improved</span>
+                <ul>
+                    <li><strong>AI Masking Stability:</strong> Fixed crashes when selecting Subject, Sky, People, or Background masks on systems missing ONNX runtime backends</li>
+                    <li><strong>Safe Fallback Masking:</strong> rembg initialization now fails gracefully and automatically uses fallback mask generation instead of aborting the task</li>
+                    <li><strong>Cleaner AI Error Handling:</strong> Suppressed noisy backend startup output and improved runtime handling for AI masking worker failures</li>
+                    <li><strong>AI Cancel Reliability:</strong> Esc/cancel handling in the AI loading modal now consistently interrupts active masking tasks and closes cleanly</li>
+                    <li><strong>Pricing Section Layout:</strong> Centered the single pricing card on the website to remove empty-column spacing on desktop</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
                     <h2>v0.4.3</h2>
                     <span class="changelog-date">April 2026</span>
                     <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.4.3" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>

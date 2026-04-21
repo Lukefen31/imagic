@@ -24,6 +24,8 @@ dependencies = [
 ai = [
     "torch>=2.0",
     "transformers>=4.30",
+    "opencv-python>=4.8",
+    "rembg[cpu]>=2.0",
     "pyiqa>=0.1.12",
     "timm>=1.0",
 ]
@@ -56,3 +58,27 @@ disallow_untyped_defs = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (undefined names, unused imports)
+    "I",   # isort (import order)
+    "B",   # flake8-bugbear (common pitfalls)
+    "UP",  # pyupgrade (modernise syntax to py311)
+    "N",   # pep8-naming
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "S",   # flake8-bandit (security)
+]
+ignore = [
+    "S101",  # use of assert — fine in tests
+    "S603",  # subprocess call — we use it intentionally with shell=False
+    "S607",  # partial path in subprocess — we use full paths via rawtherapee vendor
+    "E501",  # line too long — handled by formatter
+    "SIM105", # suppress-exception — sometimes intentional in PyQt6 event handlers
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S106"]  # asserts and hardcoded passwords OK in tests

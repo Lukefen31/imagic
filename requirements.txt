@@ -9,6 +9,13 @@ scipy>=1.11
 imagehash>=4.3
 certifi>=2023.0
 
+# AI background removal (used by AI masking feature)
+rembg>=2.0
+onnxruntime>=1.16
+
+# Optional: OpenCV is required for face detection and other AI vision tools
+# opencv-python>=4.8
+
 # Optional: AI content analysis (CLIP)
 # Uncomment if you want the ContentAnalyzer module:
 # torch>=2.0

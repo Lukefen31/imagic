@@ -3,7 +3,7 @@
 import platform
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 
 IS_MACOS = platform.system() == "Darwin"
@@ -38,6 +38,14 @@ datas = [
     (_certifi_dir, "certifi"),
 ]
 
+# rembg is excluded from PyInstaller analysis to prevent its sys.exit(1) call
+# (triggered when onnxruntime DLL fails to initialize in the isolated build subprocess).
+# We manually collect rembg's source files so the AI masking feature still works at runtime.
+try:
+    datas += collect_data_files('rembg', include_py_files=True)
+except Exception:
+    pass  # rembg not installed — masking will use fallback algorithms
+
 hiddenimports = collect_submodules("imagic")
 
 # Runtime hook that adds PyQt6/Qt6/bin to the DLL search path
@@ -54,7 +62,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[_ssl_rthook, _qt_rthook],
-    excludes=[],
+    excludes=['rembg'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

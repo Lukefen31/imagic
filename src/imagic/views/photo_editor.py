@@ -2062,6 +2062,54 @@ class PhotoEditorWidget(QWidget):
 
         # ═══════════ BASIC ═══════════
         sec = _CollapsibleSection("BASIC")
+
+        # White-balance presets row + live Kelvin readout
+        wb_row = QHBoxLayout()
+        wb_row.setContentsMargins(0, 2, 0, 4)
+        wb_row.setSpacing(4)
+        wb_label = QLabel("WB")
+        wb_label.setFixedWidth(96)
+        wb_label.setStyleSheet(f"color: {_TEXT_DIM}; font-size: 11px;")
+        wb_row.addWidget(wb_label)
+        wb_btn_style = (
+            f"QPushButton {{ background: {_BTN_BG}; color: {_TEXT_DIM}; "
+            f"border: 1px solid {_BORDER}; border-radius: 3px; "
+            f"padding: 2px 6px; font-size: 9px; }}"
+            f"QPushButton:hover {{ background: {_BTN_HOVER}; color: {_TEXT}; }}"
+        )
+        # (label, kelvin) — clicking a preset sets temperature + tint=0.
+        # "Auto" runs grey-world WB estimator on current preview.
+        wb_presets: list[tuple[str, int | None]] = [
+            ("Auto", None),
+            ("Tungsten", 3200),
+            ("Fluor", 4000),
+            ("Daylight", 5500),
+            ("Cloudy", 6500),
+            ("Shade", 7500),
+        ]
+        for name, kelvin in wb_presets:
+            btn = QPushButton(name)
+            btn.setStyleSheet(wb_btn_style)
+            btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            if kelvin is None:
+                btn.setToolTip("Auto white balance (grey-world estimator on current image)")
+                btn.clicked.connect(self._ai_auto_wb)
+            else:
+                btn.setToolTip(f"{name} ≈ {kelvin}K")
+                btn.clicked.connect(lambda _checked=False, k=kelvin: self._apply_wb_preset(k))
+            wb_row.addWidget(btn)
+        self._kelvin_label = QLabel("5500K")
+        self._kelvin_label.setFixedWidth(46)
+        self._kelvin_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self._kelvin_label.setStyleSheet(
+            f"color: {_TEXT_DIM}; font-size: 10px; "
+            f"font-family: 'Consolas','SF Mono',monospace;"
+        )
+        wb_row.addWidget(self._kelvin_label)
+        sec.add_layout(wb_row)
+
         basic_sliders = [
             ("temperature", "Temperature", -100, 100, 0),
             ("tint", "Tint", -100, 100, 0),
@@ -2078,6 +2126,9 @@ class PhotoEditorWidget(QWidget):
             s.released.connect(self._commit_undo_state)
             sec.add_widget(s)
             self._sliders[key] = s
+        # Live-update Kelvin readout when Temperature slider changes
+        self._sliders["temperature"].value_changed.connect(self._update_kelvin_label)
+        self._update_kelvin_label()
         self._panels_layout.addWidget(sec)
 
         # ═══════════ TONE / PRESENCE ═══════════
@@ -3627,6 +3678,30 @@ class PhotoEditorWidget(QWidget):
         self._apply_ai_suggestions(suggestions)
         if self._ai_modal:
             self._ai_modal.hide_modal()
+
+    def _apply_wb_preset(self, kelvin: int) -> None:
+        """Apply a fixed-Kelvin WB preset (Tungsten/Daylight/Cloudy/Shade/etc).
+
+        Maps Kelvin onto the -100..+100 temperature scale where 5500K = 0
+        (~40K per slider unit). Tint is reset to 0.
+        """
+        if "temperature" not in self._sliders or "tint" not in self._sliders:
+            return
+        scaled = int(round((kelvin - 5500) / 40))
+        scaled = max(-100, min(100, scaled))
+        self._sliders["temperature"].set_value(scaled)
+        self._sliders["tint"].set_value(0)
+        self._update_kelvin_label()
+        self._schedule_preview()
+        self._commit_undo_state()
+
+    def _update_kelvin_label(self) -> None:
+        """Refresh the Kelvin readout next to the WB presets row."""
+        if not hasattr(self, "_kelvin_label") or "temperature" not in self._sliders:
+            return
+        v = self._sliders["temperature"].value()
+        kelvin = int(round(5500 + v * 40))
+        self._kelvin_label.setText(f"{kelvin}K")
 
     def _ai_denoise(self) -> None:
         """Aggressive AI denoise preset."""

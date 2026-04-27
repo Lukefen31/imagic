@@ -1,6 +1,6 @@
 #define MyAppName "imagic Desktop"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.4.2"
+  #define MyAppVersion "0.4.6"
 #endif
 #ifndef SourceDist
   #define SourceDist "..\\..\\build\\windows\\pyinstaller\\dist\\imagic"

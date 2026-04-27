@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import logging
 import subprocess
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+
+from imagic.utils.subprocess_utils import hidden_subprocess_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class CLIResult:
     return_code: int
     stdout: str
     stderr: str
-    command: List[str]
+    command: list[str]
     duration_s: float
 
 
@@ -59,7 +59,7 @@ class CLIOrchestrator:
         darktable_cli: str = "",
         rawtherapee_cli: str = "",
         exiftool: str = "",
-        timeout: Optional[int] = 300,
+        timeout: int | None = 300,
         max_retries: int = 2,
     ) -> None:
         self.darktable_cli = darktable_cli
@@ -73,8 +73,8 @@ class CLIOrchestrator:
     # ------------------------------------------------------------------
     def _run(
         self,
-        cmd: List[str],
-        retries: Optional[int] = None,
+        cmd: list[str],
+        retries: int | None = None,
     ) -> CLIResult:
         """Execute *cmd* as a subprocess with retry logic.
 
@@ -92,15 +92,12 @@ class CLIOrchestrator:
             start = time.monotonic()
 
             try:
-                _extra = {}
-                if sys.platform == "win32":
-                    _extra["creationflags"] = subprocess.CREATE_NO_WINDOW
                 proc = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=self.timeout,
-                    **_extra,
+                    **hidden_subprocess_kwargs(),
                 )
                 elapsed = time.monotonic() - start
 
@@ -119,7 +116,9 @@ class CLIOrchestrator:
 
                 logger.warning(
                     "CLI non-zero exit (%d) for %s — stderr: %s",
-                    proc.returncode, cmd[0], proc.stderr.strip(),
+                    proc.returncode,
+                    cmd[0],
+                    proc.stderr.strip(),
                 )
 
             except subprocess.TimeoutExpired:
@@ -172,9 +171,9 @@ class CLIOrchestrator:
         self,
         input_path: Path,
         output_path: Path,
-        xmp_path: Optional[Path] = None,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
+        xmp_path: Path | None = None,
+        width: int | None = None,
+        height: int | None = None,
     ) -> CLIResult:
         """Export a single RAW file using ``darktable-cli``.
 
@@ -193,11 +192,10 @@ class CLIOrchestrator:
         """
         if not self.darktable_cli:
             raise ValueError(
-                "darktable-cli path is not configured.  "
-                "Set it in Settings → CLI Tools."
+                "darktable-cli path is not configured.  Set it in Settings → CLI Tools."
             )
 
-        cmd: List[str] = [self.darktable_cli]
+        cmd: list[str] = [self.darktable_cli]
 
         if xmp_path and xmp_path.is_file():
             cmd += [str(input_path), str(xmp_path), str(output_path)]
@@ -221,7 +219,7 @@ class CLIOrchestrator:
         self,
         input_path: Path,
         output_dir: Path,
-        pp3_path: Optional[Path] = None,
+        pp3_path: Path | None = None,
         output_format: str = "jpg",
     ) -> CLIResult:
         """Export a single RAW file using ``rawtherapee-cli``.
@@ -240,13 +238,12 @@ class CLIOrchestrator:
         """
         if not self.rawtherapee_cli:
             raise ValueError(
-                "rawtherapee-cli path is not configured.  "
-                "Set it in Settings → CLI Tools."
+                "rawtherapee-cli path is not configured.  Set it in Settings → CLI Tools."
             )
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        cmd: List[str] = [self.rawtherapee_cli, "-o", str(output_dir)]
+        cmd: list[str] = [self.rawtherapee_cli, "-o", str(output_dir)]
 
         if pp3_path and pp3_path.is_file():
             cmd += ["-p", str(pp3_path)]
@@ -273,10 +270,7 @@ class CLIOrchestrator:
             ValueError: If exiftool path is not configured.
         """
         if not self.exiftool:
-            raise ValueError(
-                "exiftool path is not configured.  "
-                "Set it in Settings → CLI Tools."
-            )
+            raise ValueError("exiftool path is not configured.  Set it in Settings → CLI Tools.")
 
         cmd = [self.exiftool, "-json", "-n", str(file_path)]
         return self._run(cmd, retries=0)
@@ -311,6 +305,7 @@ class CLIOrchestrator:
                     [path] + version_flags.get(name, ["--version"]),
                     capture_output=True,
                     timeout=10,
+                    **hidden_subprocess_kwargs(),
                 )
                 status[name] = True
             except Exception:

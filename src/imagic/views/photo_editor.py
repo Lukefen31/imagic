@@ -52,6 +52,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSlider,
+    QSpinBox,
     QSplitter,
     QTabBar,
     QVBoxLayout,
@@ -201,27 +202,28 @@ class _BatchOptimizeWorker(QThread):
                         gray = np.mean(img, axis=2)
                         lap_var = float(np.var(laplace(gray)))
                         if lap_var < 0.0003:
-                            suggestions["sharp_amount"] = 35
+                            suggestions["sharp_amount"] = 22
                         elif lap_var < 0.001:
-                            suggestions["sharp_amount"] = 20
+                            suggestions["sharp_amount"] = 14
                         else:
-                            suggestions["sharp_amount"] = 12
-                        suggestions["sharp_radius"] = 45
+                            suggestions["sharp_amount"] = 8
+                        suggestions["sharp_radius"] = 40
                     except ImportError:
-                        suggestions["sharp_amount"] = 20
-                        suggestions["sharp_radius"] = 45
+                        suggestions["sharp_amount"] = 14
+                        suggestions["sharp_radius"] = 40
                 else:
-                    suggestions["sharp_amount"] = 10
-                    suggestions["sharp_radius"] = 40
+                    suggestions["sharp_amount"] = 6
+                    suggestions["sharp_radius"] = 35
 
                 # Blend user style from first N edited photos
                 if self._user_style:
                     for k, v in self._user_style.items():
                         if k in suggestions:
-                            # Weighted blend: 60% AI, 40% user style
-                            suggestions[k] = int(suggestions[k] * 0.6 + v * 0.4)
+                            # Weighted blend: 75% per-photo AI, 25% user style
+                            # (lower user weight keeps photos visually distinct)
+                            suggestions[k] = int(suggestions[k] * 0.75 + v * 0.25)
                         else:
-                            suggestions[k] = int(v)
+                            suggestions[k] = int(v * 0.5)
 
                 # Visual refinement: render a preview and verify quality
                 suggestions = ai_visual_refine(rgb, suggestions)
@@ -250,6 +252,8 @@ class _AITaskWorker(QThread):
         try:
             result = self._fn(*self._args, **self._kwargs)
             self.finished.emit(result)
+        except SystemExit as exc:
+            self.error.emit(f"AI task exited unexpectedly: {exc}")
         except Exception as exc:
             self.error.emit(str(exc))
 
@@ -348,50 +352,50 @@ def ai_auto_enhance(rgb: np.ndarray) -> dict:
         # Scale the target based on how dark the image is.
         # Very dark (mean 0.02) → target ~0.06 (3x)
         # Moderately dark (mean 0.13) → target ~0.18 (1.4x)
-        target = mean_lum + min(0.06, mean_lum * 0.5)
+        target = mean_lum + min(0.05, mean_lum * 0.4)
 
         if mean_lum < target - 0.01 and mean_lum > 0.001:
             ev_need = (target - mean_lum) / mean_lum
-            params["exposure"] = int(np.clip(ev_need * 50, 0, 25))
+            params["exposure"] = int(np.clip(ev_need * 40, 0, 18))
 
         # Highlights recovery — protect any existing bright areas
         clip_hi = float(np.sum(lum > 0.92) / lum.size)
         if clip_hi > 0.005:
-            params["highlights"] = int(max(-50, -clip_hi * 800))
+            params["highlights"] = int(max(-40, -clip_hi * 600))
 
         # Very gentle shadow lift only if extremely crushed
         clip_lo = float(np.sum(lum < 0.03) / lum.size)
         if clip_lo > 0.4:
-            params["shadows"] = int(min(12, clip_lo * 15))
+            params["shadows"] = int(min(10, clip_lo * 12))
 
         # Minimal contrast for very flat dark images
         if std_lum < 0.08:
-            params["contrast"] = 8
+            params["contrast"] = 6
 
         # Dehaze to combat faded/hazy look in low-light
-        params["dehaze"] = 15
+        params["dehaze"] = 8
 
     else:
         # Normal/bright image handling
         target = 0.42
         if mean_lum < 0.35:
             diff = target - mean_lum
-            params["exposure"] = int(np.clip(diff * 100, 0, 30))
+            params["exposure"] = int(np.clip(diff * 70, 0, 20))
         elif mean_lum > 0.60:
-            params["exposure"] = int(max(-35, (0.45 - mean_lum) * 100))
+            params["exposure"] = int(max(-25, (0.45 - mean_lum) * 75))
 
         if std_lum < 0.15:
-            params["contrast"] = int(min(20, (0.18 - std_lum) * 150))
+            params["contrast"] = int(min(14, (0.18 - std_lum) * 110))
         elif std_lum > 0.28:
-            params["contrast"] = int(max(-15, (0.22 - std_lum) * 100))
+            params["contrast"] = int(max(-12, (0.22 - std_lum) * 80))
 
         clip_hi = float(np.sum(lum > 0.95) / lum.size)
         if clip_hi > 0.01:
-            params["highlights"] = int(max(-50, -clip_hi * 800))
+            params["highlights"] = int(max(-40, -clip_hi * 600))
 
         clip_lo = float(np.sum(lum < 0.05) / lum.size)
         if clip_lo > 0.10:
-            params["shadows"] = int(min(25, clip_lo * 100))
+            params["shadows"] = int(min(18, clip_lo * 70))
 
         # Vibrance for desaturated images
         mx = np.max(img, axis=2)
@@ -399,10 +403,10 @@ def ai_auto_enhance(rgb: np.ndarray) -> dict:
         sat = np.where(mx > 0, (mx - mn) / (mx + 1e-6), 0)
         mean_sat = float(np.mean(sat))
         if mean_sat < 0.15:
-            params["vibrance"] = int(min(25, (0.18 - mean_sat) * 150))
+            params["vibrance"] = int(min(18, (0.18 - mean_sat) * 110))
 
         if std_lum < 0.18:
-            params["clarity"] = 10
+            params["clarity"] = 6
 
     return params
 
@@ -685,24 +689,60 @@ class _SliderRow(QWidget):
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(lo, hi)
         self._slider.setValue(default)
+        self._slider.setSingleStep(1)
+        self._slider.setPageStep(1)
         self._slider.setStyleSheet(_SLIDER_STYLE)
         self._slider.setFixedHeight(18)
+        # Click on the groove to jump to that position (instead of pageStep)
+        self._slider.mousePressEvent = self._slider_mouse_press  # type: ignore[method-assign]
         layout.addWidget(self._slider, stretch=1)
 
-        self._val = QLabel(str(default))
-        self._val.setFixedWidth(32)
+        self._val = QSpinBox()
+        self._val.setRange(lo, hi)
+        self._val.setValue(default)
+        self._val.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self._val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._val.setFixedWidth(46)
+        self._val.setFixedHeight(20)
+        self._val.setKeyboardTracking(False)
         self._val.setStyleSheet(
-            f"color: {_TEXT_MUTED}; font-size: 10px; font-family: 'Consolas', 'SF Mono', monospace;"
+            f"QSpinBox {{ background: {_SECTION_BG}; color: {_TEXT}; "
+            f"border: 1px solid {_BORDER}; border-radius: 3px; padding: 1px 4px; "
+            f"font-size: 10px; font-family: 'Consolas','SF Mono',monospace; }}"
+            f"QSpinBox:focus {{ border-color: {_ACCENT}; }}"
         )
         layout.addWidget(self._val)
 
         self._slider.valueChanged.connect(self._on_changed)
         self._slider.sliderReleased.connect(self._on_released)
+        self._val.editingFinished.connect(self._on_spin_committed)
+
+    def _slider_mouse_press(self, event: QMouseEvent) -> None:
+        """Click on slider track jumps the handle to that point."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            slider = self._slider
+            lo, hi = slider.minimum(), slider.maximum()
+            pos = event.position().x() if hasattr(event, "position") else event.x()
+            ratio = max(0.0, min(1.0, pos / max(1, slider.width())))
+            new_val = int(round(lo + ratio * (hi - lo)))
+            slider.setValue(new_val)
+            event.accept()
+        QSlider.mousePressEvent(self._slider, event)
 
     def _on_changed(self, v: int) -> None:
-        self._val.setText(str(v))
+        self._val.blockSignals(True)
+        self._val.setValue(v)
+        self._val.blockSignals(False)
         self.value_changed.emit()
+
+    def _on_spin_committed(self) -> None:
+        v = self._val.value()
+        if v != self._slider.value():
+            self._slider.blockSignals(True)
+            self._slider.setValue(v)
+            self._slider.blockSignals(False)
+            self.value_changed.emit()
+        self.released.emit()
 
     def _on_released(self) -> None:
         self.released.emit()
@@ -712,9 +752,11 @@ class _SliderRow(QWidget):
 
     def set_value(self, v: int) -> None:
         self._slider.blockSignals(True)
+        self._val.blockSignals(True)
         self._slider.setValue(v)
-        self._val.setText(str(v))
+        self._val.setValue(v)
         self._slider.blockSignals(False)
+        self._val.blockSignals(False)
 
     def reset(self) -> None:
         self.set_value(self._default)
@@ -1525,13 +1567,12 @@ class PhotoEditorWidget(QWidget):
 
     def _abort_ai_task(self) -> None:
         """Abort a running AI task when the loading modal is cancelled."""
+        was_running = self._ai_worker is not None and self._ai_worker.isRunning()
         if self._ai_modal:
             self._ai_modal.hide_modal()
-        if self._ai_worker is not None and self._ai_worker.isRunning():
-            self._ai_worker.terminate()
-            self._ai_worker.wait(2000)
-            self._ai_worker = None
-        QMessageBox.information(self, "AI Masking", "AI masking was cancelled.")
+        self._stop_ai_worker()
+        if was_running:
+            QMessageBox.information(self, "AI Masking", "AI masking was cancelled.")
 
     def closeEvent(self, event) -> None:
         """Clean up threads before closing."""
@@ -2527,7 +2568,7 @@ class PhotoEditorWidget(QWidget):
                 self._decode_worker.start()
 
     @staticmethod
-    def _make_preview_proxy(rgb: np.ndarray, max_dim: int = 1800) -> np.ndarray:
+    def _make_preview_proxy(rgb: np.ndarray, max_dim: int = 1100) -> np.ndarray:
         """Downscale for fast preview if the image is larger than max_dim."""
         h, w = rgb.shape[:2]
         if max(h, w) <= max_dim:

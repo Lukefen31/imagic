@@ -11,20 +11,38 @@ from __future__ import annotations
 import io
 import logging
 import os
-import shutil
 import subprocess
 import tempfile
 import threading
 from pathlib import Path
-from typing import Optional, Tuple
 
 from PIL import Image
 
 from imagic.utils.path_utils import discover_darktable_cli, discover_rawtherapee_cli
+from imagic.utils.subprocess_utils import hidden_subprocess_kwargs
 
 logger = logging.getLogger(__name__)
 
-_RAW_THUMBNAIL_CONCURRENCY = max(1, int(os.environ.get("IMAGIC_RAW_THUMBNAIL_CONCURRENCY", "1") or "1"))
+# Extensions that Pillow can open directly — never shell out to a RAW CLI for these.
+_PILLOW_NATIVE_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".tif",
+    ".tiff",
+    ".bmp",
+    ".webp",
+    ".gif",
+}
+
+
+def _subprocess_kwargs() -> dict:
+    """Return subprocess kwargs that suppress console windows on Windows."""
+    return hidden_subprocess_kwargs()
+
+_RAW_THUMBNAIL_CONCURRENCY = max(
+    1, int(os.environ.get("IMAGIC_RAW_THUMBNAIL_CONCURRENCY", "1") or "1")
+)
 _RAW_THUMBNAIL_SEMAPHORE = threading.BoundedSemaphore(_RAW_THUMBNAIL_CONCURRENCY)
 
 # Whether rawpy is usable (checked once at import time).
@@ -41,13 +59,14 @@ except ImportError:
 # Public API
 # ------------------------------------------------------------------
 
+
 def generate_thumbnail(
     raw_path: Path,
     output_path: Path,
-    max_size: Tuple[int, int] = (320, 320),
+    max_size: tuple[int, int] = (320, 320),
     quality: int = 85,
     embedded_only: bool = False,
-) -> Optional[Path]:
+) -> Path | None:
     """Create a JPEG thumbnail for a RAW image.
 
     Strategy (first success wins):
@@ -66,6 +85,16 @@ def generate_thumbnail(
         The *output_path* on success, or ``None`` on failure.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # --- Strategy 0: Pillow fast-path for non-RAW formats ---------------
+    # TIFF / JPEG / PNG etc. are already decodable images — using rawpy or
+    # the RAW CLIs for them is wasteful and (on Windows) pops a console
+    # window per file.
+    if raw_path.suffix.lower() in _PILLOW_NATIVE_EXTENSIONS:
+        result = _generate_via_pillow(raw_path, output_path, max_size, quality)
+        if result is not None:
+            return result
+        logger.debug("Pillow strategy failed for %s — trying RAW strategies.", raw_path)
 
     # --- Strategy 1 & 2: rawpy -------------------------------------------
     if _RAWPY_AVAILABLE:
@@ -95,48 +124,48 @@ def generate_thumbnail(
 # rawpy path
 # ------------------------------------------------------------------
 
+
 def _generate_via_rawpy(
     raw_path: Path,
     output_path: Path,
-    max_size: Tuple[int, int],
+    max_size: tuple[int, int],
     quality: int,
     embedded_only: bool,
-) -> Optional[Path]:
+) -> Path | None:
     """Try rawpy embedded preview, then full decode."""
     try:
-        with _RAW_THUMBNAIL_SEMAPHORE:
-            with rawpy.imread(str(raw_path)) as raw:
-                try:
-                    thumb = raw.extract_thumb()
-                    if thumb.format == rawpy.ThumbFormat.JPEG:
-                        img = Image.open(io.BytesIO(thumb.data))
-                        img.thumbnail(max_size, Image.LANCZOS)
-                        with tempfile.NamedTemporaryFile(
-                            dir=output_path.parent,
-                            suffix=".jpg",
-                            delete=False,
-                        ) as handle:
-                            temp_path = Path(handle.name)
-                        try:
-                            img.save(str(temp_path), "JPEG", quality=quality, optimize=True)
-                            temp_path.replace(output_path)
-                        finally:
-                            temp_path.unlink(missing_ok=True)
-                        logger.debug("Thumbnail (rawpy/embedded) created: %s", output_path)
-                        return output_path
-                except Exception:
-                    logger.debug("No embedded thumb for %s — trying full decode.", raw_path)
+        with _RAW_THUMBNAIL_SEMAPHORE, rawpy.imread(str(raw_path)) as raw:
+            try:
+                thumb = raw.extract_thumb()
+                if thumb.format == rawpy.ThumbFormat.JPEG:
+                    img = Image.open(io.BytesIO(thumb.data))
+                    img.thumbnail(max_size, Image.LANCZOS)
+                    with tempfile.NamedTemporaryFile(
+                        dir=output_path.parent,
+                        suffix=".jpg",
+                        delete=False,
+                    ) as handle:
+                        temp_path = Path(handle.name)
+                    try:
+                        img.save(str(temp_path), "JPEG", quality=quality, optimize=True)
+                        temp_path.replace(output_path)
+                    finally:
+                        temp_path.unlink(missing_ok=True)
+                    logger.debug("Thumbnail (rawpy/embedded) created: %s", output_path)
+                    return output_path
+            except Exception:
+                logger.debug("No embedded thumb for %s — trying full decode.", raw_path)
 
-                if embedded_only:
-                    logger.warning("No embedded RAW thumbnail available for %s", raw_path)
-                    return None
+            if embedded_only:
+                logger.warning("No embedded RAW thumbnail available for %s", raw_path)
+                return None
 
-                rgb = raw.postprocess(
-                    half_size=True,
-                    use_camera_wb=True,
-                    no_auto_bright=True,
-                    output_bps=8,
-                )
+            rgb = raw.postprocess(
+                half_size=True,
+                use_camera_wb=True,
+                no_auto_bright=True,
+                output_bps=8,
+            )
 
         img = Image.fromarray(rgb)
         img.thumbnail(max_size, Image.LANCZOS)
@@ -159,10 +188,47 @@ def _generate_via_rawpy(
 
 
 # ------------------------------------------------------------------
+# Pillow fast-path (TIFF / JPEG / PNG / etc.)
+# ------------------------------------------------------------------
+
+
+def _generate_via_pillow(
+    src_path: Path,
+    output_path: Path,
+    max_size: tuple[int, int],
+    quality: int,
+) -> Path | None:
+    """Decode a non-RAW image with Pillow and write a JPEG thumbnail."""
+    try:
+        with Image.open(src_path) as img:
+            img.load()
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            img.thumbnail(max_size, Image.LANCZOS)
+            with tempfile.NamedTemporaryFile(
+                dir=output_path.parent,
+                suffix=".jpg",
+                delete=False,
+            ) as handle:
+                temp_path = Path(handle.name)
+            try:
+                img.save(str(temp_path), "JPEG", quality=quality, optimize=True)
+                temp_path.replace(output_path)
+            finally:
+                temp_path.unlink(missing_ok=True)
+        logger.debug("Thumbnail (Pillow) created: %s", output_path)
+        return output_path
+    except Exception as exc:
+        logger.debug("Pillow failed for %s: %s", src_path, exc)
+        return None
+
+
+# ------------------------------------------------------------------
 # CLI fallback path (RawTherapee / darktable)
 # ------------------------------------------------------------------
 
-def _resolve_cli_tools() -> Tuple[str, str]:
+
+def _resolve_cli_tools() -> tuple[str, str]:
     """Return (rawtherapee_cli, darktable_cli) paths from settings.
 
     Falls back to PATH-based discovery if settings are not yet
@@ -172,6 +238,7 @@ def _resolve_cli_tools() -> Tuple[str, str]:
     dt_path = ""
     try:
         from imagic.config.settings import Settings
+
         settings = Settings.get()
         cli = settings.data.get("cli_tools", {})
         rt_path = cli.get("rawtherapee_cli", "")
@@ -190,9 +257,9 @@ def _resolve_cli_tools() -> Tuple[str, str]:
 def _generate_via_cli(
     raw_path: Path,
     output_path: Path,
-    max_size: Tuple[int, int],
+    max_size: tuple[int, int],
     quality: int,
-) -> Optional[Path]:
+) -> Path | None:
     """Generate a thumbnail by shelling out to RawTherapee or darktable."""
     rt_path, dt_path = _resolve_cli_tools()
 
@@ -213,21 +280,31 @@ def _try_rawtherapee(
     cli: str,
     raw_path: Path,
     output_path: Path,
-    max_size: Tuple[int, int],
+    max_size: tuple[int, int],
     quality: int,
-) -> Optional[Path]:
+) -> Path | None:
     """Use rawtherapee-cli to produce a temporary JPEG, then resize."""
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             cmd = [
                 cli,
-                "-o", tmpdir,
+                "-o",
+                tmpdir,
                 f"-j{quality}",
-                "-c", str(raw_path),
+                "-c",
+                str(raw_path),
             ]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                **_subprocess_kwargs(),
+            )
             if proc.returncode != 0:
-                logger.debug("rawtherapee-cli failed (%d): %s", proc.returncode, proc.stderr.strip())
+                logger.debug(
+                    "rawtherapee-cli failed (%d): %s", proc.returncode, proc.stderr.strip()
+                )
                 return None
 
             # RawTherapee writes <stem>.jpg into the output directory.
@@ -250,9 +327,9 @@ def _try_darktable(
     cli: str,
     raw_path: Path,
     output_path: Path,
-    max_size: Tuple[int, int],
+    max_size: tuple[int, int],
     quality: int,
-) -> Optional[Path]:
+) -> Path | None:
     """Use darktable-cli to produce a temporary JPEG, then resize."""
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -261,10 +338,18 @@ def _try_darktable(
                 cli,
                 str(raw_path),
                 str(tmp_out),
-                "--width", str(max_size[0]),
-                "--height", str(max_size[1]),
+                "--width",
+                str(max_size[0]),
+                "--height",
+                str(max_size[1]),
             ]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                **_subprocess_kwargs(),
+            )
             if proc.returncode != 0 or not tmp_out.is_file():
                 logger.debug("darktable-cli failed (%d): %s", proc.returncode, proc.stderr.strip())
                 return None

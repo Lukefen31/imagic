@@ -255,6 +255,39 @@
 
             <div class="changelog-entry">
                 <div class="changelog-version">
+                    <h2>v0.4.6</h2>
+                    <span class="changelog-date">April 2026</span>
+                    <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.4.6" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
+                </div>
+                <span class="changelog-tag tag-improved">Improved</span>
+                <span class="changelog-tag tag-fixed">Fixed</span>
+                <ul>
+                    <li><strong>Editable Slider Values:</strong> Every adjustment slider in the right-hand panel now shows its value in an editable spin box. The numbers are no longer cropped off the edge of the panel and you can click the field to type an exact value (e.g. paste <code>-12</code> straight in).</li>
+                    <li><strong>More Precise Slider Control:</strong> Sliders now move in single-unit steps (page step = 1) and clicking anywhere on the track jumps the handle directly to that point instead of paging by 10. Keyboard arrows and the spin box give you exact integer control.</li>
+                    <li><strong>Snappier Live Preview:</strong> The on-screen preview proxy was downsized from 1800&nbsp;px to 1100&nbsp;px max dimension, cutting per-frame pixel work by roughly 2.5&times; while keeping visual fidelity at typical canvas sizes. Slider changes now feel close to real-time.</li>
+                    <li><strong>AI Optimize Tuned Down:</strong> The auto-enhance algorithm was overshooting on exposure, contrast, vibrance and sharpening &mdash; especially across batches. Caps were lowered (exposure 30&rarr;20, contrast 20&rarr;14, vibrance 25&rarr;18, dehaze 15&rarr;8) and the user-style blend was rebalanced from 60/40 to 75/25 in favour of per-photo analysis. Each photo now keeps its own character instead of being pushed toward a single look.</li>
+                    <li><strong>Gentler Default Sharpening on Batch Optimize:</strong> Sharpening amounts dropped (35&rarr;22 for soft images, 20&rarr;14 for medium, 12&rarr;8 for already-sharp) so high-detail photos no longer pick up halos and noise during one-click optimization.</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
+                    <h2>v0.4.5</h2>
+                    <span class="changelog-date">April 2026</span>
+                    <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.4.5" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
+                </div>
+                <span class="changelog-tag tag-fixed">Fixed</span>
+                <ul>
+                    <li><strong>Stopped Phantom Update Prompt:</strong> v0.4.4 installs reported the runtime version as 0.4.3, so the update checker kept saying a new version was available even after installing the latest build. The desktop app now reports its true installed version.</li>
+                    <li><strong>Release Version Hygiene:</strong> Aligned the runtime app version, packaging metadata, and installer default so future builds can&rsquo;t silently drift apart.</li>
+                    <li><strong>Server Fallback Bumped:</strong> The latest-version endpoint&rsquo;s built-in default now matches the current release, so a missing env var can never accidentally downgrade the advertised version.</li>
+                    <li><strong>No More Console Window Spam on Import:</strong> Importing TIFF files (or other already-decoded images) no longer pops a flurry of empty terminal windows on Windows. Thumbnails for TIFF, JPEG, PNG, BMP and WebP now use a fast in-process Pillow path instead of shelling out to the RAW CLIs.</li>
+                    <li><strong>Quieter RAW Tooling:</strong> Every external CLI call (RawTherapee, darktable, exiftool) now runs through a single hidden-window helper combining <code>CREATE_NO_WINDOW</code> with a hidden <code>STARTUPINFO</code>, so background processing can&rsquo;t flash console windows over your work.</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
                     <h2>v0.4.4</h2>
                     <span class="changelog-date">April 2026</span>
                     <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.4.4" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>

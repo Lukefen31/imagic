@@ -27,7 +27,12 @@ You are the **Head of Technology & Operations** for **imagic** — a PyQt6 deskt
 ### 3. Release Pipeline
 When shipping a release, follow this exact sequence:
 
-1. **Bump version** in both `src/imagic/__init__.py` (`__version__`) and `pyproject.toml` (`version`)
+1. **Bump version in ALL FOUR files** — they MUST stay in lockstep or the update checker will misreport:
+   - `src/imagic/__init__.py` → `__version__ = "X.Y.Z"`
+   - `pyproject.toml` → `version = "X.Y.Z"`
+   - `packaging/windows/imagic-installer.iss` → `#define MyAppVersion "X.Y.Z"`
+   - `website/api/main.py` → `DESKTOP_LATEST_VERSION = os.environ.get("IMAGIC_DESKTOP_LATEST_VERSION", "X.Y.Z")` (server fallback default)
+   - Verification: `tests/test_version_consistency.py` asserts `__init__.py` matches `pyproject.toml` — run `pytest tests/test_version_consistency.py` after bumping.
 2. **Update changelog** in `website/templates/changelog.html` — add a new `changelog-entry` div BEFORE the previous version, with the correct tag, date, download link, and bullet points
 3. **Commit and push**: `git add -A; git commit -m "..."; git push origin main`
 4. **Build Windows installer**: `& "packaging\windows\build-desktop.ps1" -Version "X.Y.Z"`
@@ -39,9 +44,14 @@ When shipping a release, follow this exact sequence:
    & "$env:USERPROFILE\.fly\bin\flyctl.exe" secrets set IMAGIC_DESKTOP_LATEST_VERSION="X.Y.Z" IMAGIC_DESKTOP_INSTALLER_URL="https://github.com/Lukefen31/imagic/releases/download/vX.Y.Z/imagic-desktop-setup.exe" -a imagic-ink
    ```
 8. **Deploy website**: `& "$env:USERPROFILE\.fly\bin\flyctl.exe" deploy --remote-only -a imagic-ink`
-9. **Verify**: Confirm deploy succeeded and the latest-version endpoint returns the new version
+9. **Verify**:
+   - `curl https://imagic.ink/api/desktop/latest-version` returns `{"latest_version": "X.Y.Z", ...}`
+   - Install the new `.exe` on a clean machine, launch, and confirm the in-app update prompt does NOT appear (no phantom update loop).
+   - Confirm `https://imagic.ink/changelog` shows the new entry at the top.
 
 CRITICAL: Always bump to a NEW version number. If the current version is already released, increment the patch version. The update checker compares `_version_tuple(latest) > _version_tuple(current)` — same version = no update shown.
+
+CRITICAL: All four version sources from step 1 MUST match. A drift between `__init__.py` and `pyproject.toml` caused the v0.4.4 phantom-update-loop bug (runtime reported 0.4.3, server said 0.4.4, users got an infinite "update available" prompt). The server fallback in `website/api/main.py` must also be bumped so a missing Fly secret can't silently advertise an old version.
 
 ### 4. Production Monitoring
 - Check the `/api/desktop/latest-version` endpoint on `https://imagic.ink` to verify it returns the correct version
@@ -83,7 +93,7 @@ config/                   # default_config.yaml, profiles/*.pp3
 - **RAW Decoding**: `rawpy` (LibRaw) for previews, RawTherapee CLI for exports
 - **Demosaic**: Use DHT + `half_size=True` for previews/batch, AHD + `half_size=False` for final quality
 - **QThread Workers**: Must emit both success and failure signals — never let exceptions go unhandled
-- **Update Check**: Client calls `/api/desktop/latest-version`, compares version tuples. Server reads `IMAGIC_DESKTOP_LATEST_VERSION` env var (default fallback in code: `0.4.1`)
+- **Update Check**: Client calls `/api/desktop/latest-version`, compares version tuples. Server reads `IMAGIC_DESKTOP_LATEST_VERSION` env var; the in-code fallback in `website/api/main.py` must always be bumped alongside `__version__` so a missing Fly secret can't advertise an outdated version.
 - **Build**: PyInstaller 6.19.0 → Inno Setup → `imagic-desktop-setup.exe`
 - **Environment**: Windows, Python 3.11+, PowerShell, `.venv` at project root
 

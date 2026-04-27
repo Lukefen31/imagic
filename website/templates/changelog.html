@@ -255,6 +255,23 @@
 
             <div class="changelog-entry">
                 <div class="changelog-version">
+                    <h2>v0.4.7</h2>
+                    <span class="changelog-date">April 2026</span>
+                    <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.4.7" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>
+                </div>
+                <span class="changelog-tag tag-fixed">Fixed</span>
+                <span class="changelog-tag tag-improved">Improved</span>
+                <ul>
+                    <li><strong>AI Optimize All No Longer Wrecks Backlit Photos:</strong> The batch optimizer was lifting exposure on cafe/window/sunlit-subject scenes that already had blown highlights, then piling on contrast and saturation from your user-style blend. v0.4.7 now detects backlit / high-dynamic-range scenes (mean luminance OK but bright zones already clipped) and switches to a recovery-only profile: highlight pull-back + gentle shadow lift, no positive exposure, no extra contrast.</li>
+                    <li><strong>Stopped User-Style Bleed Into Tonal Sliders:</strong> The "learn from your first 10 edits" blend was leaking into <code>contrast</code>, <code>saturation</code>, <code>exposure</code>, <code>highlights</code>, <code>shadows</code>, <code>whites</code>, <code>blacks</code> &mdash; that's why every batch-optimized photo inherited an identical contrast/saturation push regardless of the photo's own needs. The blend now only touches taste keys (<code>temperature</code>, <code>tint</code>, <code>vibrance</code>, <code>clarity</code>, <code>texture</code>, <code>dehaze</code>) and is clamped to &plusmn;50.</li>
+                    <li><strong>Saturation Removed From Auto Recommendations:</strong> The auto-enhance algorithm no longer suggests raw <code>saturation</code> at all (it pushes skin tones out of gamut on every JPEG). Vibrance is still used and capped tighter at 12.</li>
+                    <li><strong>Visual Refinement No Longer Adds Contrast:</strong> When the post-edit proxy looked "flat", the refiner used to pile <code>+8</code> contrast on top &mdash; explaining the <code>+34</code> contrast values some users were seeing. It now reduces shadow lift / highlight recovery instead of adding contrast.</li>
+                    <li><strong>Tighter Auto-Enhance Caps:</strong> Exposure capped at 14 (was 20), contrast at 10 (was 14), vibrance at 12 (was 18), dehaze at 6&ndash;8 (was 8&ndash;15). Optimization now feels like an assistant, not a maximalist filter.</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <div class="changelog-version">
                     <h2>v0.4.6</h2>
                     <span class="changelog-date">April 2026</span>
                     <a href="https://github.com/Lukefen31/imagic/releases/tag/v0.4.6" target="_blank" rel="noopener" class="changelog-download"><i class="fa-solid fa-arrow-down"></i> Download</a>

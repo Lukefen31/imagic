@@ -215,15 +215,34 @@ class _BatchOptimizeWorker(QThread):
                     suggestions["sharp_amount"] = 6
                     suggestions["sharp_radius"] = 35
 
-                # Blend user style from first N edited photos
+                # Blend user style ONLY for taste/look keys, never for
+                # tonal keys (exposure/contrast/highlights/shadows/whites/
+                # blacks). Tonal keys must stay per-photo or one over-edited
+                # reference photo poisons every other shot.
+                # `saturation` is intentionally excluded from user_style
+                # entirely — it pushes skin tones out of gamut.
                 if self._user_style:
+                    _USER_STYLE_KEYS = {
+                        "temperature",
+                        "tint",
+                        "vibrance",
+                        "clarity",
+                        "texture",
+                        "dehaze",
+                    }
                     for k, v in self._user_style.items():
+                        if k not in _USER_STYLE_KEYS:
+                            continue
                         if k in suggestions:
-                            # Weighted blend: 75% per-photo AI, 25% user style
-                            # (lower user weight keeps photos visually distinct)
-                            suggestions[k] = int(suggestions[k] * 0.75 + v * 0.25)
+                            # Weighted blend: 80% per-photo AI, 20% user style
+                            blended = int(suggestions[k] * 0.8 + v * 0.2)
+                            # Clamp to a sane range so a wild user_style value
+                            # can't dominate the per-photo suggestion.
+                            suggestions[k] = max(-50, min(50, blended))
                         else:
-                            suggestions[k] = int(v * 0.5)
+                            # Don't introduce a key the AI didn't suggest at
+                            # full user-style strength — apply at 25% only.
+                            suggestions[k] = max(-30, min(30, int(v * 0.25)))
 
                 # Visual refinement: render a preview and verify quality
                 suggestions = ai_visual_refine(rgb, suggestions)
@@ -340,73 +359,78 @@ def ai_auto_enhance(rgb: np.ndarray) -> dict:
     lum = 0.2126 * img[:, :, 0] + 0.7152 * img[:, :, 1] + 0.0722 * img[:, :, 2]
     mean_lum = float(np.mean(lum))
     std_lum = float(np.std(lum))
-    float(np.median(lum))
-    float(np.percentile(lum, 99))
+    p99 = float(np.percentile(lum, 99))
+    clip_hi_pre = float(np.sum(lum > 0.92) / lum.size)
+    clip_lo_pre = float(np.sum(lum < 0.03) / lum.size)
+
+    # Backlit / high-dynamic-range detection: bright spots already clipped
+    # AND a wide histogram. Pushing exposure on these scenes always blows
+    # the window/sky further. Treat them with recovery + lift, never lift.
+    is_backlit = clip_hi_pre > 0.005 and std_lum > 0.18
+    # "Already bright enough somewhere" — ANY clipping above 1% means we
+    # cannot safely add positive exposure regardless of mean luminance.
+    has_bright_zone = clip_hi_pre > 0.01 or p99 > 0.97
 
     # Any image with mean luminance below 0.25 is "dark" — be conservative.
-    # Most intentional dark scenes (clubs, concerts, night) fall here.
-    is_dark = mean_lum < 0.25
+    is_dark = mean_lum < 0.25 and not is_backlit
 
-    if is_dark:
-        # Gentle lift: aim to improve visibility without destroying mood.
-        # Scale the target based on how dark the image is.
-        # Very dark (mean 0.02) → target ~0.06 (3x)
-        # Moderately dark (mean 0.13) → target ~0.18 (1.4x)
+    if is_backlit:
+        # Backlit scene: protect highlights aggressively, lift shadows
+        # gently, do NOT add exposure or contrast.
+        params["highlights"] = int(max(-50, -clip_hi_pre * 700 - 15))
+        if clip_lo_pre > 0.10:
+            params["shadows"] = int(min(20, clip_lo_pre * 60))
+        # No contrast — already a high-contrast scene by definition.
+
+    elif is_dark:
+        # Gentle lift on genuinely dark photos.
         target = mean_lum + min(0.05, mean_lum * 0.4)
-
-        if mean_lum < target - 0.01 and mean_lum > 0.001:
+        if mean_lum < target - 0.01 and mean_lum > 0.001 and not has_bright_zone:
             ev_need = (target - mean_lum) / mean_lum
-            params["exposure"] = int(np.clip(ev_need * 40, 0, 18))
+            params["exposure"] = int(np.clip(ev_need * 35, 0, 14))
 
-        # Highlights recovery — protect any existing bright areas
-        clip_hi = float(np.sum(lum > 0.92) / lum.size)
-        if clip_hi > 0.005:
-            params["highlights"] = int(max(-40, -clip_hi * 600))
+        if clip_hi_pre > 0.005:
+            params["highlights"] = int(max(-40, -clip_hi_pre * 600))
 
-        # Very gentle shadow lift only if extremely crushed
-        clip_lo = float(np.sum(lum < 0.03) / lum.size)
-        if clip_lo > 0.4:
-            params["shadows"] = int(min(10, clip_lo * 12))
+        if clip_lo_pre > 0.4:
+            params["shadows"] = int(min(8, clip_lo_pre * 10))
 
-        # Minimal contrast for very flat dark images
-        if std_lum < 0.08:
-            params["contrast"] = 6
+        if std_lum < 0.07:
+            params["contrast"] = 5
 
-        # Dehaze to combat faded/hazy look in low-light
-        params["dehaze"] = 8
+        params["dehaze"] = 6
 
     else:
         # Normal/bright image handling
         target = 0.42
-        if mean_lum < 0.35:
+        if mean_lum < 0.30 and not has_bright_zone:
             diff = target - mean_lum
-            params["exposure"] = int(np.clip(diff * 70, 0, 20))
-        elif mean_lum > 0.60:
-            params["exposure"] = int(max(-25, (0.45 - mean_lum) * 75))
+            params["exposure"] = int(np.clip(diff * 50, 0, 12))
+        elif mean_lum > 0.62:
+            params["exposure"] = int(max(-20, (0.45 - mean_lum) * 60))
 
-        if std_lum < 0.15:
-            params["contrast"] = int(min(14, (0.18 - std_lum) * 110))
-        elif std_lum > 0.28:
-            params["contrast"] = int(max(-12, (0.22 - std_lum) * 80))
+        if std_lum < 0.13:
+            params["contrast"] = int(min(10, (0.18 - std_lum) * 80))
+        elif std_lum > 0.30:
+            params["contrast"] = int(max(-10, (0.22 - std_lum) * 70))
 
-        clip_hi = float(np.sum(lum > 0.95) / lum.size)
-        if clip_hi > 0.01:
-            params["highlights"] = int(max(-40, -clip_hi * 600))
+        if clip_hi_pre > 0.01:
+            params["highlights"] = int(max(-40, -clip_hi_pre * 600))
 
-        clip_lo = float(np.sum(lum < 0.05) / lum.size)
-        if clip_lo > 0.10:
-            params["shadows"] = int(min(18, clip_lo * 70))
+        if clip_lo_pre > 0.10:
+            params["shadows"] = int(min(15, clip_lo_pre * 60))
 
-        # Vibrance for desaturated images
+        # Vibrance only for clearly desaturated images (never recommend
+        # raw saturation — it pushes skin/sky out of gamut).
         mx = np.max(img, axis=2)
         mn = np.min(img, axis=2)
         sat = np.where(mx > 0, (mx - mn) / (mx + 1e-6), 0)
         mean_sat = float(np.mean(sat))
-        if mean_sat < 0.15:
-            params["vibrance"] = int(min(18, (0.18 - mean_sat) * 110))
+        if mean_sat < 0.13:
+            params["vibrance"] = int(min(12, (0.16 - mean_sat) * 90))
 
-        if std_lum < 0.18:
-            params["clarity"] = 6
+        if std_lum < 0.15:
+            params["clarity"] = 4
 
     return params
 
@@ -592,10 +616,16 @@ def ai_visual_refine(rgb: np.ndarray, suggestions: dict) -> dict:
         refined["exposure"] = max(0, int(cur_exp * 0.7))
 
     # --- Check 4: Lost contrast (became too flat) ---
+    # Don't pile MORE contrast on — that's how we ended up with +30+ values.
+    # Instead, if the edit flattened the image, dial back the things that
+    # caused the flattening (excess shadow lift / highlight recovery).
     if opt_std < orig_std * 0.7 and orig_std > 0.08:
-        cur_contrast = refined.get("contrast", 0)
-        refined["contrast"] = min(25, cur_contrast + 8)
-        refined["clarity"] = max(refined.get("clarity", 0), 8)
+        cur_shadows = refined.get("shadows", 0)
+        if cur_shadows > 8:
+            refined["shadows"] = int(cur_shadows * 0.6)
+        cur_hl = refined.get("highlights", 0)
+        if cur_hl < -15:
+            refined["highlights"] = int(cur_hl * 0.7)
 
     # --- Check 5: Over-saturated ---
     orig_mx = np.max(orig, axis=2)
